@@ -76,11 +76,8 @@ export class ShelfHelper extends Signals.EventEmitter {
             });
     }
 
-    /**
-     * Whether the pointer is over the helper window, or carrying a file out
-     * of it: either way the island must stay open, since hiding the window
-     * would end the drag.
-     */
+    // Whether the pointer is over the helper or carrying a file out of it: either
+    // way the island stays open, since hiding the window would end the drag.
     containsPointer() {
         if (this._dragging)
             return true;
@@ -104,9 +101,8 @@ export class ShelfHelper extends Signals.EventEmitter {
         const same = (a, b) => a && ['x', 'y', 'width', 'height'].every(key => a[key] === b[key]);
         if (same(this._shownRect, rect))
             return;
-        // A layout can be off for a frame while the island opens: a place
-        // is only taken once it holds for two looks a frame apart.
-        // Only the recheck, a frame on, may confirm a place: not a second call in this frame.
+        // Layout can be off for a frame while opening: a place counts only once the
+        // recheck a frame later agrees, never a second call in the same frame.
         if (!same(this._candidate, rect) || this._recheck) {
             this._candidate = rect;
             if (!this._recheck) {
@@ -130,9 +126,8 @@ export class ShelfHelper extends Signals.EventEmitter {
                 return;
             }
             console.warn(`Isle: shelf helper failed to show: ${error.message}`);
-            // A helper that cannot start (removed, broken install) or hangs
-            // (no display to open) is not tried again; the page keeps its
-            // own tiles until next login.
+            // A helper that cannot start (broken install) or hangs (no display) is not
+            // retried; the page keeps its own tiles until next login.
             if (error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.TIMED_OUT)) {
                 // It may still get to the Show later; a Hide queued behind
                 // it keeps the window from staying up for good.

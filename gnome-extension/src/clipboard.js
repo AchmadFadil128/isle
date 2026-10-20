@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Clipboard history: watches what is copied and hands it to isled, which
-// keeps the list (see Clipboard1 in docs/dbus-api.md); puts an item back on
-// the clipboard; and pastes it into the window in front.
-//
-// Only GNOME Shell can read the clipboard of every app on Wayland, so this
-// lives in the extension. It is event driven: Mutter reports each new owner
-// of the clipboard, and nothing polls.
+// Clipboard history: hands each copy to isled, which keeps the list (Clipboard1 in docs/dbus-api.md),
+// and puts items back or pastes them. Lives here: only GNOME Shell can read every app's clipboard on Wayland.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -108,12 +103,8 @@ export class ClipboardHistory {
         this._daemon.call('clipboard', 'AddText', text, appId);
     }
 
-    /**
-     * Puts `item` (from `Daemon.state.clipboard`) back on the clipboard.
-     * Unless `touch` is false, the item also moves to the front of the
-     * history; callers that keep the history on screen do that later, so
-     * cards don't jump under the pointer.
-     */
+    // Puts `item` (from `Daemon.state.clipboard`) back on the clipboard. `touch: false` leaves it in place
+    // in the history, for callers that move it later so cards don't jump under the pointer.
     async copy(item, {touch = true} = {}) {
         let bytes = null, mimetype = null, text = null;
         switch (item.kind) {
@@ -151,15 +142,10 @@ export class ClipboardHistory {
         return true;
     }
 
-    /**
-     * Pastes into the window in front, once it has the keyboard again (call
-     * after the island lets go of it).
-     */
+    /** Pastes into the window in front, once it has the keyboard again (call after the island lets go). */
     paste() {
         this._later(PASTE_DELAY_MS, () => {
-            // Only into an app window: with none in front, or something of
-            // the shell's own still holding the keyboard, the keys would land
-            // in the wrong place. The item stays copied either way.
+            // Only into an app window: otherwise the keys would land in the wrong place. The item stays copied.
             const focus = global.stage.get_key_focus();
             if (!global.display.focus_window || (focus && focus !== global.stage))
                 return;

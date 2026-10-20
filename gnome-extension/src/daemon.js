@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Client for isled, the Rust service that does the actual work.
-//
-// Every interface exposes its state as JSON string properties, which are
-// parsed here into plain objects on `Daemon.state`.
+// Client for isled, the Rust service that does the actual work. Each interface's state comes as
+// JSON string properties, parsed here into plain objects on `Daemon.state`.
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -89,12 +87,8 @@ const INTERFACES = {
     },
 };
 
-/**
- * Signals:
- * - `changed` (key): `state[key]` has a new value
- * - `pomodoro-finished` (finished, next): phase names, e.g. 'focus', 'short_break'
- * - `system-event` (event): see `SystemEvent` in the daemon
- */
+// Signals: `changed` (key): `state[key]` is new; `pomodoro-finished` (finished, next): phase names;
+// `system-event` (event): see `SystemEvent` in the daemon.
 export class Daemon extends Signals.EventEmitter {
     constructor() {
         super();
@@ -178,10 +172,7 @@ export class Daemon extends Signals.EventEmitter {
         }
     }
 
-    /**
-     * Calls `method` on interface `name`. Failures are logged, not thrown,
-     * since there is rarely anything better to do from a button handler.
-     */
+    /** Calls `method` on interface `name`. Failures are logged, not thrown, as callers can rarely do better. */
     call(name, method, ...args) {
         const proxy = this._proxies[name];
         if (!proxy)

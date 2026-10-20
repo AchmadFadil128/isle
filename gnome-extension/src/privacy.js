@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// What is watching or recording: the microphone, the camera, screen sharing
-// and GNOME's own screen recorder. Everything here is event driven; nothing
-// polls.
-//
-// - Microphone: a recording stream on the sound server, ignoring sound
-//   settings apps that only meter the input level (as GNOME does).
-// - Camera: reported by isled (inotify on /dev/video*).
-// - Screen sharing and recording: Mutter's remote access handles.
+// Mic, camera (from isled), screen sharing and recording; all event driven.
+// Mic streams that only meter input (sound settings) are ignored, as GNOME does.
 
 import GLib from 'gi://GLib';
 
@@ -20,11 +14,7 @@ import {isWayland} from './compat.js';
 /** Apps that open the microphone only to show its level. */
 const LEVEL_METERS = ['org.gnome.VolumeControl', 'org.PulseAudio.pavucontrol'];
 
-/**
- * Signals:
- * - `changed` (): any of the states below changed
- * - `recording-started` (): GNOME's screen recorder started
- */
+/** Signals: `changed` (any state), `recording-started` (GNOME's screen recorder). */
 export class PrivacyMonitor extends Signals.EventEmitter {
     constructor(daemon) {
         super();

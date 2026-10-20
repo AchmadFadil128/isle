@@ -1,16 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! `isle-shelf`: the file shelf's drag-and-drop window.
-//!
-//! GNOME Shell's own widgets cannot exchange drag and drop with apps, so the
-//! extension asks this helper to draw the shelf in a borderless window laid
-//! exactly over the island's shelf page. The extension calls
-//! `io.github.zickrian.isle.ShelfWindow1.Show(x, y, width, height)` and `Hide()`; the
-//! shelf's contents live in isled.
-//!
-//! The window is an X11 override-redirect window (via XWayland on a Wayland
-//! session): those are the only client windows GNOME Shell stacks above its
-//! top bar and the island.
+//! `isle-shelf`: the shelf's drag-and-drop window, as Shell widgets can't DnD with apps.
+//! An X11 override-redirect window: the only kind GNOME Shell stacks above the island.
 
 mod service;
 mod shelf;
@@ -30,9 +21,8 @@ fn main() -> glib::ExitCode {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     // SAFETY: called before GTK starts and before any other thread exists.
     unsafe { env::set_var("GDK_BACKEND", "x11") };
-    // The window is small and plain: drawing it on the CPU saves about a
-    // third of the memory a GPU renderer takes. A renderer set by the user
-    // is kept.
+    // This small window uses about a third less memory rendered on the CPU than
+    // the GPU. A renderer set by the user is kept.
     if env::var_os("GSK_RENDERER").is_none() {
         // SAFETY: as above.
         unsafe { env::set_var("GSK_RENDERER", "cairo") };

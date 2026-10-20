@@ -1,14 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// GNOME's notifications, routed through the island.
-//
-// The island replaces the top bar clock, and with it the place GNOME shows
-// notifications. This module:
-//   - keeps GNOME's own banners hidden while the extension runs, and emits
-//     `banner` instead, following the same rules GNOME uses;
-//   - lists current notifications for the Notifications page;
-//   - exposes Do Not Disturb, which is GNOME's own "show banners" setting,
-//     so it stays in sync with Quick Settings.
+// GNOME's notifications via the island, which replaces the clock where GNOME shows them. Hides GNOME's
+// banners and emits `banner` by GNOME's rules; Do Not Disturb is GNOME's own "show banners" setting.
 
 import Gio from 'gi://Gio';
 
@@ -16,12 +9,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
-/**
- * Signals:
- * - `changed` (): the list of notifications, or which are unseen, changed
- * - `banner` (notification): a new notification should be shown
- * - `dnd-changed` (): Do Not Disturb was turned on or off
- */
+/** Signals: `changed` (): the list or unseen set changed; `banner` (notification); `dnd-changed` (). */
 export class NotificationCenter extends Signals.EventEmitter {
     constructor() {
         super();
@@ -71,11 +59,8 @@ export class NotificationCenter extends Signals.EventEmitter {
             notification.destroy(MessageTray.NotificationDestroyedReason.DISMISSED);
     }
 
-    /**
-     * GNOME's banners are hidden by keeping the tray's `bannerBlocked` set.
-     * The calendar and the overview set and clear it too, so their requests
-     * are remembered and only applied again when the extension stops.
-     */
+    // GNOME's banners are hidden by keeping the tray's `bannerBlocked` set. The calendar and overview set
+    // it too, so their requests are remembered and applied again when the extension stops.
     _blockBanners() {
         const tray = this._tray;
         // The tray only has a setter, so read the field behind it.

@@ -10,12 +10,8 @@ import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
 import {clutterBackend} from './compat.js';
 
-/**
- * Isle's rule for the top bar's colour, per `top-bar-style`. It is added to
- * whatever inline style the bar has, so other extensions keep theirs; and
- * added back whenever one of them replaces the style (Blur my Shell does).
- * Glass has no colour of its own, like a Mac's menu bar around its notch.
- */
+// Isle's top bar colour per `top-bar-style`, added to the bar's inline style so other extensions keep
+// theirs, and re-added when one replaces it (Blur my Shell does). Glass has no colour of its own.
 const BAR_STYLES = {
     black: 'background-color: #000000;',
     glass: 'background-color: transparent;',
@@ -35,16 +31,8 @@ const COMPACT_BAR_CLASS = 'isle-compact-bar';
 /** Style class making the top bar as tall as the closed island. */
 const NOTCH_BAR_CLASS = 'isle-notch-bar';
 
-/**
- * Restyles the top bar around the island: paints it black so the island
- * blends in, or see-through like glass, and hides the clock with its
- * calendar menu, since the island shows the time and the notifications.
- *
- * Signals:
- * - `height-changed` ()
- * - `style-changed` (): `blendsIn` may have changed
- * - `calendar-requested` (): the calendar shortcut (Super+V) was pressed
- */
+// Restyles the top bar around the island (black or glass) and hides the clock and its calendar menu.
+// Signals: `height-changed`, `style-changed` (`blendsIn` may have changed), `calendar-requested` (Super+V).
 export class TopBar extends Signals.EventEmitter {
     constructor(settings) {
         super();
@@ -79,10 +67,7 @@ export class TopBar extends Signals.EventEmitter {
         return Main.panel.height;
     }
 
-    /**
-     * Whether the bar is as black as the island, so the two read as one
-     * shape; otherwise the island hangs from the top of the screen itself.
-     */
+    /** Whether the bar is as black as the island; otherwise the island hangs from the screen's top edge. */
     get blendsIn() {
         return this._settings.get_string('top-bar-style') === 'black';
     }
@@ -140,14 +125,8 @@ function toggleStyleClass(actor, name, on) {
         actor.remove_style_class_name(name);
 }
 
-/**
- * Routes GNOME's volume and brightness pop-ups to `handler`, which returns
- * whether it showed them; if not, GNOME's own OSD appears as usual.
- *
- * GNOME 46–48 show them all through `show(monitorIndex, icon, label, level,
- * maxLevel)`. GNOME 49 made that `show(icon, label, levels)`, with a level
- * per monitor (`showOne()` goes through it), and added `showAll()` beside it.
- */
+// Routes GNOME's volume and brightness OSDs to `handler`; if it returns false, GNOME shows its own.
+// GNOME 46–48: `show(monitorIndex, icon, label, level, maxLevel)`; 49: `show(icon, label, levels)`, plus `showAll()`.
 export class OsdHook {
     constructor(handler) {
         const manager = Main.osdWindowManager;

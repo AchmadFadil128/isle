@@ -127,9 +127,8 @@ impl ShelfWindow {
         window.present();
         // Files may have been deleted since the shelf was last shown.
         self.call("Refresh", None);
-        // Already on screen (moved, not reshown): place it now. Otherwise the
-        // map handler does, since mapping puts the window back where GDK
-        // last had it.
+        // Already mapped (moved, not reshown): place it now. Otherwise the map
+        // handler does, since mapping restores where GDK last had the window.
         if window.is_mapped() {
             self.place();
         }

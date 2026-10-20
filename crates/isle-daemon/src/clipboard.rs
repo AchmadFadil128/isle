@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Clipboard history over D-Bus.
-//!
-//! The shell extension owns the clipboard and reports each copy here; isled
-//! keeps the list (see `isle_core::clipboard`) and the image files. Images
-//! are stored once per content hash in `~/.local/share/isle/clips`, with a
-//! small thumbnail beside each so the list never loads full-size pictures.
+//! Clipboard history over D-Bus: the shell reports copies, isled keeps the list and images.
+//! Images are stored once per hash in `~/.local/share/isle/clips`, each with a thumbnail.
 
 use std::collections::HashSet;
 use std::fs;
@@ -117,9 +113,8 @@ impl ClipboardService {
     }
 }
 
-/// An item as listed in the `Items` property: text is cut to a preview,
-/// and images are given as paths, so the list stays small however much was
-/// copied. `GetText` returns the full content.
+/// An `Items` entry: text cut to a preview, images as paths, so the list stays small.
+/// `GetText` returns the full content.
 #[derive(Serialize)]
 struct ItemView<'a> {
     id: u64,
@@ -307,9 +302,8 @@ impl ClipFiles {
         self.image(hash).is_file() && self.thumb(hash).is_file()
     }
 
-    /// Stores a PNG and its thumbnail, returning the image's size. Blocks;
-    /// the decoder's default limits cap how much memory a hostile image can
-    /// claim.
+    /// Stores a PNG and its thumbnail, returning the image's size. Blocks; the decoder's
+    /// default limits cap how much memory a hostile image can claim.
     fn store(&self, hash: &str, png: &[u8]) -> fdo::Result<(u32, u32)> {
         let image = image::load_from_memory_with_format(png, ImageFormat::Png)
             .map_err(|err| fdo::Error::InvalidArgs(format!("not a readable PNG image: {err}")))?;
@@ -342,9 +336,8 @@ impl ClipFiles {
         }
     }
 
-    /// Deletes every file in the directory that does not belong to one of
-    /// `referenced`: images whose items went while isled was not running,
-    /// and leftovers of writes cut short.
+    /// Deletes files not in `referenced`: images dropped while isled was down, and
+    /// leftovers of interrupted writes.
     fn remove_orphans(&self, referenced: &HashSet<&str>) {
         let entries = match fs::read_dir(&self.dir) {
             Ok(entries) => entries,

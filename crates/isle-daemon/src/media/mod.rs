@@ -53,13 +53,8 @@ pub struct MediaService {
 }
 
 impl MediaService {
-    /// Sends a command to the active player without waiting for it.
-    ///
-    /// zbus holds this interface for as long as a method runs, and the media
-    /// watcher needs it to publish anything. Awaiting a slow or hung player
-    /// here would freeze every media update, so the call runs in a task of
-    /// its own, bounded by a timeout, and a failure is only logged; callers
-    /// fire and forget these commands anyway.
+    /// Sends a command to the active player in a task of its own, bounded by a timeout.
+    /// zbus holds this interface while a method runs, so awaiting a hung player freezes media.
     fn send<F, Fut>(&self, command: &'static str, call: F) -> fdo::Result<()>
     where
         F: FnOnce(PlayerProxy<'static>, Option<OwnedObjectPath>) -> Fut + Send + 'static,
@@ -105,9 +100,8 @@ impl MediaService {
         self.send("SetPosition", move |player, track| async move {
             match track {
                 Some(track) => player.set_position(&track, position_us).await,
-                // Without a track id only a relative seek is possible. Measure
-                // it from where the player is now: our own sample may be
-                // seconds old.
+                // Without a track id only a relative seek works; measure it from the player's
+                // live position, since our own sample may be seconds old.
                 None => {
                     let current = player.position().await?;
                     player.seek(position_us.saturating_sub(current)).await

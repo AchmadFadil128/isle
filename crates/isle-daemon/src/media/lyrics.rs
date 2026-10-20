@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Lyrics from LRCLIB (https://lrclib.net), a free database of synced lyrics,
+//! Lyrics from LRCLIB (<https://lrclib.net>), a free database of synced lyrics,
 //! cached on disk so each song is only looked up once.
 
 use std::fmt;
@@ -216,10 +216,8 @@ fn lookup(query: &TrackQuery) -> Result<Option<Record>, Failure> {
         return Ok(Some(record));
     }
 
-    // Last, for YouTube-style titles, a free-text search on the whole title:
-    // finds uploads whose "Artist - Song" was not split because the channel
-    // is not the artist, or was split wrongly. Any song can turn up here, so
-    // the length must fit.
+    // Last, for YouTube-style titles, search the whole title as free text (catches a wrongly
+    // split "Artist - Song"). Any song can turn up here, so the length must fit.
     let text = full_title(&query.title);
     if text == title && !text.contains(" - ") {
         return Ok(None);
@@ -289,9 +287,8 @@ fn has_lyrics(record: &Record) -> bool {
         || record.instrumental()
 }
 
-/// Picks the best search result: the right artist and length first, then
-/// synced over plain lyrics. With `strict`, a result whose length is known
-/// and does not fit the track's is never picked.
+/// Picks the best result: right artist and length first, then synced over plain lyrics.
+/// With `strict`, a result whose known length does not fit is never picked.
 fn best_match(results: Vec<Record>, length_s: f64, artist: &str, strict: bool) -> Option<Record> {
     let fits = |record: &Record| {
         length_s <= 0.0

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Focus timer (Pomodoro): a ring with the time remaining inside, and beside
-// it the phase, today's total and one row of controls. See
-// docs/product-spec.md.
+// Focus timer (Pomodoro): a ring with the time left, the phase, today's total
+// and controls. See docs/product-spec.md.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';

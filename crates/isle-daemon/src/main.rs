@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! `isled`: the Isle background service.
-//!
-//! Everything the island shows that is not drawn by the desktop shell lives
-//! here, exposed on the session bus as `io.github.zickrian.isle.Daemon`. See
-//! `docs/dbus-api.md` for the interfaces.
+//! `isled`: the Isle background service, on the session bus as `io.github.zickrian.isle.Daemon`.
+//! See `docs/dbus-api.md` for the interfaces.
 
 mod calendar;
 mod clipboard;
@@ -80,9 +77,8 @@ async fn main() -> anyhow::Result<()> {
         .await
         .with_context(|| format!("could not own {BUS_NAME}; is isled already running?"))?;
     info!("isled is running as {BUS_NAME}");
-    // Started only now: a phase restored from disk that ran out while isled
-    // was down finishes at once, and its PhaseFinished signal must come from
-    // the claimed name for clients to see it.
+    // Started only now: a restored phase that ran out while isled was down finishes at once,
+    // and clients only see its PhaseFinished signal if it comes from the claimed name.
     tokio::spawn(pomodoro::run(pomodoro));
 
     std::future::pending::<()>().await;

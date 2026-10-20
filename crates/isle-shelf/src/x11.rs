@@ -10,9 +10,8 @@ use x11rb::protocol::xproto::{
 
 type Error = Box<dyn std::error::Error>;
 
-/// Makes the (realized, not yet mapped) window override-redirect: the window
-/// manager neither decorates nor places it, and GNOME Shell stacks it above
-/// its own chrome, like an app's popup menu.
+/// Makes the realized, unmapped window override-redirect: undecorated, unplaced
+/// by the window manager, and stacked by GNOME Shell above its own chrome.
 pub fn make_override_redirect(window: &gtk::Window) -> Result<(), Error> {
     let xid = xid(window)?;
     sync_gdk(window);
@@ -37,10 +36,8 @@ pub fn place(window: &gtk::Window, x: i32, y: i32, width: i32, height: i32) -> R
     Ok(())
 }
 
-/// Sends GDK's queued requests and waits until the X server has handled
-/// them. Ours go over another connection, so without this they can arrive
-/// first: before the window exists on the server (and fail unseen), or
-/// before GDK's own placement of it, which then undoes ours.
+/// Flushes GDK's queued requests and waits for the X server: ours use another
+/// connection and could beat the window's creation, or GDK's placement undoing ours.
 fn sync_gdk(window: &gtk::Window) {
     WidgetExt::display(window).sync();
 }

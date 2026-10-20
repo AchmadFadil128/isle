@@ -15,10 +15,7 @@ import {notificationIcon, plainBody} from '../notifications.js';
 import {icon, iconButton, isSymbolic, label, setButtonIcon, setEnabled} from '../widgets.js';
 import {Page} from './page.js';
 
-/**
- * Notifications by app (their source), in the order of each app's newest;
- * within an app, newest first.
- */
+/** Notifications grouped by app, apps ordered by their newest; newest first within an app. */
 function groupByApp(notifications) {
     const groups = new Map();
     for (const notification of notifications) {
@@ -35,10 +32,7 @@ function appName(source, notification) {
     return source?.title || notification.title || 'this app';
 }
 
-/**
- * The app's icon: a colour app icon as it is, a symbolic one on a grey
- * rounded square, the way macOS shows system notifications.
- */
+/** The app's icon: a colour one as is, a symbolic one on a grey rounded square, as macOS does. */
 function notificationBadge(gicon) {
     gicon ??= new Gio.ThemedIcon({name: 'dialog-information-symbolic'});
     if (!isSymbolic(gicon))
@@ -153,10 +147,7 @@ class NotificationsPage extends Page {
             this._center.acknowledgeAll();
     }
 
-    /**
-     * An app's notifications folded into a stack, like macOS: the newest on
-     * top, the edge of the next peeking out under it, and "+2 more from …".
-     */
+    /** An app's notifications as a macOS-like stack: newest on top, the next peeking out, "+2 more from …". */
     _stack(source, items) {
         const stack = new St.BoxLayout({...VERTICAL, style_class: 'isle-notification-stack'});
         stack.add_child(this._row(items[0]));
@@ -199,10 +190,7 @@ class NotificationsPage extends Page {
         setButtonIcon(this._dndButton, on ? 'isle-moon' : 'isle-bell');
     }
 
-    /**
-     * A card like macOS's: the app's icon, the title with its time on the
-     * right (a close button in its place under the pointer), the text below.
-     */
+    /** A macOS-like card: app icon, title with its time (a close button under the pointer), text below. */
     _row(notification) {
         const content = new St.BoxLayout({style_class: 'isle-notification', x_expand: true});
         content.add_child(notificationBadge(notificationIcon(notification)));

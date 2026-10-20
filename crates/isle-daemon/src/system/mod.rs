@@ -119,12 +119,8 @@ pub fn spawn_watchers(system: Connection, iface: InterfaceRef<SystemService>) {
     supervise("camera", move || camera::watch(iface.clone()));
 }
 
-/// Runs the watcher that `start` returns, and starts a new one whenever it
-/// stops. UPower, NetworkManager and BlueZ can restart under us (an update,
-/// a crash), and a watcher talking to the old instance would otherwise leave
-/// the state frozen. Restarts back off from [`RESTART_MIN`] to
-/// [`RESTART_MAX`], so a service that is simply missing costs one cheap
-/// attempt a minute; a healthy watcher is never polled.
+/// Runs the watcher from `start`, restarting it whenever it stops (UPower, NetworkManager and
+/// BlueZ can restart under us), backing off from [`RESTART_MIN`] to [`RESTART_MAX`].
 fn supervise<F, W>(name: &'static str, start: F)
 where
     F: Fn() -> W + Send + 'static,

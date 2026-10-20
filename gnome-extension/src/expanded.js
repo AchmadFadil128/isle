@@ -69,10 +69,8 @@ export const ExpandedView = GObject.registerClass({
         this._smoothScrolling = false;
         this._clockTimeout = 0;
 
-        // Sideways scrolls always flip pages, so they are taken before the
-        // pages' scrollable parts (lists, lyrics), which only scroll up and
-        // down; those get the rest first, and what they leave flips pages
-        // in `vfunc_scroll_event`.
+        // Sideways scrolls always flip pages, so catch them before lists and lyrics do;
+        // vertical scrolls those leave flip pages in `vfunc_scroll_event`.
         this.connect('captured-event', (_actor, event) => this._captureScroll(event));
 
         this._header = this._buildHeader();
@@ -409,11 +407,8 @@ export const ExpandedView = GObject.registerClass({
             (this._smoothScrolling || Boolean(event.get_flags() & Clutter.EventFlags.POINTER_EMULATED));
     }
 
-    /**
-     * Whether `event`, a mouse wheel click up or down, is over a list that
-     * scrolls up and down. St.ScrollView steps only with the click and
-     * ignores its smooth copy, so the click has to reach it.
-     */
+    // Whether a wheel click is over a vertical list. St.ScrollView steps only on
+    // the click and ignores its smooth copy, so the click must reach it.
     _overList(event) {
         const direction = event.get_scroll_direction();
         if (direction !== Clutter.ScrollDirection.UP && direction !== Clutter.ScrollDirection.DOWN)

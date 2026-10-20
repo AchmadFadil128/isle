@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Damped springs drive every island animation. Unlike fixed-duration
-// easing, a spring can be retargeted mid-flight and keeps its velocity, so
-// the island never jolts when the pointer moves in and out quickly.
+// Damped springs drive every island animation: unlike fixed-duration easing, a spring can be
+// retargeted mid-flight and keeps its velocity, so the island never jolts.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 
-/**
- * The island's size spring: about 3.5% overshoot, peaking after ~0.37 s and
- * at rest by ~0.57 s (close to `cubic-bezier(.34, 1.32, .5, 1)` over 0.62 s).
- */
+/** The island's size spring: ~3.5% overshoot, peaking at ~0.37 s and at rest by ~0.57 s. */
 export const ISLAND = {stiffness: 155, damping: 18};
 /** Same speed without overshoot, for corner and shoulder radii. */
 export const GENTLE = {stiffness: 155, damping: 25};
@@ -64,10 +60,7 @@ export class Spring {
     }
 }
 
-/**
- * Steps a set of springs once per frame of `actor`'s stage view, calling
- * `onFrame` after each step, and stops when all of them are at rest.
- */
+/** Steps springs once per frame of `actor`'s stage view, calling `onFrame` each step, until all rest. */
 export class SpringDriver {
     constructor(actor, springs, onFrame) {
         this._springs = springs;

@@ -1,29 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Short-lived alerts the island grows to show: charging, earbuds, volume
-// and brightness, keyboard, the focus timer, a new song...
-//
-// An alert is a plain object:
-//   {
-//     key,       // alerts with the same key replace each other in place
-//     icon,      // icon name, or
-//     gicon,     // a Gio.Icon, or
-//     art,       // a cover art path
-//     badge,     // a Gio.Icon on the art's corner (the playing app)
-//     appIcon,   // true: show the icon large and uncircled (notifications)
-//     ring,      // 0..1 draws a ring around the icon that sweeps up to it
-//     title, subtitle,
-//     tone,      // 'neutral' | 'good' | 'warn' | 'bad' | 'focus' | 'break'
-//     value,     // large text on the right, e.g. '70%'
-//     status,    // a short state in a tinted pill on the right, e.g. 'On'
-//     level,     // 0..1 shows a level bar on the right, with levelText
-//     action,    // {label, callback} shows a button on the right
-//     duration,  // milliseconds on screen
-//     onActivate,// called when the alert itself is clicked
-//     page,      // expanded page to open when hovered
-//     priority,  // 'instant' alerts (OSD) replace whatever is showing
-//     transient, // dropped rather than queued while the island is open
-//   }
+// Short-lived alerts the island grows to show. An alert: {key (same key replaces), icon | gicon | art, badge,
+// appIcon, ring, title, subtitle, tone, value, status, level, action, duration, onActivate, page, priority, transient}.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -54,10 +32,7 @@ const TONE_COLORS = {
 const css = ([r, g, b], alpha = 1) =>
     `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${alpha})`;
 
-/**
- * The badge behind an icon, lit in the alert's colour from the top, like
- * iOS's: a neutral alert gets a grey one.
- */
+/** The badge behind an icon, lit from the top in the alert's colour like iOS's; grey when neutral. */
 function badgeStyle(rgb, neutral) {
     const [top, bottom] = neutral ? [0.16, 0.08] : [0.34, 0.16];
     const base = neutral ? [1, 1, 1] : rgb;
@@ -130,10 +105,7 @@ class PeekView extends St.Widget {
         this.connect('destroy', () => this._onDestroy());
     }
 
-    /**
-     * Fills the view from an alert (see the top of this file). `onDone` runs
-     * after the alert's button did its job.
-     */
+    /** Fills the view from an alert (see the top of this file); `onDone` runs after its button did its job. */
     setAlert(alert, onDone = null) {
         const rgb = TONE_COLORS[alert.tone] ?? TONE_COLORS.neutral;
         const color = css(rgb);

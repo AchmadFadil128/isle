@@ -1,14 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Decides what the island shows and when; see docs/product-spec.md.
-//
-// The island is in one of three presentations:
-//   compact  - the resting pill with the clock and live activities
-//   peek     - a short alert (volume, charger, focus timer, new song...)
-//   expanded - the full island with pages, while the pointer is on it
-//
-// Alerts queue up and are shown one at a time; "instant" ones (volume,
-// brightness, keyboard, critical notifications) replace whatever is showing.
+// Decides what the island shows and when (compact, peek or expanded); see docs/product-spec.md.
+// Alerts show one at a time; "instant" ones (volume, brightness, critical...) replace what is showing.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -49,15 +42,12 @@ const ALERT_FIT_DELAY_MS = 60;
 /** Without input for this long, the user is away and animations rest. */
 const IDLE_MS = 60 * 1000;
 
-// Corner and shoulder radii per presentation. The shoulders ("ears") grow
-// with the island.
-// The compact island hangs 30 px by default: room for its content at a
-// comfortable size, a 16 px corner and a 10 px shoulder.
+// Corner and shoulder ("ear") radii per presentation; the shoulders grow with the island.
+// The compact island hangs 30 px by default, with a 16 px corner and a 10 px shoulder.
 const COMPACT_RADIUS = 16;
 const COMPACT_SHOULDER = 10;
-// Inside the top bar the closed island is a small notch. Its shoulders only
-// show on a bar that is not black, where it hangs from the screen's top edge
-// like Boring Notch on a Mac.
+// Inside the top bar the closed island is a small notch. Its shoulders only show on a bar that is
+// not black, where it hangs from the screen's top edge.
 const IN_BAR_RADIUS = 10;
 const IN_BAR_SHOULDER = 7;
 const PEEK_RADIUS = 22;
@@ -68,12 +58,8 @@ const PEEK_SHOULDER = 13;
 const EXPANDED_RADIUS = 32;
 const EXPANDED_SHOULDER = 22;
 
-/**
- * Pages that open by default when they have something to show, best first,
- * unless a page was picked by hand lately. Notifications only count when
- * some arrived unseen (e.g. during Do Not Disturb), since the others were
- * already shown as alerts.
- */
+// Pages that open by default when they have something to show, best first, unless one was picked
+// by hand lately. Notifications count only when some arrived unseen (others were shown as alerts).
 const DEFAULT_PAGE_ORDER = ['notifications', 'music', 'focus'];
 
 export class Controller {
@@ -244,10 +230,8 @@ export class Controller {
         // Before measuring it: inside the bar it is smaller.
         this._compact.inBar = inBar;
 
-        // Alerts hang below the top bar, with their content in the part that
-        // hangs down; the open island's header row sits in the top bar
-        // itself. The compact island either hangs too or sits inside the
-        // bar like a MacBook's notch, covering no window.
+        // Alerts hang below the top bar; the open island's header sits in the bar. The compact island
+        // either hangs too or sits inside the bar like a MacBook's notch, covering no window.
         let size, view;
         switch (presentation) {
         case 'expanded':
@@ -372,10 +356,7 @@ export class Controller {
         this._nextAlert();
     }
 
-    /**
-     * The page to open on: the one picked by hand lately (for a few
-     * minutes), else one with something live to show, else music.
-     */
+    /** The page to open on: the one picked lately by hand, else one with something live, else music. */
     _defaultPage() {
         if (Date.now() - this._pagePickedAt < PAGE_MEMORY_MS)
             return null; // stay on the current page
@@ -384,12 +365,8 @@ export class Controller {
 
     // Keyboard
 
-    /**
-     * Super+V (GNOME's calendar shortcut, which the island takes over) opens
-     * the clipboard history with the search field ready, and holds the
-     * island open without the pointer; pressing it again, Esc or a click
-     * elsewhere closes it.
-     */
+    // Super+V (GNOME's calendar shortcut, taken over) opens the clipboard history, search ready, and
+    // holds the island open without the pointer; Super+V again, Esc or a click elsewhere closes it.
     _toggleFromKeyboard() {
         if (this._expandWanted && this._keyboardGrab) {
             this.collapse();

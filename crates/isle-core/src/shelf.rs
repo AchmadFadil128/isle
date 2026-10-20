@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The file shelf: files parked on the island to be dragged somewhere later.
-//!
-//! The shelf only remembers where files are; it never copies or moves them.
+//! The file shelf: files parked on the island to drag later; it never copies or moves them.
 
 use serde::{Deserialize, Serialize};
 

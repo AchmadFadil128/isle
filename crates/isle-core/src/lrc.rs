@@ -1,13 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Parser for LRC, the de-facto format for time-synced lyrics.
-//!
-//! ```text
-//! [ar:Artist]
-//! [offset:+250]
-//! [00:12.34]First line
-//! [00:15.00][01:02.50]A line sung twice
-//! ```
 
 use serde::{Deserialize, Serialize};
 
@@ -62,9 +55,7 @@ pub fn plain(source: &str) -> Vec<LyricLine> {
         .collect()
 }
 
-/// Parses `mm:ss`, `mm:ss.xx` or `mm:ss.xxx` into milliseconds. Returns
-/// `None` for negative fields and for minutes too large to fit in an `i64`
-/// of milliseconds.
+/// Parses `mm:ss`, `mm:ss.xx` or `mm:ss.xxx` into milliseconds; `None` if negative or too big.
 fn parse_timestamp(tag: &str) -> Option<i64> {
     let (minutes, seconds) = tag.split_once(':')?;
     let minutes: i64 = minutes.parse().ok()?;

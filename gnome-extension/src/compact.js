@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The resting island: the clock, flanked by live activities (a screen
-// recording or focus timer on the left, music on the right, privacy dots at
-// the far right). A paused song keeps its cover, with the bars at rest.
+// The resting island: the clock flanked by live activities (recording or timer
+// left, music right, privacy dots far right). A paused song keeps its cover.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -149,9 +148,8 @@ export const CompactView = GObject.registerClass({
         const recording = this._privacy.recording;
         const widthBefore = this.preferredWidth;
 
-        // Left, first that applies: a screen recording, the focus timer, cover
-        // art, the unread dot, the Do Not Disturb moon. Both slots keep their
-        // width when empty, so the centre stays centred.
+        // Left, first that applies: recording, focus timer, cover, unread dot, DND.
+        // Both slots keep their width when empty, so the centre stays centred.
         let left = null;
         if (recording)
             left = this._recordingDot;

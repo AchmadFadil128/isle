@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Tasks: a plain list to write things down and tick them off. Today's
-// progress stacked on the left (ring, headline, caption); on the right, a
-// field to add a task and the list.
-// Click a title to rename it, × to remove it. Finished tasks fold away under
-// "Completed". See docs/product-spec.md, section 5.
+// Tasks: a plain to-do list; today's progress on the left, the add field and
+// list on the right. See docs/product-spec.md, section 5.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -77,9 +74,8 @@ class TasksPage extends Page {
         this._entry.set_primary_icon(new St.Icon({gicon: icon('isle-plus-symbolic'), icon_size: 14, style_class: 'isle-task-add-icon'}));
         const text = this._entry.clutter_text;
         text.connect('activate', () => this._add());
-        // Typing needs the keyboard, which the shell only gets on request.
-        // Ask before the field takes focus: the grab moves focus itself.
-        // Esc or a click outside the island gives it back.
+        // The shell only gets keys on request: ask before the field takes focus, as
+        // the grab moves focus itself. Esc or a click outside gives the keyboard back.
         text.connect('button-press-event', () => {
             this.emit('request-keyboard', true);
             return Clutter.EVENT_PROPAGATE;

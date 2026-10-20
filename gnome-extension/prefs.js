@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Preferences: how the island looks and behaves (GSettings), the clipboard
-// history, and the focus timer's durations (stored by isled, edited over
-// D-Bus).
+// Preferences: island look and behaviour (GSettings), clipboard history, and
+// focus timer durations (stored by isled, edited over D-Bus).
 
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
@@ -219,10 +218,7 @@ function confirmClear(window) {
     dialog.present();
 }
 
-/**
- * Lists the apps whose copies are ignored, each with a remove button, and a
- * searchable list of installed apps to add one.
- */
+/** Lists the ignored apps, each with a remove button, and a search to add one. */
 function fillIgnoredApps(group, settings) {
     const key = 'clipboard-ignored-apps';
     const apps = Gio.AppInfo.get_all()

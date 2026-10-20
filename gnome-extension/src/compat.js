@@ -10,11 +10,7 @@ import {PACKAGE_VERSION} from 'resource:///org/gnome/shell/misc/config.js';
 
 const SHELL_MAJOR = parseInt(PACKAGE_VERSION, 10);
 
-/**
- * Constructor params for a vertical box. GNOME 48 replaced `vertical` with
- * `orientation`, and GNOME 51 dropped `vertical`; before 48 there is only
- * `vertical`.
- */
+/** Vertical box params: GNOME 48 added `orientation`, GNOME 51 dropped `vertical`. */
 export const VERTICAL = SHELL_MAJOR >= 48
     ? {orientation: Clutter.Orientation.VERTICAL}
     : {vertical: true};

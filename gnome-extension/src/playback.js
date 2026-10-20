@@ -13,10 +13,7 @@ export function hasTrack(nowPlaying) {
     return nowPlaying?.available && Boolean(nowPlaying.title);
 }
 
-/**
- * The playback position right now, in milliseconds. The daemon only samples
- * the position when something changes; while playing it advances in real time.
- */
+/** The playback position now (ms), advanced in real time from the daemon's last sample while playing. */
 export function positionMs(nowPlaying) {
     if (!nowPlaying?.available)
         return 0;
@@ -48,10 +45,7 @@ export function lineIndexAt(lines, position) {
     return found;
 }
 
-/**
- * Milliseconds until the line after `index` starts at the current playback
- * speed, or null if there is none.
- */
+/** Milliseconds until the line after `index` starts at the current playback speed, or null if none. */
 export function msUntilLine(nowPlaying, lines, index) {
     const next = lines[index + 1];
     if (!next)
@@ -63,10 +57,7 @@ export function msUntilLine(nowPlaying, lines, index) {
 /** The playing app per player, looked up once: `desktop_entry|identity`. */
 const playerApps = new Map();
 
-/**
- * The app that is playing: from the player's desktop entry, or else found
- * by its name (Chrome gives only "Chrome"). Null when there is none.
- */
+/** The playing app, from the player's desktop entry or else its name (Chrome gives only "Chrome"); or null. */
 export function playerApp({desktop_entry: entry, identity}) {
     const key = `${entry}|${identity}`;
     if (!playerApps.has(key)) {

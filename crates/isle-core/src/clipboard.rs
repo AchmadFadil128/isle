@@ -1,24 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Clipboard history: what was copied, newest first.
-//!
-//! The desktop shell watches the clipboard and hands each copy to isled;
-//! this module decides what the history keeps. A copy that is already in
-//! the history moves to the top instead of appearing twice, pinned items
-//! are kept until removed by hand, and everything else is pruned to a fixed
-//! length.
-//!
-//! Images are referred to by a hash of their content; storing the files is
-//! the daemon's job. Every operation that drops items therefore returns the
-//! hashes no item refers to any more, so their files can be deleted.
+//! Clipboard history, newest first: re-copies move to the top, pins stay, the rest is pruned.
+//! Images go by content hash; anything that drops items returns the hashes left unused.
 
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// Unpinned items beyond this many are dropped, oldest first. Small on
-/// purpose: recent copies are what gets pasted again, and every card costs
-/// drawing time.
+/// Unpinned items kept, oldest dropped first; small because every card costs drawing time.
 pub const MAX_UNPINNED: usize = 20;
 
 /// At most this many items can be pinned; unpin one to pin another.
@@ -32,9 +21,7 @@ pub enum PinError {
     Full,
 }
 
-/// Longest text accepted, in bytes. Anything larger is more likely a file
-/// read into the clipboard by accident than something worth keeping, and
-/// would bloat the stored history.
+/// Longest text accepted, in bytes; anything bigger is likely a file copied by accident.
 pub const MAX_TEXT_BYTES: usize = 512 * 1024;
 
 /// Characters of text shown in previews. The full text is only sent when
@@ -159,9 +146,7 @@ impl Clip {
         }
     }
 
-    /// Whether `other` is the same copy, so it moves up instead of being
-    /// added again. Text is compared as given, images by content and files
-    /// by the whole list, in order.
+    /// Whether `other` is the same copy: text as given, images by content, files by the whole list.
     fn same_as(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Image { hash: a, .. }, Self::Image { hash: b, .. }) => a == b,
@@ -220,9 +205,8 @@ impl ClipboardHistory {
         })
     }
 
-    /// Records a copy at the top. A copy already in the history moves up
-    /// and keeps its pin; it only takes `app_id` if it had none, so the
-    /// app it first came from stays known when another app re-copies it.
+    /// Records a copy at the top. A copy already in the history moves up and keeps its pin;
+    /// it only takes `app_id` if it had none, so the app it first came from stays known.
     pub fn add(&mut self, clip: Clip, app_id: &str, now: i64) -> Added {
         let item = match self.items.iter().position(|item| item.clip.same_as(&clip)) {
             Some(index) => {
@@ -297,9 +281,7 @@ impl ClipboardHistory {
         self.items.iter().filter_map(|item| item.clip.image_hash())
     }
 
-    /// Drops the oldest unpinned items beyond `MAX_UNPINNED` (a history
-    /// saved under a larger limit shrinks on load), and returns the image
-    /// hashes left without an item.
+    /// Drops unpinned items beyond `MAX_UNPINNED`, oldest first; returns image hashes left unused.
     pub fn prune(&mut self) -> Vec<String> {
         let mut unpinned = 0;
         self.drop_where(|item| {
@@ -333,10 +315,8 @@ impl ClipboardHistory {
     }
 }
 
-/// A stable hash of `bytes` as 16 hex digits (64-bit FNV-1a), naming stored
-/// images. It must never change between versions or runs, since it is
-/// written to disk, which rules out the standard library's hashers. It only
-/// tells copies apart, so it need not resist deliberate collisions.
+/// A stable 64-bit FNV-1a hash of `bytes` as 16 hex digits, naming stored images.
+/// It is written to disk so it must never change, which rules out std's hashers.
 pub fn content_hash(bytes: &[u8]) -> String {
     const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0000_0100_0000_01b3;

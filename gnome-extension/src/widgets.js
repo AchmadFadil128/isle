@@ -16,12 +16,8 @@ export function setIconDir(dir) {
     iconDir = dir;
 }
 
-/**
- * A `Gio.Icon` for `name`: one of the extension's own icons (in `icons/`)
- * if it exists, otherwise a themed icon. The bundled icons are white line
- * drawings, deliberately not named `-symbolic`: GNOME recolours symbolic
- * icons by filling every shape, which would turn outlines into solid blobs.
- */
+// A `Gio.Icon` for `name`: a bundled one (in `icons/`) if it exists, else a themed icon. Bundled
+// icons are not named `-symbolic`: GNOME would fill every shape, turning outlines into blobs.
 export function icon(name) {
     const file = iconDir?.get_child(`${name}.svg`);
     if (file?.query_exists(null))
@@ -72,10 +68,7 @@ export function chipButton(iconName, text, onClick, styleClass = '') {
     return button;
 }
 
-/**
- * Updates a chip's state. A state change always changes the icon too (e.g.
- * outline to filled), never just the colour.
- */
+/** Updates a chip's state; a state change always changes the icon too, never just the colour. */
 export function setChip(button, {active = false, icon: iconName = null, label: text = null, enabled = true}) {
     if (iconName)
         button._isleIcon.gicon = icon(iconName);
@@ -91,11 +84,8 @@ export function setChip(button, {active = false, icon: iconName = null, label: t
 /** Opacity of disabled controls: still visible, clearly not available. */
 const DISABLED_OPACITY = 90;
 
-/**
- * Enables or disables a button. Disabled buttons stay in place, dimmed, so
- * the layout never jumps. Dimming uses opacity rather than CSS colour because
- * the bundled icons are plain white images that do not take a colour.
- */
+// Enables or disables a button; disabled ones stay in place, dimmed, so the layout never jumps.
+// Dimmed by opacity, not CSS colour: the bundled icons are white images that take no colour.
 export function setEnabled(button, enabled) {
     button.reactive = enabled;
     button.can_focus = enabled;
@@ -107,10 +97,7 @@ export function setButtonIcon(button, iconName) {
     button.child.gicon = icon(iconName);
 }
 
-/**
- * A circular progress ring, optionally with a child centred inside it.
- * `progress` is a GObject property, so it can be animated with `ease_property`.
- */
+/** A circular progress ring, optionally with a child centred inside; `progress` can be eased. */
 export const Ring = GObject.registerClass({
     Properties: {
         'progress': GObject.ParamSpec.double('progress', null, null,
@@ -200,9 +187,7 @@ class Bars extends St.BoxLayout {
         for (let i = 0; i < count; i++) {
             const bar = new St.Widget({style_class: 'isle-bar', y_align: Clutter.ActorAlign.CENTER});
             bar.height = this._restHeight(i);
-            // Off screen a bar's bounce pauses (see `_bounce`); back on, it
-            // goes on. Each bar is watched itself: the box is on screen a
-            // moment before its bars are.
+            // A bar's bounce pauses off screen. Each bar is watched itself: the box maps a moment before them.
             bar.connect('notify::mapped', () => this._bounce(bar));
             this._bars.push(bar);
             this.add_child(bar);
@@ -240,10 +225,8 @@ class Bars extends St.BoxLayout {
     }
 
     _bounce(bar) {
-        // Off screen, or with animations turned off, ease() skips the
-        // animation and reports it finished at once, so going on would loop
-        // without end and break the bounce (as when a player drops its title
-        // between songs while playing). With animations off the bars rest.
+        // Off screen or with animations off, ease() reports finished at once, so going on would loop
+        // without end (as when a player drops its title between songs). With animations off the bars rest.
         if (!this._playing || !bar.mapped || !St.Settings.get().enable_animations)
             return;
         bar.ease({
@@ -271,10 +254,7 @@ export function isSymbolic(gicon) {
     return false;
 }
 
-/**
- * Whether the image at `path` looks like an icon rather than a cover: its
- * corners are see-through. Covers are opaque all the way to the edge.
- */
+/** Whether the image at `path` looks like an icon, not a cover: its corners are see-through. */
 function isIcon(path) {
     try {
         const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(path, 32, 32);
@@ -348,11 +328,8 @@ class Art extends St.Bin {
     }
 });
 
-/**
- * Places `actor` inside its parent at the given rectangle. Used from
- * `vfunc_allocate`, where moving children through their position and size
- * properties would queue another layout mid-layout.
- */
+// Places `actor` inside its parent at the given rectangle. For `vfunc_allocate`, where setting
+// position and size properties would queue another layout mid-layout.
 function allocateAt(actor, x, y, width, height) {
     actor.allocate(Clutter.ActorBox.new(x, y, x + width, y + height));
 }
@@ -404,10 +381,7 @@ class LevelBar extends St.Widget {
     }
 });
 
-/**
- * A horizontal slider that can be clicked, dragged or scrolled. Emits
- * `value-changed` while it moves and `released` with the final value.
- */
+/** A horizontal slider. Emits `value-changed` while it moves and `released` with the final value. */
 export const Slider = GObject.registerClass({
     Signals: {
         'value-changed': {param_types: [GObject.TYPE_DOUBLE]},
@@ -438,9 +412,7 @@ export const Slider = GObject.registerClass({
         return this._value;
     }
 
-    // The track inside is sized from this slider's allocation, so its width
-    // must not feed back into the slider's own size: it only ever takes the
-    // space its parent gives it.
+    // The track is sized from this allocation, so the slider only takes the space its parent gives it.
     vfunc_get_preferred_width(_forHeight) {
         return [0, 0];
     }
@@ -522,10 +494,7 @@ export const Slider = GObject.registerClass({
     }
 });
 
-/**
- * Coloured dots for what is in use, as on iPhone: green for the camera,
- * orange for the microphone, blue for screen sharing. Dots fade and scale in.
- */
+/** Coloured dots for what is in use, as on iPhone: green camera, orange microphone, blue screen sharing. */
 export const PrivacyDots = GObject.registerClass(
 class PrivacyDots extends St.BoxLayout {
     _init() {

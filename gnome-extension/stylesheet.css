@@ -1,20 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
-/* Isle. The island itself is drawn black by island.js; this styles what
- * sits on it. Layout and sizes follow docs/product-spec.md.
- *
- * Palette (dark, iOS-like):
- *   text      #ffffff · secondary rgba(255,255,255,0.55) · faint 0.35
- *   surfaces  #1c1c1e · #2c2c2e · #3a3a3c (hover)
- *   accents   green #34d67a · amber #ffb833 · red #ff5c5c (errors) · blue #5aabff
- */
+/* Isle. island.js draws the island black; this styles what sits on it (see docs/product-spec.md).
+ * iOS-like dark palette: surfaces #1c1c1e #2c2c2e #3a3a3c; accents #34d67a #ffb833 #ff5c5c #5aabff. */
 
 /* ── Shared ───────────────────────────────────────────── */
 
-/* Type like macOS: Inter (installed with Isle), the open cousin of SF Pro,
- * or SF Pro itself where installed (`isle-sf`, set by shell.js). St takes a
- * single quoted family only: a list stops it reading the rules that follow.
- * Tabular figures keep times from jumping. */
+/* Inter (installed with Isle) or SF Pro (`isle-sf`, set by shell.js). St takes a single quoted
+ * family only: a list stops it reading the rules that follow. Tabular figures keep times still. */
 #isleIsland {
   color: #ffffff;
   font-family: "Inter Variable";
@@ -136,10 +128,8 @@
 
 #panel.isle-compact-bar.isle-sf { font-family: "SF Pro Text"; }
 
-/* With the closed island inside the top bar, like a MacBook's notch in its
- * menu bar, the bar is as tall as the island. Maximised windows start below
- * it, so the island never covers them. Comes after the compact bar's height
- * so it wins. */
+/* Closed island inside the top bar, like a MacBook's notch: the bar is as tall as the island, so
+ * maximised windows start below it. Comes after the compact bar's height so it wins. */
 #panel.isle-notch-bar { height: 32px; }
 
 /* The glass bar has no colour, so its text and icons carry a soft shadow to

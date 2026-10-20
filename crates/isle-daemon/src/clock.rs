@@ -20,8 +20,7 @@ pub fn now_ms() -> i64 {
 }
 
 /// Waits until the wall-clock `deadline` passes or `wake` is notified.
-/// Returns whether the deadline has passed; on `false`, re-read the state
-/// and call again.
+/// Returns whether it passed; on `false`, re-read the state and call again.
 pub async fn wait_until(deadline: Option<i64>, wake: &Notify) -> bool {
     let notified = wake.notified();
     let Some(deadline) = deadline else {

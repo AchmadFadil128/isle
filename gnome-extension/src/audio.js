@@ -1,24 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The default sound output: its volume, mute state, and the outputs to
-// choose from (speakers, headphones, earbuds, HDMI...). Uses the same mixer
-// as GNOME's Quick Settings, so both always agree.
+// The default sound output: its volume, mute state and the outputs to choose from.
+// Uses the same mixer as GNOME's Quick Settings, so both always agree.
 
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 import {getMixerControl} from 'resource:///org/gnome/shell/ui/status/volume.js';
 
-/**
- * Output device ids are small integers handed out as devices appear. GNOME
- * learns them from `output-added` at start-up, which has already happened by
- * the time the extension runs, so existing ones are found by looking up the
- * id range once.
- */
+// Output ids are small integers. GNOME learns them from `output-added` at start-up, which is over
+// by the time the extension runs, so existing ones are found by looking up this id range once.
 const MAX_DEVICE_ID = 256;
 
-/**
- * Signals:
- * - `changed` (): volume, mute, outputs or the active output changed
- */
+/** Signals: `changed` (): volume, mute, outputs or the active output changed. */
 export class AudioOutputs extends Signals.EventEmitter {
     constructor() {
         super();

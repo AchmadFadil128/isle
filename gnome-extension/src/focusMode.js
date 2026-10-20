@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Do Not Disturb during focus sessions, like a Focus mode on iPhone.
-//
-// When a focus phase starts and Do Not Disturb is off, it is turned on; when
-// the phase ends it is turned off again. Isle only ever undoes what it did:
-// if Do Not Disturb was already on, or the user turns it off mid-session, it
-// is left alone. Whether Isle owes turning it off is saved, so it survives
-// the lock screen (where Do Not Disturb stays on) and a crashed shell.
+// Turns Do Not Disturb on for focus phases, and only ever undoes what it did.
+// That is saved, so it survives the lock screen (DND stays on) and shell crashes.
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 

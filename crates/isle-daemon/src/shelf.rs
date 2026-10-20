@@ -37,9 +37,8 @@ impl ShelfService {
 
 #[interface(name = "io.github.zickrian.isle.Shelf1")]
 impl ShelfService {
-    /// Adds local files by `file://` URI. Other URIs are rejected, but do not
-    /// stop the rest: a drop mixing files with, say, a web link still shelves
-    /// the files, and is then reported as invalid with the rejected URIs.
+    /// Adds local files by `file://` URI. Other URIs are rejected without stopping the rest;
+    /// the call then fails as invalid, naming the rejected URIs.
     async fn add(
         &mut self,
         uris: Vec<String>,
@@ -130,9 +129,8 @@ impl ShelfService {
     }
 }
 
-/// Images sent from the clipboard history are copied into a folder of the
-/// shelf's own (so they outlive the history); taking one off the shelf
-/// deletes that copy. The user's own files are never touched.
+/// Deletes the shelf's own copy of a clipboard image (kept so it outlives the history).
+/// The user's own files are never touched.
 fn forget(uri: &str) {
     let Some(path) = Url::parse(uri).ok().and_then(|url| url.to_file_path().ok()) else {
         return;

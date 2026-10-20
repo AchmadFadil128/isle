@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Cleaning up track metadata so lyric lookups find a match.
-//!
-//! Browsers report YouTube videos as e.g. title "Artist - Song (Official
-//! Video)" with artist "ArtistVEVO" or "Artist - Topic"; lyric databases know
-//! the song as plain "Song" by "Artist".
+//! Cleaning up track metadata so lyric lookups find a match, e.g. YouTube's
+//! "Artist - Song (Official Video)" by "ArtistVEVO" becomes "Song" by "Artist".
 
 /// Words that mark a bracketed suffix as noise rather than part of the title.
 const NOISE: &[&str] = &[
@@ -60,7 +57,7 @@ pub fn full_title(title: &str) -> String {
     strip_noise(title)
 }
 
-/// Removes bracketed suffixes like "(Official Video)" or "[4K]".
+/// Removes bracketed suffixes like "(Official Video)" or "\[4K\]".
 fn strip_noise(title: &str) -> String {
     let mut result = String::with_capacity(title.len());
     let mut rest = title;

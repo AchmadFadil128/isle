@@ -38,11 +38,8 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
         }
     }
 
-    /// Loads the stored value, falling back to the default if the file is
-    /// missing, unreadable or corrupt. The user's data is never lost to that
-    /// fallback: a corrupt file is moved aside to `<name>.json.corrupt`, and
-    /// a file that cannot be read at all (or moved aside) is left alone, with
-    /// saving switched off until isled restarts.
+    /// Loads the stored value, falling back to the default. A corrupt file is moved aside to
+    /// `<name>.json.corrupt`; one that cannot be read or moved turns saving off until restart.
     pub fn load(&mut self) -> T {
         let bytes = match fs::read(&self.path) {
             Ok(bytes) => bytes,
@@ -78,9 +75,8 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
         })
     }
 
-    /// Whether the loaded value is a stand-in for data that could not be
-    /// read or was corrupt, so files it no longer mentions may still belong
-    /// to the user's real data (in the `.corrupt` copy).
+    /// Whether the value stands in for unreadable or corrupt data, so files it no longer
+    /// mentions may still belong to the user's real data.
     pub fn lost_track(&self) -> bool {
         self.read_only || self.fell_back
     }

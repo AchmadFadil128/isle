@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Pomodoro focus timer: focus sessions separated by short breaks, with a
-//! long break after every few sessions.
-//!
-//! All times are wall-clock milliseconds since the Unix epoch, passed in by
-//! the caller so the logic stays deterministic and testable.
+//! Pomodoro timer: focus sessions, short breaks, and a long break every few sessions.
+//! Times are epoch milliseconds passed in by the caller, so the logic stays deterministic.
 
 use serde::{Deserialize, Serialize};
 
@@ -116,9 +113,8 @@ impl Pomodoro {
         }
     }
 
-    /// Picks up where a saved timer left off. A running phase keeps its end
-    /// time, so one that ran out in the meantime finishes on the next
-    /// [`tick`](Self::tick), exactly as if the daemon had been there.
+    /// Picks up a saved timer. A running phase keeps its end time, so one that ran out
+    /// meanwhile finishes on the next [`tick`](Self::tick).
     pub fn restore(config: PomodoroConfig, state: TimerState) -> Self {
         if state.phase == Phase::Idle {
             return Self::new(config);

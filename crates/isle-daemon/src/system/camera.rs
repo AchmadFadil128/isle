@@ -1,16 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Whether a camera is in use, for the island's privacy indicator.
-//!
-//! The kernel reports every open and close of `/dev/video*` through inotify,
-//! so this costs nothing while nobody touches a camera. Opens minus closes
-//! gives the number of handles held on each device node. Short-lived probes
-//! (udev, PipeWire enumerating devices) open and close a camera within a
-//! blink, so a change only counts once it has lasted [`SETTLE`].
-//!
-//! Counts are kept per node, so a webcam unplugged mid-call takes its open
-//! handles with it, and they are counted afresh whenever the kernel's event
-//! queue overflowed and events may have been lost.
+//! Whether a camera is in use, counted from inotify opens and closes of `/dev/video*`.
+//! A change only counts after [`SETTLE`], to ignore quick probes by udev or PipeWire.
 
 use std::collections::HashMap;
 use std::fs;
@@ -68,9 +59,7 @@ pub async fn watch(iface: InterfaceRef<SystemService>) -> anyhow::Result<()> {
                     if event.mask.contains(EventMask::CREATE) {
                         add_camera(&mut watches, &mut cameras, path);
                     } else if event.mask.contains(EventMask::DELETE) {
-                        // Unplugged. Its handles die with the device even if
-                        // an app has yet to close them, so stop counting them
-                        // now rather than waiting for the watch to go away.
+                        // Unplugged: its handles die with the device, so stop counting them now.
                         cameras.retain(|_, camera| camera.path != path);
                     }
                 } else if let Some(camera) = cameras.get_mut(&event.wd) {
@@ -149,10 +138,8 @@ fn add_camera(
     }
 }
 
-/// How many open file handles point at `device`, from our own processes'
-/// `/proc/*/fd` (others are not readable, and do not affect this user's
-/// privacy indicator). Only used when the counts from inotify events are not
-/// available or not trustworthy: at start-up and after lost events.
+/// Open handles on `device` from our own processes' `/proc/*/fd` (others' are unreadable).
+/// Only used when inotify counts are not trustworthy: at start-up and after lost events.
 fn holders(device: &Path) -> usize {
     let Ok(processes) = fs::read_dir("/proc") else {
         return 0;

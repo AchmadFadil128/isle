@@ -69,10 +69,7 @@ class FilesView extends St.Widget {
         this.update();
     }
 
-    /**
-     * While the helper window covers this tab, it draws nothing itself so
-     * the two never show through each other.
-     */
+    /** While the helper window covers this tab, draw nothing so the two never mix. */
     set helperActive(active) {
         if (active === this._helperActive)
             return;

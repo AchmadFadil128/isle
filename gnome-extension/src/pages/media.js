@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Now playing, like macOS's Now Playing: the cover on the left; title,
-// artist, a scrubber and the controls beside it. With lyrics on, a wider
-// island with the player on the left and synced lyrics on the right.
-// See docs/product-spec.md, section 5.
+// Now playing, like macOS's: cover on the left; title, artist, scrubber and controls beside it.
+// With lyrics on, a wider island with synced lyrics on the right. See docs/product-spec.md, section 5.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -109,9 +107,8 @@ class MediaPage extends Page {
         });
         this._badges.push({badge, icon: badgeIcon});
 
-        // The badge expands to reach the corner; kept from spreading to the
-        // box, which would then take a share of the row and leave the art
-        // stranded at one end and the badge at the other.
+        // The badge expands to reach the corner; kept from spreading to the box, which would then take a
+        // share of the row and pull the art and badge apart.
         const box = new St.Widget({
             layout_manager: new Clutter.BinLayout(),
             x_expand: false,
@@ -168,10 +165,7 @@ class MediaPage extends Page {
         return row;
     }
 
-    /**
-     * A button switching to `mode` and back. While its mode is shown it is
-     * lit and its icon fills in.
-     */
+    /** A button switching to `mode` and back; while its mode is shown it is lit and its icon fills in. */
     _modeButton(mode, iconName, accessibleName, on) {
         return iconButton(on ? `${iconName}-fill` : iconName, `isle-button-flat isle-mode-toggle${on ? ' on' : ''}`,
             () => this._toggleMode(mode), {size: 18, accessibleName});

@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Cards for the Clipboard tab of the Shelf page: one card per copied item,
-// pinned ones first, then newest first. Click a card to copy it; on hover it
-// offers pin, a hand-off (to Tasks for text, to the Files tab for images and
-// files) and ×. The keyboard can move a selection and paste it.
+// Cards for the Shelf page's Clipboard tab, pinned first, then newest. Click to copy; on hover: pin,
+// a hand-off (text to Tasks, images and files to Files) and ×. The keyboard can select and paste.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -22,10 +20,7 @@ const MAX_CARDS = 30;
 const MAX_PINNED = 10;
 /** The Files tab holds this many files. */
 const SHELF_CAPACITY = 5;
-/**
- * Cards drawn at once: about what fits on screen. The rest follow a few at a
- * time between frames, so opening the island never stutters.
- */
+/** Cards drawn at once (about a screenful); the rest follow a few per frame so opening never stutters. */
 const FIRST_CARDS = 6;
 const CARDS_PER_IDLE = 6;
 /** How long "Copied" and friends stay on a card. */
@@ -54,10 +49,7 @@ function matches(item, query) {
     return `${item.preview}\n${app}`.toLowerCase().includes(query);
 }
 
-/**
- * Signals:
- * - `activated` (item, paste): a card was chosen; `paste` when by keyboard
- */
+/** Signals: `activated` (item, paste): a card was chosen; `paste` when by keyboard. */
 export const ClipsView = GObject.registerClass({
     Signals: {
         'activated': {param_types: [GObject.TYPE_JSOBJECT, GObject.TYPE_BOOLEAN]},
@@ -119,10 +111,7 @@ export const ClipsView = GObject.registerClass({
         this.update();
     }
 
-    /**
-     * Redraws the cards. `off` tells that clipboard history is switched off,
-     * so the empty state can say so.
-     */
+    /** Redraws the cards; `off` means clipboard history is switched off, for the empty state. */
     update({off = false} = {}) {
         this._off = off;
         // Pinned items stay at the front, the rest newest first (as isled
@@ -415,11 +404,8 @@ export const ClipsView = GObject.registerClass({
         }
     }
 
-    /**
-     * Puts a copy of a clipboard image on the shelf, under a readable name.
-     * The history's own file goes when the item is pruned; the copy stays
-     * until it is taken off the shelf (isled then deletes it).
-     */
+    // Puts a copy of a clipboard image on the shelf under a readable name: the history's file goes when
+    // the item is pruned, the copy stays until taken off the shelf (isled then deletes it).
     _shelveImage(item) {
         const dir = GLib.build_filenamev([GLib.get_user_data_dir(), 'isle', 'shelf']);
         GLib.mkdir_with_parents(dir, 0o700);

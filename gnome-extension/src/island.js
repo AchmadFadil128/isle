@@ -1,16 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The island itself: a black shape hanging from the top bar that morphs
-// between sizes with spring physics and cross-fades between views.
-//
-//   ┌──────────── top bar (black) ────────────┐
-//   └───────╮                       ╭─────────┘   <- concave shoulders
-//           │        content        │
-//           ╰───────────────────────╯             <- rounded corners
-//
-// On a bar that is not black it hangs from the screen's top edge instead,
-// shoulders and all, like a MacBook's notch; closed, it can sit inside the
-// bar, rounding its corners within it.
+// The island itself: a black shape hanging from the top bar that springs between sizes and
+// cross-fades views. On a bar that is not black it hangs from the screen's top edge, like a notch.
 
 import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
@@ -20,10 +11,7 @@ import St from 'gi://St';
 import {GENTLE, Spring, SpringDriver} from './spring.js';
 
 
-/**
- * Sideways speed (px/s) given to the island by `nudge`: a stretch of about
- * 15 px that springs back, like iOS when the volume is already at its limit.
- */
+/** Sideways speed (px/s) `nudge` gives: a ~15 px stretch that springs back, as iOS does at a volume limit. */
 const NUDGE_VELOCITY = 220;
 
 /** How long a tint takes to come and go: a wash, and a glow (which lingers out). */
@@ -34,10 +22,7 @@ const FADE_OUT = 160;
 const FADE_IN = 320;
 /** The incoming view waits for the shape to make room before appearing. */
 const FADE_IN_DELAY = 200;
-/**
- * Below this shoulder size (px) the corners may climb into the top bar, so
- * an island growing out of the bar rounds smoothly instead of jumping.
- */
+/** Below this shoulder size (px) the corners may climb into the top bar, so the island rounds smoothly. */
 const SHOULDER_FADE = 4;
 
 export const Island = GObject.registerClass({
@@ -155,10 +140,7 @@ export const Island = GObject.registerClass({
             y + height <= top + Math.max(0, this._height.value);
     }
 
-    /**
-     * Animates to `size` ({width, height, radius, shoulder}) and shows
-     * `view`, which should already be sized to fit.
-     */
+    /** Animates to `size` ({width, height, radius, shoulder}) and shows `view`, already sized to fit. */
     morph(size, view) {
         this._width.setTarget(size.width);
         this._height.setTarget(size.height);
@@ -178,10 +160,7 @@ export const Island = GObject.registerClass({
         this._showView(view);
     }
 
-    /**
-     * Adds a view, hidden. Every view is added up front so it is always on
-     * the stage, even before it is first shown.
-     */
+    /** Adds a view, hidden. All views are added up front so they are always on the stage. */
     addView(view) {
         view.connect('notify::width', () => this._placeView(view));
         view.opacity = 0;
