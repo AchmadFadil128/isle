@@ -42,10 +42,10 @@ const PAGE_MEMORY_MS = 5 * 60 * 1000;
 
 // Corner and shoulder radii per presentation. The shoulders ("ears") grow
 // with the island.
-// The compact island hangs 22 px by default: just enough for a 14 px corner
-// and an 8 px shoulder, so it is fully round without hanging low.
-const COMPACT_RADIUS = 14;
-const COMPACT_SHOULDER = 8;
+// The compact island hangs 30 px by default: room for its content at a
+// comfortable size, a 16 px corner and a 10 px shoulder.
+const COMPACT_RADIUS = 16;
+const COMPACT_SHOULDER = 10;
 const PEEK_RADIUS = 22;
 const PEEK_SHOULDER = 13;
 const EXPANDED_RADIUS = 32;

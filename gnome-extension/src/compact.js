@@ -13,9 +13,9 @@ import * as Format from './format.js';
 import * as Playback from './playback.js';
 import {Art, Bars, Eyes, Ring, icon} from './widgets.js';
 
-const WIDTH_CLOCK = 150;
-const WIDTH_ACTIVITIES = 232;
-const WIDTH_LYRICS = 400;
+const WIDTH_CLOCK = 164;
+const WIDTH_ACTIVITIES = 256;
+const WIDTH_LYRICS = 420;
 /** How often the focus ring is redrawn; it moves too slowly to need more. */
 const RING_REFRESH_S = 5;
 /** The focus timer's colour: white while focusing, green on a break. */
@@ -40,8 +40,8 @@ export const CompactView = GObject.registerClass({
         this.add_child(row);
 
         this._left = new St.Bin({style_class: 'isle-compact-slot', y_align: Clutter.ActorAlign.CENTER});
-        this._ring = new Ring({size: 16, lineWidth: 2.5});
-        this._art = new Art({size: 20, radius: 5});
+        this._ring = new Ring({size: 20, lineWidth: 3});
+        this._art = new Art({size: 24, radius: 6});
         this._dot = new St.Widget({style_class: 'isle-unseen-dot', y_align: Clutter.ActorAlign.CENTER});
         this._moon = new St.Icon({gicon: icon('isle-moon'), icon_size: 13, style_class: 'isle-dnd-moon', y_align: Clutter.ActorAlign.CENTER});
 
@@ -58,7 +58,7 @@ export const CompactView = GObject.registerClass({
         center.add_child(this._eyes);
 
         this._right = new St.Bin({style_class: 'isle-compact-slot', y_align: Clutter.ActorAlign.CENTER});
-        this._bars = new Bars({height: 13});
+        this._bars = new Bars({height: 16});
 
         row.add_child(this._left);
         row.add_child(center);

@@ -26,7 +26,7 @@ The island is always in exactly one presentation. `P` is the top bar height
 
 | Presentation | Size (w × h) | Corner | Shoulder | Content |
 |---|---|---|---|---|
-| Compact | 150 × (P + 22); 232 with an activity; 400 with live lyrics | 14 | 8 | Clock, or lyric line, or eyes; activity slots left/right |
+| Compact | 164 × (P + 30); 256 with an activity; 420 with live lyrics | 16 | 10 | Clock, or lyric line, or eyes; activity slots left/right |
 | Peek (alert) | 380 × (P + 56) | 22 | 13 | Badge · title/subtitle · value, level bar or button |
 | Expanded | 600 × (P + 170); 720 for lyrics | 32 | 22 | Header row · page · dots |
 

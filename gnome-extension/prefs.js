@@ -28,7 +28,7 @@ export default class IslePreferences extends ExtensionPreferences {
 
         const look = new Adw.PreferencesGroup({title: 'Appearance'});
         look.add(switchRow(settings, 'black-top-bar', 'Black top bar', 'Blend the top bar into the island'));
-        look.add(spinRow(settings, 'notch-depth', 'Island height', 'How far the closed island hangs below the top bar, in pixels', 22, 36));
+        look.add(spinRow(settings, 'notch-depth', 'Island height', 'How far the closed island hangs below the top bar, in pixels', 24, 40));
         page.add(look);
 
         const idle = new Adw.PreferencesGroup({title: 'When Idle'});
