@@ -45,7 +45,9 @@ glance (and for colour-blind users):
 | Control | Off | On |
 |---|---|---|
 | Do Not Disturb | bell outline, grey chip | filled moon, indigo chip; moon in the closed island |
-| Short Break / Focus Time | outline icon | filled icon, lit chip |
+| Focus Time | target outline, grey chip | filled target, indigo chip |
+| Short Break | cup outline, grey chip | filled cup, green chip ("Long Break" during a long break) |
+| Focus stopwatch | outline | filled while running; reset dims until the timer starts |
 | Lyrics | speech bubble outline | filled bubble, lit button |
 | Edit Task | pencil, "Edit Task" | check mark, "Done" |
 | Play / pause | play | pause |

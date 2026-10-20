@@ -84,9 +84,21 @@ export function setChip(button, {active = false, icon: iconName = null, label: t
         button.add_style_pseudo_class('checked');
     else
         button.remove_style_pseudo_class('checked');
-    // Disabled chips stay in place, dimmed, so the layout never jumps.
+    setEnabled(button, enabled);
+}
+
+/** Opacity of disabled controls: still visible, clearly not available. */
+const DISABLED_OPACITY = 90;
+
+/**
+ * Enables or disables a button. Disabled buttons stay in place, dimmed, so
+ * the layout never jumps. Dimming uses opacity rather than CSS colour because
+ * the bundled icons are plain white images that do not take a colour.
+ */
+export function setEnabled(button, enabled) {
     button.reactive = enabled;
     button.can_focus = enabled;
+    button.ease({opacity: enabled ? 255 : DISABLED_OPACITY, duration: 150});
 }
 
 /** Sets an icon button's icon. */
