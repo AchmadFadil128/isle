@@ -17,6 +17,7 @@ use zbus::proxy::CacheProperties;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
 use zbus::{Connection, proxy};
 
+use super::gap::GapBridge;
 use super::lyrics::{self, Lyrics, LyricsStatus, TrackQuery};
 use super::{MediaService, NowPlaying, art};
 use crate::clock::now_ms;
@@ -73,6 +74,8 @@ enum Event {
     Lyrics { lookup: u64, lyrics: Lyrics },
     /// Time to retry lyrics lookup number `lookup`, which failed.
     RetryLyrics { lookup: u64 },
+    /// A gap between songs may be over; see [`GapBridge`].
+    GapOver,
 }
 
 /// Everything read from one player's `GetAll`.
@@ -129,6 +132,9 @@ struct Watcher {
     lyrics_lookup: u64,
     /// Failed lookups in a row for the current track, for the retry backoff.
     lyrics_failures: u32,
+    gap: GapBridge<Option<(PlayerProxy<'static>, Option<OwnedObjectPath>)>>,
+    /// When a `GapOver` is due, so only one waits at a time.
+    gap_check: Option<Instant>,
 }
 
 /// Runs forever, keeping `iface` in sync with the active player.
@@ -148,6 +154,8 @@ pub async fn watch(conn: Connection, iface: InterfaceRef<MediaService>) -> anyho
         lyrics_query: None,
         lyrics_lookup: 0,
         lyrics_failures: 0,
+        gap: GapBridge::default(),
+        gap_check: None,
     };
 
     for name in dbus.list_names().await? {
@@ -181,6 +189,7 @@ pub async fn watch(conn: Connection, iface: InterfaceRef<MediaService>) -> anyho
                     watcher.retry_lyrics(lookup);
                     continue;
                 }
+                Event::GapOver => watcher.gap_check = None,
             },
             else => return Ok(()),
         }
@@ -302,7 +311,7 @@ impl Watcher {
     }
 
     async fn publish(&mut self) {
-        let (now_playing, active, query) = match self.active() {
+        let (now_playing, active) = match self.active() {
             Some(entry) => {
                 let s = &entry.snapshot;
                 let now_playing = NowPlaying {
@@ -323,22 +332,26 @@ impl Watcher {
                     can_play_pause: s.can_play_pause,
                     can_seek: s.can_seek,
                 };
-                let query = (!s.title.is_empty()).then(|| TrackQuery {
-                    title: s.title.clone(),
-                    artist: s.artist.clone(),
-                    album: s.album.clone(),
-                    length_s: s.length_us as f64 / 1e6,
-                });
                 let art_url = s.art_url.clone();
                 let active = (entry.player.clone(), s.track_id.clone());
                 if now_playing.art_path.is_empty() && art::is_remote(&art_url) {
                     self.download_art(art_url);
                 }
-                (now_playing, Some(active), query)
+                (now_playing, Some(active))
             }
-            None => (NowPlaying::default(), None, None),
+            None => (NowPlaying::default(), None),
         };
+        let (now_playing, active, gap_ends) = self.gap.show(now_playing, active, Instant::now());
+        if let Some(at) = gap_ends {
+            self.check_gap_at(at);
+        }
 
+        let query = (!now_playing.title.is_empty()).then(|| TrackQuery {
+            title: now_playing.title.clone(),
+            artist: now_playing.artist.clone(),
+            album: now_playing.album.clone(),
+            length_s: now_playing.length_us as f64 / 1e6,
+        });
         self.load_lyrics(query).await;
 
         let mut service = self.iface.get_mut().await;
@@ -352,6 +365,19 @@ impl Watcher {
                 warn!("could not publish now playing: {err}");
             }
         }
+    }
+
+    /// Publishes again at `at`, when a gap between songs stops being bridged.
+    fn check_gap_at(&mut self, at: Instant) {
+        if self.gap_check == Some(at) {
+            return;
+        }
+        self.gap_check = Some(at);
+        let events = self.events.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep_until(at).await;
+            let _ = events.send(Event::GapOver);
+        });
     }
 
     fn download_art(&mut self, url: String) {

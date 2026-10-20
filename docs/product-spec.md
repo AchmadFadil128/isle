@@ -158,12 +158,24 @@ headphones, earbuds, HDMI) with a check on the current one; click one to
 switch. The output button lights up and fills in while this is shown; it
 returns to the player when the island closes.
 
-**Lyrics** (Music page, toggled). The island widens to 720. Left: cover,
-title, artist, scrubber, controls with the lyrics toggle lit. A hairline
-divider. Right: synced lines, the current one white, others dimmed, faded at
-the top and bottom; click a line to jump there; scrolling by hand pauses
-following for 4 s. The island takes a soft wash of the cover's colour.
-States: looking for lyrics, no lyrics found, instrumental, offline.
+**Lyrics** (Music page, toggled), like Apple Music's. The island widens to
+720. Left, in a column: a 64 px cover, title, artist and the music bars
+(dancing while it plays), the scrubber, then the lyrics toggle (lit),
+previous · play/pause · next and the output button. Right: synced lines;
+the one being sung is white and full size, the others a little smaller,
+those to come dimmed by distance and those sung dimmest; the view glides to
+keep the current line a third of the way down, its edges fading. Pauses in
+the singing (and a long intro) show as three breathing dots. Click a line
+to jump there; scrolling by hand pauses following for 4 s. The island takes
+a wash of the cover's main colour (by hue, so a two-colour cover gives one
+of them, not the grey between). States, centred with an icon: "Looking for
+lyrics" (breathing dots), "No lyrics for this song", "Instrumental", "Can't
+reach the lyrics", "Lyrics are busy right now".
+
+Between songs the island stays steady: when a song that was playing gives
+way to nothing (browsers report no title and "Paused" for a moment between
+videos), the song is shown playing for up to 1.5 s, so the cover, bars and
+width do not drop out and back; a song paused by itself shows at once.
 
 **Notifications**. A slim row on top: how many there are ("4
 notifications"), then **Do Not Disturb** (bell, or a moon on purple while
@@ -209,17 +221,30 @@ segmented control (switching crossfades).
   field has the keyboard: ← → choose a card (white outline), Enter pastes it
   into the window in front (Ctrl+Shift+V in terminals).
 - **Files**: at most 5 files, all in view with no scrolling; a sixth is
-  refused until one is removed. The bar says what the tab is for ("Drop
-  files here, then drag them into any app"), how full it is ("3 of 5"), or
-  "Full · remove a file to add another". With `isle-shelf` installed, a drop
-  zone and file tiles drawn by the helper over this tab: drag a file out to
-  any app (a chat, an email, a folder), double-click to open, × on hover to
-  remove. Dragging copies; a drag that ends nowhere leaves the file on the
-  shelf, and the island stays open until the drag ends. Dragging a file near
-  the island opens this tab by itself, and the bar says "Drop to keep it on
-  the shelf" (or "Full · remove a file first", and the drop is refused); the
-  drop zone lights up softly while a file is over it. Without the helper: tiles that open on
-  click, × on hover to remove, and an install hint when empty.
+  refused until one is removed. Each file is a tile of one size: a 52 px
+  square preview (a picture cut to a square, or the file's icon) with a
+  round × always on its corner, and the name below, shortened in the
+  middle. Click a tile to copy the file ("copied" shows on it): pictures
+  as the image itself, so chat apps and AI chats paste an image, other
+  files as a file; double-click to open it. The bar says what the tab is
+  for ("Drop files here, then drag them into any app"), how full it is ("3
+  of 5 · click to copy, or drag into any app"), or "Full · remove a file to
+  add another". With `isle-shelf` installed, the helper draws this tab in a
+  see-through window placed exactly over it, tile for tile as the island
+  draws it: drag a file out to any app (a chat, an email, a folder).
+  Dragging copies; a drag that ends nowhere leaves the file on the shelf,
+  and the island stays open until the drag ends. Dragging a file near the
+  island (within 120 px) opens this tab by itself; the helper is started as
+  the drag begins and shown as soon as the growing island covers the tab,
+  so it takes the drop at once. While the file is on its way the tab lights
+  up as one rounded area with an empty "Drop here" slot at the front, and
+  the bar says "Drop to keep it on the shelf" (or "Full · remove a file
+  first", the area edged red, and the drop is refused); a drag that goes
+  off elsewhere closes the island again. When a file lands, light in its
+  colour (its picture's main colour, or its type's) rises from the island's
+  two bottom corners and fades after about 2 s, and the bar says "Added".
+  Without the helper the island's own tiles do all but take drops, with an
+  install hint when empty.
 
 Clipboard history is event driven (GNOME tells the shell when the
 clipboard changes; nothing polls) and kept by `isled`: the 20 most recent
@@ -238,6 +263,22 @@ saves, Esc cancels); × appears on hover. Finished tasks fold under
 "Completed · N" and show as plain struck-through rows when unfolded, the
 list scrolling to them.
 Finished tasks are cleared at midnight.
+
+**Calendar** (title "Calendar"), like macOS's Calendar widget. Left: the
+month in red capitals with the year (click: back to today) and ‹ › to move
+between months; the week's day letters (from the locale's first weekday,
+weekends dimmer); the days, today in a red circle, the chosen day in a grey
+one, a dot under days with events. Right: the chosen day ("Today, 20
+October"; "Tomorrow", "Yesterday", or its weekday), a **Today** pill when
+away from it, a field to add an event in one line (the hint says "e.g.
+Dinner 8:00 pm"; also "Standup 9:00-9:15", "Gym at 7pm"; without a time it
+is all day), then the day's events as pills tinted in their
+calendar's colour with a bar of it down the side: title, and "All day" or
+the time on the right. Finished events recede. Events come from the
+desktop's calendars (Evolution, and accounts added in Settings → Online
+Accounts such as Google; blue; click to open GNOME Calendar) and Isle's own
+(orange; × on hover to remove), kept by `isled` and forgotten after 400
+days.
 
 ## 6. Alerts
 

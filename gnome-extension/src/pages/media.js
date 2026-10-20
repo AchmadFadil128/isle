@@ -6,15 +6,16 @@
 // See docs/product-spec.md, section 5.
 
 import Clutter from 'gi://Clutter';
-import GdkPixbuf from 'gi://GdkPixbuf';
 import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
+import {vividColorOfFile} from '../colors.js';
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import * as Playback from '../playback.js';
-import {Art, Slider, icon, iconButton, label, setButtonIcon} from '../widgets.js';
+import {Art, Bars, Slider, icon, iconButton, label, setButtonIcon} from '../widgets.js';
+import {LyricsPane} from './lyrics.js';
 import {Page} from './page.js';
 
 /** The cover beside the player: as tall as its column. */
@@ -23,189 +24,8 @@ const ART_SIZE = 104;
 const LYRICS_WIDTH = 720;
 /** How often the elapsed time and scrubber move while playing. */
 const PROGRESS_REFRESH_MS = 250;
-/** Where the current lyric line sits in the lyrics pane, from the top. */
-const LYRIC_ANCHOR = 0.42;
-/** After scrolling the lyrics by hand, wait this long before following again. */
-const MANUAL_SCROLL_HOLD_MS = 4000;
-/** Line opacity by distance from the current line; lines fade out with distance. */
-const LINE_OPACITY = [255, 120, 80, 55];
-
-const LYRICS_MESSAGES = {
-    none: '',
-    loading: 'Looking for lyrics…',
-    not_found: 'No lyrics found for this song',
-    instrumental: '♪  Instrumental',
-    error: "Couldn't load lyrics. Check your connection.",
-    unavailable: 'The lyrics service is busy. Trying again soon.',
-};
-
-/**
- * The cover's most colourful average colour, toned for a background wash,
- * or null. Reads a 12×12 thumbnail, so it costs next to nothing.
- */
-function coverColor(path) {
-    if (!path)
-        return null;
-    let pixbuf;
-    try {
-        pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 12, 12, false);
-    } catch {
-        return null;
-    }
-    const pixels = pixbuf.get_pixels();
-    const channels = pixbuf.get_n_channels();
-    const stride = pixbuf.get_rowstride();
-    let [r, g, b, total] = [0, 0, 0, 0];
-    for (let y = 0; y < pixbuf.get_height(); y++) {
-        for (let x = 0; x < pixbuf.get_width(); x++) {
-            const i = y * stride + x * channels;
-            const [pr, pg, pb] = [pixels[i], pixels[i + 1], pixels[i + 2]];
-            const max = Math.max(pr, pg, pb);
-            const min = Math.min(pr, pg, pb);
-            // Favour saturated, not-too-dark pixels.
-            const weight = max < 24 ? 0.02 : 0.1 + (max - min) / 255;
-            r += pr * weight;
-            g += pg * weight;
-            b += pb * weight;
-            total += weight;
-        }
-    }
-    if (!total)
-        return null;
-    const color = [r / total, g / total, b / total];
-    const peak = Math.max(...color, 1);
-    // Vivid covers wash bright; grey ones stay dark, so white lyrics read.
-    const saturation = (peak - Math.min(...color)) / peak;
-    const brightness = 0.35 + 0.45 * Math.min(1, saturation * 2);
-    return color.map(channel => (channel / peak) * brightness);
-}
-
-/** Synced lyrics that follow the song; click a line to jump to it. */
-const LyricsPane = GObject.registerClass(
-class LyricsPane extends St.Widget {
-    _init(page) {
-        super._init({
-            style_class: 'isle-lyrics',
-            layout_manager: new Clutter.BinLayout(),
-            clip_to_allocation: true,
-            reactive: true,
-            x_expand: true,
-            y_expand: true,
-        });
-        this._page = page;
-        this._key = null;
-        this._lines = [];
-        this._labels = [];
-        this._current = -2;
-        this._manualUntil = 0;
-
-        this._column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true, x_align: Clutter.ActorAlign.FILL, y_align: Clutter.ActorAlign.START});
-        this._message = label('', 'isle-lyrics-message', {x_align: Clutter.ActorAlign.CENTER});
-        this.add_child(this._column);
-        this.add_child(this._message);
-    }
-
-    update() {
-        const {lyrics} = this._page.daemon.state;
-        const status = lyrics?.status ?? 'none';
-        const showLines = status === 'synced' || status === 'plain';
-        this._message.text = LYRICS_MESSAGES[status] ?? '';
-        this._message.visible = !showLines;
-        this._column.visible = showLines;
-
-        // The same track goes from "loading" to "synced", so both matter.
-        const key = `${lyrics?.track}\u001f${status}`;
-        if (key !== this._key) {
-            this._key = key;
-            this._rebuild(showLines ? lyrics : null);
-        }
-        this.follow();
-    }
-
-    _rebuild(lyrics) {
-        this._column.destroy_all_children();
-        this._lines = lyrics?.lines ?? [];
-        this._synced = lyrics?.status === 'synced';
-        this._current = -2;
-        this._column.translation_y = 0;
-        this._labels = this._lines.map(line => {
-            const text = new St.Label({
-                text: line.text || '♪',
-                style_class: this._synced ? 'isle-lyric-line' : 'isle-lyric-line plain',
-                reactive: this._synced,
-            });
-            text.clutter_text.line_wrap = true;
-            text.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-            if (this._synced) {
-                text.connect('button-release-event', () => {
-                    this._manualUntil = 0;
-                    this._page.daemon.call('media', 'SetPosition', line.time_ms * 1000);
-                    return Clutter.EVENT_STOP;
-                });
-            }
-            this._column.add_child(text);
-            return text;
-        });
-    }
-
-    /** Highlights the line being sung and scrolls it into place. */
-    follow() {
-        if (!this._synced || !this._lines.length)
-            return;
-        const {nowPlaying} = this._page.daemon.state;
-        const index = Playback.lineIndexAt(this._lines, Playback.positionMs(nowPlaying));
-        if (index !== this._current) {
-            this._current = index;
-            this._labels.forEach((text, i) => {
-                const distance = Math.min(Math.abs(i - index), LINE_OPACITY.length - 1);
-                text.ease({opacity: LINE_OPACITY[distance], duration: 300, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
-            });
-            if (Date.now() > this._manualUntil)
-                this._scrollTo(index);
-        }
-        const wait = Playback.isPlaying(nowPlaying) ? Playback.msUntilLine(nowPlaying, this._lines, index) : null;
-        if (wait === null || !this._page.active)
-            this._page.cancel('lyric');
-        else
-            this._page.later('lyric', wait + 30, () => this.follow());
-    }
-
-    _scrollTo(index) {
-        const target = this._labels[Math.max(index, 0)];
-        if (!target)
-            return;
-        // Allocation may lag a frame behind a rebuild; wait for it.
-        if (!target.has_allocation()) {
-            this._page.later('lyric-layout', 16, () => this._scrollTo(index));
-            return;
-        }
-        const anchor = this.height * LYRIC_ANCHOR;
-        const offset = anchor - (target.y + target.height / 2);
-        this._column.ease({
-            translation_y: Math.min(0, offset),
-            duration: 420,
-            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
-        });
-    }
-
-    vfunc_scroll_event(event) {
-        const direction = event.get_scroll_direction();
-        let delta = 0;
-        if (direction === Clutter.ScrollDirection.UP)
-            delta = 40;
-        else if (direction === Clutter.ScrollDirection.DOWN)
-            delta = -40;
-        else if (direction === Clutter.ScrollDirection.SMOOTH)
-            delta = -event.get_scroll_delta()[1] * 30;
-        if (!delta)
-            return Clutter.EVENT_PROPAGATE;
-        const min = Math.min(0, this.height - this._column.height - 12);
-        this._column.remove_transition('translation-y');
-        this._column.translation_y = Math.max(min, Math.min(0, this._column.translation_y + delta));
-        this._manualUntil = Date.now() + MANUAL_SCROLL_HOLD_MS;
-        return Clutter.EVENT_STOP;
-    }
-});
+/** The music bars' opacity while the song is paused, as on the closed island. */
+const PAUSED_BARS_OPACITY = 110;
 
 export const MediaPage = GObject.registerClass(
 class MediaPage extends Page {
@@ -382,24 +202,32 @@ class MediaPage extends Page {
         return player;
     }
 
+    /** The player in a column beside the lyrics, like Apple Music's. */
     _buildLyricsLayout() {
         const layout = new St.BoxLayout({style_class: 'isle-lyrics-layout', x_expand: true, y_expand: true, visible: false});
 
         const side = new St.BoxLayout({...VERTICAL, style_class: 'isle-lyrics-side', y_align: Clutter.ActorAlign.CENTER});
         const top = new St.BoxLayout({style_class: 'isle-player-top'});
-        top.add_child(this._art(60, 12));
-        top.add_child(this._texts('isle-side-title', 'isle-side-artist'));
+        top.add_child(this._art(64, 12));
+        const texts = this._texts('isle-side-title', 'isle-side-artist');
+        this._lyricsBars = new Bars({height: 11});
+        this._lyricsBars.x_align = Clutter.ActorAlign.START;
+        this._lyricsBars.add_style_class_name('isle-side-bars');
+        texts.add_child(this._lyricsBars);
+        top.add_child(texts);
         side.add_child(top);
         side.add_child(this._progress());
 
-        const controls = new St.BoxLayout({style_class: 'isle-lyrics-controls', x_align: Clutter.ActorAlign.CENTER});
+        const controls = new St.BoxLayout({style_class: 'isle-lyrics-controls'});
         controls.add_child(this._modeButton('lyrics', 'isle-lyrics', 'Hide lyrics', true));
-        controls.add_child(this._transport());
+        const transport = this._transport();
+        transport.set({x_expand: true, x_align: Clutter.ActorAlign.CENTER});
+        controls.add_child(transport);
+        controls.add_child(this._modeButton('audio', 'isle-output', 'Volume and output', false));
         side.add_child(controls);
 
         this._lyricsPane = new LyricsPane(this);
         layout.add_child(side);
-        layout.add_child(new St.Widget({style_class: 'isle-divider', y_expand: true}));
         layout.add_child(this._lyricsPane);
         return layout;
     }
@@ -486,6 +314,7 @@ class MediaPage extends Page {
         for (const scrubber of this._scrubbers)
             scrubber.reactive = nowPlaying.can_seek && nowPlaying.length_us > 0;
         this._lyricsPane.update();
+        this._syncBars();
         this._tickProgress();
     }
 
@@ -524,7 +353,7 @@ class MediaPage extends Page {
         if (path === this._tintPath)
             return;
         this._tintPath = path;
-        this._tint = coverColor(path);
+        this._tint = vividColorOfFile(path);
         if (this._shown('lyrics'))
             this.emit('tint-changed');
     }
@@ -546,12 +375,21 @@ class MediaPage extends Page {
             this.later('progress', PROGRESS_REFRESH_MS, () => this._tickProgress());
     }
 
+    /** The bars by the title dance while the song plays and the page is open. */
+    _syncBars() {
+        const playing = Playback.isPlaying(this.daemon.state.nowPlaying);
+        this._lyricsBars.playing = this.active && playing;
+        this._lyricsBars.ease({opacity: playing ? 255 : PAUSED_BARS_OPACITY, duration: 200});
+    }
+
     onActivate() {
+        this._syncBars();
         this._tickProgress();
         this._lyricsPane.follow();
     }
 
     onDeactivate() {
+        this._lyricsBars.playing = false;
         // Reopening the island starts on the player, not a sub-view.
         if (this._mode === 'audio')
             this._toggleMode('audio');

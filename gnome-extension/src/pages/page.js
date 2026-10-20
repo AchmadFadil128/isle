@@ -66,6 +66,11 @@ export const Page = GObject.registerClass({
         return null;
     }
 
+    /** How `tint` colours the island: 'wash' or 'glow' (see `Island.setTint`). */
+    get tintStyle() {
+        return 'wash';
+    }
+
     onActivate() {}
 
     onDeactivate() {}

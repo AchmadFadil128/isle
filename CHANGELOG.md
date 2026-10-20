@@ -6,6 +6,49 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A **Calendar** page, like macOS's Calendar widget: the month on the left
+  (today in red, a dot under days with events) and the chosen day's events
+  on the right. It shows the desktop's calendars (Google and others through
+  Online Accounts) and events written in one line on the island, such as
+  "Dinner 8:00 pm" or "Standup 9:00-9:15". isled keeps them
+  (`Calendar1` on D-Bus).
+- Files on the shelf can be copied with a click: a picture as the image
+  itself, so it pastes straight into WhatsApp, an AI chat or any web page,
+  and other files as files. Double-click opens a file.
+- When a file lands on the shelf, the island glows in its colour from its
+  bottom corners.
+
+### Changed
+
+- The lyrics look like Apple Music's: the line being sung large and bright,
+  the others smaller and dimmer, faded edges, breathing dots for pauses and
+  a long intro, a clearer column for the player with the music bars by the
+  title, and proper states for loading, no lyrics and the service being
+  unreachable.
+- Dropping a file on the island is much quicker: the shelf helper starts as
+  soon as a drag begins and takes the drop as soon as the island opens over
+  it (about 0.25 s, from over a second), showing where the file will land.
+  A drag that goes off elsewhere closes the island again.
+- The cover's colour for the lyrics wash is its main hue, not an average
+  that could turn two colours into grey.
+- The open island lays its pages out at full size from the start and
+  reveals them as it grows, so nothing reflows during the animation.
+
+### Fixed
+
+- Files on the shelf keep their × to remove them: a picture's thumbnail
+  made its tile grow until the × was pushed out of sight. Tiles now all
+  have one size, the same in the helper's window and on the island.
+- The island stays steady when a browser moves on to the next video: the
+  song, its cover and the dancing music bars no longer drop out for a
+  moment between songs.
+- Big photos on the shelf no longer make the island stutter as it opens;
+  previews are made off the shell's main thread.
+- Lyrics opened on a song already playing scroll to the right line.
+- No more warnings in the log when the island starts.
+
 ## [0.1.2] - 2026-10-20
 
 ### Added

@@ -26,6 +26,9 @@ import {GENTLE, Spring, SpringDriver} from './spring.js';
  */
 const NUDGE_VELOCITY = 220;
 
+/** How long a tint takes to come and go: a wash, and a glow (which lingers out). */
+const TINT_FADE = {wash: [450, 450], glow: [380, 1100]};
+
 /** Cross-fade timings in milliseconds. */
 const FADE_OUT = 160;
 const FADE_IN = 320;
@@ -58,6 +61,7 @@ export const Island = GObject.registerClass({
         this._monitor = null;
         this._view = null;
         this._tint = null;
+        this._tintStyle = 'wash';
         this._tintStrength = 0;
 
         this._width = new Spring(0);
@@ -71,11 +75,10 @@ export const Island = GObject.registerClass({
         this._shape.connect('repaint', area => this._repaint(area));
         this.add_child(this._shape);
 
-        // Views are centred at the top of this box, which clips them to the
-        // island's body while it is still growing. (Clutter.BinLayout only
-        // honours START/END alignment for children that also expand.)
+        // Clips the views while the island grows; a fixed layout keeps them at
+        // full size (a bin would squeeze them), so nothing reflows.
         this._stage = new St.Widget({
-            layout_manager: new Clutter.BinLayout(),
+            layout_manager: new Clutter.FixedLayout(),
             clip_to_allocation: true,
         });
         this.add_child(this._stage);
@@ -108,20 +111,48 @@ export const Island = GObject.registerClass({
         this._shape.queue_repaint();
     }
 
-    /** RGB colour washed into the bottom of the island, or null for none. */
-    set tint(rgb) {
-        if (rgb)
+    // Colours the island with `rgb` (0..1; null fades it): 'wash' rises to the bottom,
+    // 'glow' spills up from the two bottom corners.
+    setTint(rgb, style = 'wash') {
+        if (rgb) {
             this._tint = rgb;
+            this._tintStyle = style;
+        }
+        const [fadeIn, fadeOut] = TINT_FADE[this._tintStyle];
         this.remove_transition('tint-strength');
         this.ease_property('tint-strength', rgb ? 1 : 0, {
-            duration: 450,
+            duration: rgb ? fadeIn : fadeOut,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
     }
 
-    /** Whether the island has finished moving. */
-    get isSettled() {
-        return this._springs.every(spring => spring.settled);
+    /** Where `actor` in the shown view will be once the island settles: {x, y, width, height}. */
+    restingRect(actor) {
+        if (!this._monitor || !this._view)
+            return null;
+        const margin = Math.max(0, this._shoulder.target);
+        const width = Math.max(0, this._width.target);
+        // As `_sync` and `_placeView` will place the view.
+        const viewX = Math.round(this._monitor.x + (this._monitor.width - width - 2 * margin) / 2) +
+            margin + Math.round((Math.ceil(width) - this._view.width) / 2);
+        const [viewLeft, viewTop] = this._view.get_transformed_position();
+        const [left, top] = actor.get_transformed_position();
+        const [actorWidth, actorHeight] = actor.get_transformed_size();
+        return {
+            x: Math.round(viewX + left - viewLeft),
+            y: Math.round(this._monitor.y + top - viewTop),
+            width: Math.round(actorWidth),
+            height: Math.round(actorHeight),
+        };
+    }
+
+    /** Whether the island's shape, as it is right now, covers `rect`. */
+    covers({x, y, width, height}) {
+        const [left, top] = this.get_transformed_position();
+        const bodyLeft = left + Math.max(0, this._shoulder.value);
+        const bodyRight = bodyLeft + Math.max(0, this._width.value);
+        return x >= bodyLeft && x + width <= bodyRight && y >= top &&
+            y + height <= top + Math.max(0, this._height.value);
     }
 
     /**
@@ -152,9 +183,7 @@ export const Island = GObject.registerClass({
      * the stage, even before it is first shown.
      */
     addView(view) {
-        view.x_expand = view.y_expand = true;
-        view.x_align = Clutter.ActorAlign.CENTER;
-        view.y_align = Clutter.ActorAlign.START;
+        view.connect('notify::width', () => this._placeView(view));
         view.opacity = 0;
         view.reactive = false;
         view.hide();
@@ -167,6 +196,11 @@ export const Island = GObject.registerClass({
             return;
         this._width.velocity += NUDGE_VELOCITY;
         this._driver.start();
+    }
+
+    /** Centres `view` at the top of the island's body. */
+    _placeView(view) {
+        view.set_position(Math.round((Math.ceil(Math.max(0, this._width.value)) - view.width) / 2), 0);
     }
 
     _showView(view) {
@@ -212,6 +246,8 @@ export const Island = GObject.registerClass({
         this._shape.set_size(Math.ceil(outerWidth), Math.ceil(height));
         this._stage.set_position(margin, 0);
         this._stage.set_size(Math.ceil(width), Math.ceil(height));
+        for (const view of this._stage.get_children())
+            this._placeView(view);
         this._shape.queue_repaint();
 
         if (this._monitor) {
@@ -247,17 +283,42 @@ export const Island = GObject.registerClass({
         cr.closePath();
 
         cr.setSourceRGBA(0, 0, 0, 1);
+        cr.fillPreserve();
         if (this._tint && this._tintStrength > 0) {
-            cr.fillPreserve();
-            // Black under the top bar, deepening to the cover's colour.
-            const [r, g, b] = this._tint;
-            const gradient = new Cairo.LinearGradient(0, top, 0, height);
-            gradient.addColorStopRGBA(0, r, g, b, 0);
-            gradient.addColorStopRGBA(1, r, g, b, 0.75 * this._tintStrength);
-            cr.setSource(gradient);
+            for (const gradient of this._tintGradients(left, right, top, height)) {
+                cr.setSource(gradient);
+                cr.fillPreserve();
+            }
         }
-        cr.fill();
+        cr.newPath();
         cr.$dispose();
+    }
+
+    /** The gradients that paint the tint over the black shape, in order. */
+    _tintGradients(left, right, top, height) {
+        const [r, g, b] = this._tint;
+        const strength = this._tintStrength;
+        if (this._tintStyle === 'glow') {
+            // A pool of light at each bottom corner, joined by a faint band
+            // along the bottom edge.
+            const radius = Math.min((right - left) * 0.36, Math.max(0, height - top) * 1.05);
+            const corners = [left + radius * 0.12, right - radius * 0.12].map(x => {
+                const glow = new Cairo.RadialGradient(x, height + radius * 0.2, 0, x, height + radius * 0.2, radius);
+                glow.addColorStopRGBA(0, r, g, b, 0.95 * strength);
+                glow.addColorStopRGBA(0.4, r, g, b, 0.42 * strength);
+                glow.addColorStopRGBA(1, r, g, b, 0);
+                return glow;
+            });
+            const band = new Cairo.LinearGradient(0, height - radius * 0.4, 0, height);
+            band.addColorStopRGBA(0, r, g, b, 0);
+            band.addColorStopRGBA(1, r, g, b, 0.2 * strength);
+            return [band, ...corners];
+        }
+        // Black under the top bar, deepening to the cover's colour.
+        const wash = new Cairo.LinearGradient(0, top, 0, height);
+        wash.addColorStopRGBA(0, r, g, b, 0);
+        wash.addColorStopRGBA(1, r, g, b, 0.75 * strength);
+        return [wash];
     }
 
     _onDestroy() {

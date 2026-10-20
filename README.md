@@ -4,8 +4,8 @@
 
 **A dynamic island for the GNOME desktop.**
 
-Music with synced lyrics, notifications, a focus timer, tasks and a
-clipboard shelf, living in a notch at the top of your screen.
+Music with synced lyrics, notifications, a focus timer, tasks, a calendar
+and a clipboard shelf, living in a notch at the top of your screen.
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 ![GNOME Shell 46–51](https://img.shields.io/badge/GNOME%20Shell-46%E2%80%9351-4a86cf.svg)
@@ -44,10 +44,11 @@ appear in the same place instead of in the middle of the screen.
 | | |
 |---|---|
 | <img src="docs/images/music.png" alt="Music page" width="420"> | **Music.** Spotify, YouTube in your browser, or any MPRIS player: cover art with the playing app's icon, a scrubber and controls. Volume and output switching are one click away. |
-| <img src="docs/images/lyrics.png" alt="Synced lyrics" width="420"> | **Synced lyrics** from [LRCLIB](https://lrclib.net). The island widens and takes the cover's colour; click a line to jump to it. |
+| <img src="docs/images/lyrics.png" alt="Synced lyrics" width="420"> | **Synced lyrics** from [LRCLIB](https://lrclib.net), like Apple Music's: the line being sung large and bright, pauses as breathing dots. The island widens and takes the cover's colour; click a line to jump to it. |
 | <img src="docs/images/focus.png" alt="Focus timer" width="420"> | **Focus timer** (Pomodoro) with breaks, daily totals and Do Not Disturb while you focus. Its ring stays visible in the closed island. |
-| <img src="docs/images/clipboard.png" alt="Clipboard history" width="420"> | **Shelf.** A clipboard history of text, links, images and files (search, filter, pin; Super+V to paste), and a files tray: drop files on the island, then drag them into any app. |
+| <img src="docs/images/clipboard.png" alt="Clipboard history" width="420"> | **Shelf.** A clipboard history of text, links, images and files (search, filter, pin; Super+V to paste), and a files tray: drop files on the island, then drag them into any app or click one to copy it, ready to paste into a chat. |
 | <img src="docs/images/tasks.png" alt="Tasks" width="420"> | **Tasks.** A plain list for today: add, tick off, rename in place. Finished tasks fold away and clear at midnight. |
+| <img src="docs/images/calendar.png" alt="Calendar" width="420"> | **Calendar.** The month beside the chosen day's events, like macOS's Calendar widget. Shows your desktop calendars (Google and others through Online Accounts) and events you add in a line: "Dinner 8:00 pm". |
 | <img src="docs/images/alerts.png" alt="Closed island and alerts" width="420"> | **Alerts** for volume, brightness, Caps Lock, charging, low battery, Bluetooth devices with their battery, going offline, and GNOME notifications, which also collect on a **Notifications** page with Do Not Disturb. |
 
 Also: privacy dots while the camera, microphone or screen sharing is in use,
@@ -166,7 +167,7 @@ next line starts, and pages only tick while they are open.
 
 ## Privacy
 
-Isle runs locally. The clipboard history, tasks and timer stay in
+Isle runs locally. The clipboard history, tasks, calendar events and timer stay in
 `~/.local/share/isle` and never leave your computer; copies from password
 managers are never kept. The only network requests are a lyrics lookup on
 [LRCLIB](https://lrclib.net) and the cover art the player points to, once
@@ -203,14 +204,14 @@ isle-uninstall
 
 (or `./uninstall.sh` from the release package or the source folder). This
 removes the extension, the programs, the service and the font. Your
-tasks, clipboard history, shelf and timer settings stay in
+tasks, calendar events, clipboard history, shelf and timer settings stay in
 `~/.local/share/isle` until you delete that folder.
 
 ## How it works
 
 ```
 ┌────────────────── isled (Rust) ──────────────────┐
-│ MPRIS · lyrics · timer · tasks · shelf           │
+│ MPRIS · lyrics · timer · tasks · calendar · shelf│
 │ UPower · NetworkManager · BlueZ                  │
 │            exposed on D-Bus (zbus)               │
 └────────────────────────┬─────────────────────────┘
@@ -226,7 +227,7 @@ else lives in Rust behind a D-Bus API.
 
 | Path | Contents |
 |---|---|
-| `crates/isle-core` | Platform-independent logic: LRC parsing, track-title clean-up, Pomodoro, tasks, shelf, clipboard history. Unit tested. |
+| `crates/isle-core` | Platform-independent logic: LRC parsing, track-title clean-up, Pomodoro, tasks, calendar, shelf, clipboard history. Unit tested. |
 | `crates/isle-daemon` | `isled`, the D-Bus service. |
 | `crates/isle-shelf` | `isle-shelf`, the files tray's drag-and-drop window. |
 | `gnome-extension` | The GNOME Shell extension. |

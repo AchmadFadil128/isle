@@ -74,6 +74,13 @@ const INTERFACES = {
             <property name="Items" type="s" access="read"/>`),
         properties: {Items: 'clipboard'},
     },
+    calendar: {
+        xml: node('Calendar1', `
+            <method name="Add"><arg name="date" type="s" direction="in"/><arg name="text" type="s" direction="in"/><arg type="t" direction="out"/></method>
+            <method name="Remove"><arg name="id" type="t" direction="in"/></method>
+            <property name="Events" type="s" access="read"/>`),
+        properties: {Events: 'events'},
+    },
     system: {
         xml: node('System1', `
             <signal name="Event"><arg name="event" type="s"/></signal>
@@ -180,11 +187,17 @@ export class Daemon extends Signals.EventEmitter {
         if (!proxy)
             return Promise.resolve(null);
         return new Promise(resolve => {
-            proxy[`${method}Remote`](...args, (result, error) => {
-                if (error)
-                    console.warn(`Isle: ${method} failed: ${error.message}`);
-                resolve(error ? null : result);
-            });
+            try {
+                proxy[`${method}Remote`](...args, (result, error) => {
+                    if (error)
+                        console.warn(`Isle: ${method} failed: ${error.message}`);
+                    resolve(error ? null : result);
+                });
+            } catch (e) {
+                // Arguments that do not fit the method's signature.
+                console.warn(`Isle: ${method} failed: ${e.message}`);
+                resolve(null);
+            }
         });
     }
 

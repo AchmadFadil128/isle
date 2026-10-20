@@ -171,7 +171,8 @@ export const CompactView = GObject.registerClass({
         this._syncBars();
         this._privacyDots.update(this._showingPrivacy() ? this._privacy : {});
         this._privacyBalance.visible = this._privacyDots.visible;
-        this._privacyBalance.width = this._privacyDots.get_preferred_width(-1)[1];
+        // Measured only when shown: hidden, it may not be on the stage yet.
+        this._privacyBalance.width = this._privacyDots.visible ? this._privacyDots.get_preferred_width(-1)[1] : 0;
 
         if (timerActive) {
             this._ring.color = timerColor(pomodoro.phase);

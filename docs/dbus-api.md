@@ -45,6 +45,18 @@ if the player then rejects the command, isled only logs it.
 | `SetDone(t id, b done)`, `Rename(t id, s title)`, `Remove(t id)`, `ClearDone()` | | Finished tasks are cleared at midnight. |
 | `Items` | `s` | `[{id, title, done, done_at_ms}]`; `done_at_ms` is when the task was ticked off, or null. |
 
+## io.github.zickrian.isle.Calendar1
+
+Isle's own calendar events, kept in `~/.local/share/isle/calendar.json`.
+Times are local wall-clock times. (Events of the desktop's calendars come
+from GNOME Shell, not from here.)
+
+| Member | Signature | |
+|---|---|---|
+| `Add(s date, s text) → t id` | | Adds an event on `date` (`YYYY-MM-DD`) from a line of text, taking its time from it: `Dinner 8:00 pm`, `Standup 9:00-9:15`, `Gym at 7pm`; without a time it lasts all day. A date that does not exist, or no title left, is refused with `InvalidArgs`. |
+| `Remove(t id)` | | |
+| `Events` | `s` | `[{id, title, date, start, end}]` by day and time; `start` and `end` are `HH:MM` or null (all day; no end given). Events over 400 days old are forgotten. |
+
 ## io.github.zickrian.isle.Shelf1
 
 | Member | Signature | |
@@ -96,3 +108,4 @@ Served by `isle-shelf` (not `isled`) as `io.github.zickrian.isle.ShelfWindow` at
 |---|---|---|
 | `Show(i x, i y, i width, i height)` | | Show the shelf window over this area, in logical pixels. |
 | `Hide()` | | |
+| `SetDropping(b dropping)` | | A file is being dragged towards the island: show where it will land. |

@@ -6,6 +6,7 @@
 //! here, exposed on the session bus as `io.github.zickrian.isle.Daemon`. See
 //! `docs/dbus-api.md` for the interfaces.
 
+mod calendar;
 mod clipboard;
 mod clock;
 mod media;
@@ -19,6 +20,7 @@ use anyhow::Context;
 use log::{info, warn};
 use zbus::connection;
 
+use crate::calendar::CalendarService;
 use crate::clipboard::ClipboardService;
 use crate::media::MediaService;
 use crate::pomodoro::PomodoroService;
@@ -47,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
         .serve_at(OBJECT_PATH, TodoService::load())?
         .serve_at(OBJECT_PATH, ShelfService::load())?
         .serve_at(OBJECT_PATH, ClipboardService::load())?
+        .serve_at(OBJECT_PATH, CalendarService::load())?
         .serve_at(OBJECT_PATH, SystemService::default())?
         .build()
         .await

@@ -26,6 +26,7 @@ const TABS = {
     focus: {icon: 'isle-timer', label: 'Focus'},
     shelf: {icon: 'isle-shelf', label: 'Shelf'},
     tasks: {icon: 'isle-tasks', label: 'Tasks'},
+    calendar: {icon: 'isle-calendar', label: 'Calendar'},
 };
 /** How bright a tab's icon is: open, under the pointer, otherwise. */
 const TAB_OPACITY = {open: 255, hover: 230, idle: 140};
@@ -226,6 +227,11 @@ export const ExpandedView = GObject.registerClass({
     /** RGB colour to wash the island with, or null. */
     get tint() {
         return this.page.tint ?? null;
+    }
+
+    /** How `tint` colours the island; see `Island.setTint`. */
+    get tintStyle() {
+        return this.page.tintStyle;
     }
 
     pageNamed(name) {

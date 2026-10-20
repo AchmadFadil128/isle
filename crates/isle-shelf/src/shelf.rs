@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The shelf window: tiles for the files on the shelf, a drop zone, and the
-//! link to isled, which owns the list.
+//! The see-through shelf window: the files' tiles and the drop zone; isled owns the list.
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use gtk::{gdk, gio, glib, prelude::*};
@@ -33,11 +33,22 @@ struct Inner {
     window: gtk::Window,
     stack: gtk::Stack,
     tiles: gtk::Box,
+    empty_title: gtk::Label,
+    empty_hint: gtk::Label,
     daemon: RefCell<Option<gio::DBusProxy>>,
     /// Where the window belongs (x, y, width, height), kept for re-placing.
     area: Cell<Option<(i32, i32, i32, i32)>>,
-    /// The shelf holds `CAPACITY` files already.
-    full: Cell<bool>,
+    /// The files on the shelf, newest first.
+    items: RefCell<Vec<Item>>,
+    /// Each file's tile, kept while the file stays, so its thumbnail loads
+    /// once; files without one are new and fade in.
+    tile_cache: RefCell<HashMap<String, gtk::Widget>>,
+    /// Where a dragged file will land.
+    slot: gtk::Widget,
+    /// A file is being dragged towards the island (the extension says so).
+    near: Cell<bool>,
+    /// A file is being dragged over this window.
+    over: Cell<bool>,
 }
 
 impl ShelfWindow {
@@ -69,21 +80,28 @@ impl ShelfWindow {
         let filled = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         filled.append(&scroller);
 
-        let stack = gtk::Stack::builder()
-            .transition_type(gtk::StackTransitionType::Crossfade)
-            .css_classes(["drop-area"])
-            .build();
+        let empty_title = gtk::Label::builder().css_classes(["empty-title"]).build();
+        let empty_hint = gtk::Label::builder().css_classes(["empty-hint"]).build();
+        // No crossfade: a new file's tile fades in by itself, and the two
+        // states would show through each other meanwhile.
+        let stack = gtk::Stack::builder().css_classes(["drop-area"]).build();
         stack.add_named(&filled, Some("files"));
-        stack.add_named(&empty_state(), Some("empty"));
+        stack.add_named(&empty_state(&empty_title, &empty_hint), Some("empty"));
         window.set_child(Some(&stack));
 
         let shelf = Self(Rc::new(Inner {
             window,
             stack,
             tiles,
+            empty_title,
+            empty_hint,
             daemon: RefCell::default(),
             area: Cell::default(),
-            full: Cell::default(),
+            items: RefCell::default(),
+            tile_cache: RefCell::default(),
+            slot: tile::slot(),
+            near: Cell::default(),
+            over: Cell::default(),
         }));
         shelf.accept_drops();
         let weak = Rc::downgrade(&shelf.0);
@@ -96,7 +114,7 @@ impl ShelfWindow {
         });
         shelf.connect_daemon();
 
-        shelf.render(&[]);
+        shelf.render();
         shelf
     }
 
@@ -130,36 +148,60 @@ impl ShelfWindow {
         self.0.window.set_visible(false);
     }
 
+    /// Whether a file is being dragged towards the island: the shelf then
+    /// shows where it will land before the pointer even gets here.
+    pub fn set_dropping(&self, dropping: bool) {
+        if self.0.near.replace(dropping) != dropping {
+            self.render();
+        }
+    }
+
+    fn full(&self) -> bool {
+        self.0.items.borrow().len() >= CAPACITY
+    }
+
     /// Files dropped anywhere on the window go onto the shelf.
     fn accept_drops(&self) {
         let target = gtk::DropTarget::new(gdk::FileList::static_type(), gdk::DragAction::COPY);
-        // Lights up to say "drop here", or dims and refuses when full.
+        // A full shelf refuses the drop; the island's hint says why.
         let weak = Rc::downgrade(&self.0);
-        target.connect_enter(move |_, _, _| {
+        target.connect_enter(move |target, _, _| {
             let Some(inner) = weak.upgrade() else {
                 return gdk::DragAction::empty();
             };
-            if inner.full.get() {
-                inner.stack.add_css_class("full");
+            if dragged_from_here(target) {
                 return gdk::DragAction::empty();
             }
-            inner.stack.add_css_class("dropping");
-            gdk::DragAction::COPY
+            let shelf = ShelfWindow(inner);
+            shelf.0.over.set(true);
+            shelf.render();
+            if shelf.full() {
+                gdk::DragAction::empty()
+            } else {
+                gdk::DragAction::COPY
+            }
         });
-        let stack = self.0.stack.clone();
+        let weak = Rc::downgrade(&self.0);
         target.connect_leave(move |_| {
-            stack.remove_css_class("dropping");
-            stack.remove_css_class("full");
+            if let Some(inner) = weak.upgrade()
+                && inner.over.replace(false)
+            {
+                ShelfWindow(inner).render();
+            }
         });
 
         let weak = Rc::downgrade(&self.0);
-        target.connect_drop(move |_, value, _, _| {
+        target.connect_drop(move |target, value, _, _| {
             let Some(inner) = weak.upgrade() else {
                 return false;
             };
-            inner.stack.remove_css_class("dropping");
-            inner.stack.remove_css_class("full");
-            if inner.full.get() {
+            if dragged_from_here(target) {
+                return false;
+            }
+            let shelf = ShelfWindow(inner);
+            shelf.0.over.set(false);
+            shelf.render();
+            if shelf.full() {
                 return false;
             }
             let Ok(files) = value.get::<gdk::FileList>() else {
@@ -174,7 +216,7 @@ impl ShelfWindow {
             if uris.is_empty() {
                 return false;
             }
-            ShelfWindow(inner).call("Add", Some(&(uris,).to_variant()));
+            shelf.call("Add", Some(&(uris,).to_variant()));
             true
         });
         self.0.window.add_controller(target);
@@ -206,11 +248,15 @@ impl ShelfWindow {
                 proxy.connect_local("g-properties-changed", false, move |values| {
                     let proxy = values[0].get::<gio::DBusProxy>().ok()?;
                     if let Some(inner) = weak.upgrade() {
-                        ShelfWindow(inner).render(&items(&proxy));
+                        inner.items.replace(items(&proxy));
+                        ShelfWindow(inner).render();
                     }
                     None
                 });
-                shelf.render(&items(&proxy));
+                shelf.0.items.replace(items(&proxy));
+                // What is there at start is not new.
+                shelf.render_tiles(false);
+                shelf.render();
                 shelf.0.daemon.replace(Some(proxy));
             },
         );
@@ -235,23 +281,74 @@ impl ShelfWindow {
         );
     }
 
-    fn render(&self, items: &[Item]) {
+    fn render(&self) {
         let inner = &self.0;
-        inner.full.set(items.len() >= CAPACITY);
+        let count = inner.items.borrow().len();
+        let full = count >= CAPACITY;
+        let dragging = inner.near.get() || inner.over.get();
+        set_class(&inner.stack, "dropping", dragging);
+        set_class(&inner.stack, "over", inner.over.get());
+        set_class(&inner.stack, "full", dragging && full);
+
+        self.render_tiles(true);
+        if dragging && !full && count > 0 {
+            // Where the file will land: the newest file comes first.
+            inner.tiles.prepend(&inner.slot);
+        }
+
+        let (title, hint) = if dragging {
+            (
+                "Drop to add it",
+                "Then drag it into any app, or click to copy it",
+            )
+        } else {
+            (
+                "Drop files here",
+                "Then drag them into any app, or click to copy",
+            )
+        };
+        inner.empty_title.set_label(title);
+        inner.empty_hint.set_label(hint);
+        inner
+            .stack
+            .set_visible_child_name(if count == 0 { "empty" } else { "files" });
+    }
+
+    /// Lays out a tile per file, newest first, reusing the tiles of files
+    /// already shown. With `mark_new`, tiles for new files fade in.
+    fn render_tiles(&self, mark_new: bool) {
+        let inner = &self.0;
         while let Some(child) = inner.tiles.first_child() {
             inner.tiles.remove(&child);
         }
-        for item in items {
-            let weak = Rc::downgrade(&self.0);
-            inner.tiles.append(&tile::new(item, move |uri| {
-                if let Some(inner) = weak.upgrade() {
-                    ShelfWindow(inner).call("Remove", Some(&(uri,).to_variant()));
-                }
-            }));
+        let mut old = inner.tile_cache.take();
+        let mut cache = HashMap::new();
+        for item in inner.items.borrow().iter() {
+            let tile = old.remove(&item.uri).unwrap_or_else(|| {
+                let weak = Rc::downgrade(&self.0);
+                tile::new(item, mark_new, move |uri| {
+                    if let Some(inner) = weak.upgrade() {
+                        ShelfWindow(inner).call("Remove", Some(&(uri,).to_variant()));
+                    }
+                })
+            });
+            inner.tiles.append(&tile);
+            cache.insert(item.uri.clone(), tile);
         }
-        inner
-            .stack
-            .set_visible_child_name(if items.is_empty() { "empty" } else { "files" });
+        inner.tile_cache.replace(cache);
+    }
+}
+
+/// Whether the drag is a tile carried out of this window, not a file coming in.
+fn dragged_from_here(target: &gtk::DropTarget) -> bool {
+    target.current_drop().and_then(|drop| drop.drag()).is_some()
+}
+
+fn set_class(widget: &impl IsA<gtk::Widget>, class: &str, on: bool) {
+    if on {
+        widget.add_css_class(class);
+    } else {
+        widget.remove_css_class(class);
     }
 }
 
@@ -264,7 +361,7 @@ fn items(proxy: &gio::DBusProxy) -> Vec<Item> {
         .unwrap_or_default()
 }
 
-fn empty_state() -> gtk::Box {
+fn empty_state(title: &gtk::Label, hint: &gtk::Label) -> gtk::Box {
     let box_ = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(4)
@@ -275,21 +372,11 @@ fn empty_state() -> gtk::Box {
     box_.append(
         &gtk::Image::builder()
             .icon_name("folder-download-symbolic")
-            .pixel_size(28)
+            .pixel_size(24)
             .css_classes(["empty-icon"])
             .build(),
     );
-    box_.append(
-        &gtk::Label::builder()
-            .label("Drop files here")
-            .css_classes(["empty-title"])
-            .build(),
-    );
-    box_.append(
-        &gtk::Label::builder()
-            .label("Then drag them out to any app")
-            .css_classes(["empty-hint"])
-            .build(),
-    );
+    box_.append(title);
+    box_.append(hint);
     box_
 }

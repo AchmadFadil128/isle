@@ -336,32 +336,52 @@
 .isle-output-name { font-size: 13px; font-weight: 600; }
 .isle-output-detail { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
 
-/* Lyrics */
+/* Lyrics, like Apple Music's: the player in a column beside the words. */
 
-.isle-lyrics-layout { spacing: 20px; padding-bottom: 6px; }
-.isle-lyrics-side { width: 250px; spacing: 6px; }
-.isle-lyrics-controls { spacing: 6px; }
-.isle-side-title { font-size: 15px; font-weight: 600; }
-.isle-side-artist { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
+.isle-lyrics-layout { spacing: 26px; }
+.isle-lyrics-side { width: 232px; spacing: 8px; }
+.isle-lyrics-side .isle-player-top { spacing: 12px; }
+.isle-lyrics-side .isle-player-progress { padding-top: 2px; }
+.isle-lyrics-controls { spacing: 4px; }
+.isle-lyrics-controls .isle-transport { spacing: 14px; }
+.isle-lyrics-controls .isle-mode-toggle { color: rgba(255, 255, 255, 0.75); }
+.isle-side-title { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
+.isle-side-artist { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
+.isle-side-bars { padding-top: 5px; }
 
-.isle-divider {
-  width: 1px;
-  margin: 10px 0;
-  background-color: rgba(255, 255, 255, 0.12);
-}
+/* Lines fade at the edges as they scroll; room below lets the last ones
+ * reach the reading line. */
+.isle-lyrics-scroll { -st-vfade-offset: 26px; }
+.isle-lyrics-column { spacing: 2px; }
+.isle-lyrics-end { height: 72px; }
 
-.isle-lyrics-message { font-size: 13px; color: rgba(255, 255, 255, 0.5); }
-
-/* Lines fade with distance from the current one (set in media.js). */
+/* Size, brightness and scale per line are set in lyrics.js. */
 .isle-lyric-line {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
+  letter-spacing: -0.3px;
   padding: 3px 0;
   color: #ffffff;
 }
 
-.isle-lyric-line:hover { color: rgba(255, 255, 255, 0.85); }
-.isle-lyric-line.plain { font-size: 14px; font-weight: 500; color: rgba(255, 255, 255, 0.8); }
+.isle-lyric-line.plain {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* A pause in the singing. */
+.isle-lyric-dots { spacing: 6px; padding: 9px 2px; }
+.isle-lyric-dot { width: 7px; height: 7px; border-radius: 4px; background-color: #ffffff; }
+
+/* No lines: loading, not found, instrumental, or the service unreachable. */
+.isle-lyrics-state { spacing: 3px; }
+.isle-lyrics-state-icon { color: rgba(255, 255, 255, 0.4); padding-bottom: 5px; }
+.isle-lyrics-state-dots { padding: 4px 0 8px 0; }
+.isle-lyrics-state-dots .isle-lyric-dot { background-color: rgba(255, 255, 255, 0.6); }
+.isle-lyrics-state-title { font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.85); }
+.isle-lyrics-state-hint { font-size: 12px; color: rgba(255, 255, 255, 0.45); }
 
 /* ── Focus ────────────────────────────────────────────── */
 
@@ -433,6 +453,90 @@
 
 .isle-task-section:hover { color: #ffffff; background-color: #1c1c1e; }
 .isle-task-section-box { spacing: 6px; }
+
+/* ── Calendar ─────────────────────────────────────────── */
+
+/* The month, like macOS's Calendar widget. */
+.isle-cal-month { width: 196px; spacing: 2px; }
+.isle-cal-month-header { spacing: 0; padding-bottom: 2px; }
+.isle-cal-month-title { padding: 1px 4px; border-radius: 6px; }
+.isle-cal-month-title:hover { background-color: rgba(255, 255, 255, 0.06); }
+.isle-cal-month-title-box { spacing: 5px; }
+.isle-cal-month-name { font-size: 12px; font-weight: 700; letter-spacing: 0.4px; color: #ff453a; }
+.isle-cal-year { font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.5); }
+.isle-cal-arrow { padding: 4px; color: rgba(255, 255, 255, 0.75); }
+
+.isle-cal-weekdays { padding-bottom: 1px; }
+.isle-cal-weekday {
+  width: 28px;
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.55);
+}
+.isle-cal-weekday.weekend { color: rgba(255, 255, 255, 0.35); }
+
+.isle-cal-cell { width: 28px; }
+
+.isle-cal-day {
+  width: 19px;
+  height: 19px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  transition-duration: 120ms;
+}
+
+.isle-cal-day:hover { background-color: rgba(255, 255, 255, 0.12); }
+.isle-cal-day:focus { box-shadow: inset 0 0 0 1.5px rgba(90, 171, 255, 0.8); }
+.isle-cal-day.weekend { color: rgba(255, 255, 255, 0.55); }
+.isle-cal-day.selected { background-color: rgba(255, 255, 255, 0.22); }
+.isle-cal-day.today { background-color: #ff453a; font-weight: 700; }
+.isle-cal-day.today:hover { background-color: #ff5f55; }
+
+/* A day with events: a dot just under its number. */
+.isle-cal-dot {
+  width: 3px;
+  height: 3px;
+  margin-bottom: 1px;
+  border-radius: 2px;
+  background-color: rgba(255, 255, 255, 0.55);
+}
+.isle-cal-dot.on-today { background-color: #ffffff; }
+
+/* The day's events. */
+.isle-cal-agenda { spacing: 6px; }
+.isle-cal-day-header { spacing: 8px; padding-left: 2px; }
+.isle-cal-day-name { font-size: 14px; font-weight: 600; letter-spacing: -0.1px; }
+
+.isle-cal-today {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  color: #ffffff;
+  background-color: #2c2c2e;
+}
+
+.isle-cal-today:hover { background-color: #3a3a3c; }
+.isle-cal-add { padding: 6px 12px; font-size: 13px; }
+.isle-cal-scroll { -st-vfade-offset: 14px; }
+.isle-cal-events { spacing: 4px; padding-bottom: 2px; }
+
+/* An event as in macOS's Calendar: tinted in its calendar's colour (set
+ * in calendar.js), with a bar of it down the side. */
+.isle-cal-event {
+  spacing: 8px;
+  padding: 0 6px 0 0;
+  min-height: 26px;
+  border-radius: 7px;
+}
+
+.isle-cal-event-bar { width: 3px; border-radius: 2px; margin: 4px 0 4px 5px; }
+.isle-cal-event-title { font-size: 13px; font-weight: 600; }
+.isle-cal-event-time { font-size: 11px; font-weight: 500; color: rgba(255, 255, 255, 0.65); }
+.isle-cal-empty { font-size: 13px; color: rgba(255, 255, 255, 0.4); }
 
 /* ── Notifications ────────────────────────────────────── */
 
@@ -585,25 +689,55 @@
 .isle-clip-feedback { border-radius: 12px; background-color: rgba(28, 28, 30, 0.95); }
 .isle-clip-feedback-label { font-size: 12px; font-weight: 700; padding-top: 4px; }
 
-/* Files tab */
+/* Files tab. The shelf helper's window draws this tab when installed; its
+ * style.css mirrors these sizes and colours so the two look the same. */
 
-.isle-shelf-tiles { spacing: 10px; padding: 4px 0; }
+/* Lit as one rounded area while a file is on its way. The border is always
+ * there, so lighting it moves nothing. */
+.isle-shelf-files {
+  border-radius: 16px;
+  border: 1px solid transparent;
+  transition-duration: 160ms;
+}
+
+.isle-shelf-files:drop {
+  border-color: rgba(255, 255, 255, 0.18);
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.isle-shelf-tiles { spacing: 6px; }
 
 .isle-shelf-tile {
-  width: 84px;
-  border-radius: 12px;
+  padding: 6px 0;
+  border-radius: 14px;
   color: #ffffff;
+  transition-duration: 120ms;
 }
-
-.isle-shelf-open { padding: 8px 4px; }
 
 .isle-shelf-tile:hover { background-color: #1c1c1e; }
-.isle-shelf-name { font-size: 12px; padding-top: 6px; }
-.isle-shelf-remove {
-  padding: 3px;
-  margin: 4px;
-  border-radius: 99px;
-  color: #ffffff;
-  background-color: rgba(255, 255, 255, 0.2);
+.isle-shelf-tile:focus { box-shadow: inset 0 0 0 2px rgba(90, 171, 255, 0.8); }
+.isle-shelf-tile-box { spacing: 4px; }
+.isle-shelf-name { font-size: 12px; text-align: center; }
+
+.isle-shelf-preview { border-radius: 12px; }
+.isle-shelf-preview.thumbnail { background-color: #2c2c2e; background-size: cover; }
+
+/* Where a dragged file will land. */
+.isle-shelf-slot {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.8);
 }
-.isle-shelf-remove:hover { background-color: rgba(255, 255, 255, 0.32); }
+
+.isle-shelf-copied { border-radius: 12px; background-color: rgba(0, 0, 0, 0.6); }
+
+/* Always there, so a file can always be taken off the shelf. */
+.isle-shelf-remove {
+  padding: 0;
+  border-radius: 9px;
+  color: #ffffff;
+  background-color: #3a3a3c;
+  border: 1.5px solid #000000;
+}
+
+.isle-shelf-remove:hover { background-color: #5a5a5e; }

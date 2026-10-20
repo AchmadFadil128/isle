@@ -31,6 +31,7 @@ import {PEEK_HEIGHT, PeekView} from './peek.js';
 import * as Playback from './playback.js';
 import {KeyboardWatcher, OsdHook, SF_PRO_CLASS, TopBar, hasSfPro} from './shell.js';
 import {ShelfHelper} from './shelfHelper.js';
+import {CalendarPage} from './pages/calendar.js';
 import {MediaPage} from './pages/media.js';
 import {NotificationsPage} from './pages/notifications.js';
 import {ShelfPage} from './pages/shelf.js';
@@ -88,6 +89,7 @@ export class Controller {
         this._pagePickedAt = 0;
         this._lastTrack = null;
         this._tint = null;
+        this._tintStyle = null;
 
         this._topBar = new TopBar(this._settings);
         this._notifications = new NotificationCenter();
@@ -125,6 +127,7 @@ export class Controller {
             new TimerPage(this._daemon, size),
             new ShelfPage(this._daemon, this._clipboard, this._settings, size),
             new TasksPage(this._daemon, size),
+            new CalendarPage(this._daemon, size),
         ];
         for (const page of pages) {
             page.connect('request-keyboard', (_page, wanted) => this._setKeyboard(wanted));
@@ -135,6 +138,8 @@ export class Controller {
             // Picked by hand (a tab, a swipe) while open; not when opening.
             if (this._expandWanted)
                 this._pagePickedAt = Date.now();
+            if (expanded.page === this._shelf)
+                this._shelfHelper?.prepare();
             this._shelfHelper?.sync();
         });
         expanded.connect('page-settled', () => this._shelfHelper?.sync());
@@ -167,6 +172,13 @@ export class Controller {
             if (!this._island.hover)
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
         });
+        // It went elsewhere after all.
+        this._shelfHelper.connect('drag-away', () => {
+            this._shelf.dropping = false;
+            this._collapseUnlessHeld();
+        });
+        this._shelfHelper.connect('available-changed', () =>
+            (this._shelf.helperAvailable = this._shelfHelper.available));
 
         this._compact.connect('width-changed', () => {
             if (this._presentation === 'compact')
@@ -269,14 +281,20 @@ export class Controller {
         this._island.morph(size, view);
         this._expanded.setActive(presentation === 'expanded');
         this._syncTint();
+        // Have the helper running before it is needed: starting takes a moment.
+        if (presentation === 'expanded' && this._expanded.page === this._shelf)
+            this._shelfHelper.prepare();
         this._shelfHelper.sync();
     }
 
     _syncTint() {
-        const tint = this._presentation === 'expanded' ? this._expanded.tint : null;
-        if (tint !== this._tint) {
+        const expanded = this._presentation === 'expanded';
+        const tint = expanded ? this._expanded.tint : null;
+        const style = expanded ? this._expanded.tintStyle : null;
+        if (tint !== this._tint || style !== this._tintStyle) {
             this._tint = tint;
-            this._island.tint = tint;
+            this._tintStyle = style;
+            this._island.setTint(tint, style);
         }
     }
 

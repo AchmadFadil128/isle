@@ -17,6 +17,11 @@ const INTERFACE: &str = r#"
       <arg name="height" type="i" direction="in"/>
     </method>
     <method name="Hide"/>
+    <!-- A file is being dragged towards the island: show where it will
+         land before the pointer gets to the window. -->
+    <method name="SetDropping">
+      <arg name="dropping" type="b" direction="in"/>
+    </method>
     <!-- A file is being dragged out: the island must stay open meanwhile,
          or hiding this window would end the drag. -->
     <signal name="Dragging">
@@ -50,6 +55,13 @@ pub fn register(connection: &gio::DBusConnection, window: ShelfWindow) -> Result
                 window.hide();
                 invocation.return_value(None);
             }
+            "SetDropping" => match params.get::<(bool,)>() {
+                Some((dropping,)) => {
+                    window.set_dropping(dropping);
+                    invocation.return_value(None);
+                }
+                None => invocation.return_error(gio::DBusError::InvalidArgs, "expected a boolean"),
+            },
             _ => invocation.return_error(gio::DBusError::UnknownMethod, method),
         })
         .build()?;

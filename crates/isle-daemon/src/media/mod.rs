@@ -4,6 +4,7 @@
 //! (Spotify, browsers, mpv, ...) is currently active, plus its lyrics.
 
 mod art;
+mod gap;
 mod lyrics;
 mod mpris;
 
