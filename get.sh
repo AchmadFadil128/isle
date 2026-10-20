@@ -17,8 +17,8 @@ for tool in curl tar sha256sum; do
 done
 command -v gnome-shell >/dev/null || fail "GNOME Shell was not found; Isle is a GNOME Shell extension."
 SHELL_VERSION="$(gnome-shell --version | grep -oE '[0-9]+' | head -n1)"
-[ "$SHELL_VERSION" = 46 ] ||
-    echo "Note: Isle is made for GNOME Shell 46, and this is GNOME Shell $SHELL_VERSION; it may not load."
+[ "$SHELL_VERSION" -ge 46 ] && [ "$SHELL_VERSION" -le 51 ] ||
+    echo "Note: Isle is made for GNOME Shell 46 to 51, and this is GNOME Shell $SHELL_VERSION; it may not load."
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

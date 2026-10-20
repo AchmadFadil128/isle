@@ -30,6 +30,7 @@ import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
+import {VERTICAL} from './compat.js';
 import {Art, LevelBar, Ring, icon, isSymbolic, pillButton} from './widgets.js';
 
 /** Narrowest and widest an alert gets; in between it fits its content. */
@@ -94,7 +95,8 @@ class PeekView extends St.Widget {
             translation_x: 4,
             translation_y: 4,
         });
-        this._artBox = new St.Widget({layout_manager: new Clutter.BinLayout()});
+        // Not widened by the badge's expand flags; see `_art()` in pages/media.js.
+        this._artBox = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: false, y_expand: false});
         this._artBox.add_child(this._art);
         this._artBox.add_child(this._artBadge);
         // A level as a ring around a lit badge, like the other alerts' badges.
@@ -103,7 +105,7 @@ class PeekView extends St.Widget {
         this._ring = new Ring({size: 38, lineWidth: 3.5, child: this._ringBadge});
         this._row.add_child(this._badge);
 
-        const texts = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const texts = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         this._title = new St.Label({style_class: 'isle-peek-title'});
         this._subtitle = new St.Label({style_class: 'isle-peek-subtitle'});
         for (const text of [this._title, this._subtitle]) {

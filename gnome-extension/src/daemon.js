@@ -124,7 +124,7 @@ export class Daemon extends Signals.EventEmitter {
         const Proxy = Gio.DBusProxy.makeProxyWrapper(xml);
         // The proxy is created even while isled is not running, and picks up
         // its state whenever it appears (or restarts).
-        Proxy(Gio.DBus.session, BUS_NAME, OBJECT_PATH, (proxy, error) => {
+        new Proxy(Gio.DBus.session, BUS_NAME, OBJECT_PATH, (proxy, error) => {
             if (error) {
                 if (!error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
                     console.warn(`Isle: could not create the ${name} proxy: ${error.message}`);

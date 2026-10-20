@@ -13,6 +13,7 @@ import Pango from 'gi://Pango';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
+import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import {icon, iconButton, label} from '../widgets.js';
 
@@ -91,7 +92,7 @@ export const ClipsView = GObject.registerClass({
         this.add_child(this._scroll);
 
         this._empty = new St.BoxLayout({
-            vertical: true,
+            ...VERTICAL,
             style_class: 'isle-empty',
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
@@ -282,7 +283,7 @@ export const ClipsView = GObject.registerClass({
             opacity: 0,
             visible: false,
         });
-        const feedbackBox = new St.BoxLayout({vertical: true, x_expand: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        const feedbackBox = new St.BoxLayout({...VERTICAL, x_expand: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         card._feedbackIcon = new St.Icon({icon_size: 18, x_align: Clutter.ActorAlign.CENTER});
         card._feedbackLabel = label('', 'isle-clip-feedback-label', {x_align: Clutter.ActorAlign.CENTER});
         feedbackBox.add_child(card._feedbackIcon);
@@ -375,7 +376,7 @@ export const ClipsView = GObject.registerClass({
             return layers;
         }
         case 'files': {
-            const box = new St.BoxLayout({vertical: true, style_class: 'isle-clip-body', x_expand: true, y_expand: true});
+            const box = new St.BoxLayout({...VERTICAL, style_class: 'isle-clip-body', x_expand: true, y_expand: true});
             const names = item.preview.split('\n');
             const [type] = Gio.content_type_guess(names[0], null);
             box.add_child(new St.Icon({gicon: Gio.content_type_get_icon(type), icon_size: 28, style_class: 'isle-clip-file-icon', x_align: Clutter.ActorAlign.START}));
@@ -387,7 +388,7 @@ export const ClipsView = GObject.registerClass({
             return box;
         }
         case 'link': {
-            const box = new St.BoxLayout({vertical: true, style_class: 'isle-clip-body', x_expand: true, y_expand: true});
+            const box = new St.BoxLayout({...VERTICAL, style_class: 'isle-clip-body', x_expand: true, y_expand: true});
             const link = item.preview.trim();
             const host = label(hostOf(link), 'isle-clip-host');
             host.clutter_text.ellipsize = Pango.EllipsizeMode.END;
@@ -400,7 +401,7 @@ export const ClipsView = GObject.registerClass({
             return box;
         }
         default: {
-            const box = new St.BoxLayout({vertical: true, style_class: 'isle-clip-body', x_expand: true, y_expand: true});
+            const box = new St.BoxLayout({...VERTICAL, style_class: 'isle-clip-body', x_expand: true, y_expand: true});
             const code = CODE_PATTERN.test(item.preview);
             // Leading blank lines and long runs of spaces waste the card.
             const shown = code ? item.preview.replace(/^\s*\n/, '') : item.preview.replace(/\s+/g, ' ').trim();

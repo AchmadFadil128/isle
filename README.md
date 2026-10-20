@@ -8,7 +8,7 @@ Music with synced lyrics, notifications, a focus timer, tasks and a
 clipboard shelf, living in a notch at the top of your screen.
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
-![GNOME Shell 46](https://img.shields.io/badge/GNOME%20Shell-46-4a86cf.svg)
+![GNOME Shell 46–51](https://img.shields.io/badge/GNOME%20Shell-46%E2%80%9351-4a86cf.svg)
 ![Rust 1.85+](https://img.shields.io/badge/Rust-1.85%2B-orange.svg)
 
 <img src="docs/images/demo.gif" alt="Isle on a GNOME desktop: music with lyrics, notifications, focus timer, clipboard, tasks and alerts" width="800">
@@ -56,24 +56,30 @@ your windows uncovered.
 
 ## Requirements
 
-- **GNOME Shell 46** on Wayland or X11 (Ubuntu 24.04, Fedora 40, …), on a
-  64-bit Intel or AMD PC (x86_64).
+- **GNOME Shell 46 to 51** (Ubuntu 24.04 to 26.10, Fedora 40 to 45,
+  Debian 13, …), on a 64-bit Intel or AMD PC (x86_64). Check with
+  `gnome-shell --version`.
 - `curl`, which most systems have.
 
 ## Installation
 
-Run this in a terminal:
+1. Run this in a terminal:
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash
-```
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash
+   ```
 
-Then **log out and back in**: GNOME Shell on Wayland only loads a new
-extension at login (on X11, press Alt+F2, type `r` and press Enter instead).
+2. **Log out and back in**: GNOME Shell on Wayland only loads a new
+   extension at login (on GNOME 46 to 48 with X11, press Alt+F2, type `r`
+   and press Enter instead).
 
-The script downloads the latest release, checks it, and installs it for your
-user only: no root, no compiler and no cloning needed. Run the same command
-again to update.
+That's all. The script downloads the latest release, checks it, and installs
+it for your user only: no root, no compiler and no cloning needed. Run the
+same command again to update.
+
+The [installation guide](docs/install.md) goes through it step by step, with
+updating, uninstalling, installing offline and what to do if the island does
+not appear.
 
 > [!NOTE]
 > The installer turns off settings and extensions that would fight with the

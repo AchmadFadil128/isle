@@ -11,6 +11,8 @@ import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
+import {DesktopAppInfo} from './src/appInfo.js';
+
 const DAEMON = 'io.github.zickrian.isle.Daemon';
 const DAEMON_PATH = '/io/github/zickrian/isle/Daemon';
 const POMODORO_INTERFACE = 'io.github.zickrian.isle.Pomodoro1';
@@ -248,7 +250,7 @@ function fillIgnoredApps(group, settings) {
     const refresh = () => {
         rows.forEach(row => group.remove(row));
         // Only apps on this computer; the built-in list names others too.
-        rows = settings.get_strv(key).map(id => [id, Gio.DesktopAppInfo.new(id)]).filter(([, app]) => app).map(([id, app]) => {
+        rows = settings.get_strv(key).map(id => [id, DesktopAppInfo.new(id)]).filter(([, app]) => app).map(([id, app]) => {
             const row = new Adw.ActionRow({title: app.get_display_name()});
             if (app.get_icon())
                 row.add_prefix(new Gtk.Image({gicon: app.get_icon(), pixel_size: 24}));

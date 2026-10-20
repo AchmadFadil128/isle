@@ -200,6 +200,10 @@ class Bars extends St.BoxLayout {
         for (let i = 0; i < count; i++) {
             const bar = new St.Widget({style_class: 'isle-bar', y_align: Clutter.ActorAlign.CENTER});
             bar.height = this._restHeight(i);
+            // Off screen a bar's bounce pauses (see `_bounce`); back on, it
+            // goes on. Each bar is watched itself: the box is on screen a
+            // moment before its bars are.
+            bar.connect('notify::mapped', () => this._bounce(bar));
             this._bars.push(bar);
             this.add_child(bar);
         }
@@ -236,7 +240,11 @@ class Bars extends St.BoxLayout {
     }
 
     _bounce(bar) {
-        if (!this._playing)
+        // Off screen, or with animations turned off, ease() skips the
+        // animation and reports it finished at once, so going on would loop
+        // without end and break the bounce (as when a player drops its title
+        // between songs while playing). With animations off the bars rest.
+        if (!this._playing || !bar.mapped || !St.Settings.get().enable_animations)
             return;
         bar.ease({
             height: this._maxHeight * (0.25 + Math.random() * 0.75),

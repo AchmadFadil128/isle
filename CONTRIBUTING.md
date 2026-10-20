@@ -45,8 +45,14 @@ done
 GNOME Shell can run nested inside your session:
 
 ```sh
-dbus-run-session -- gnome-shell --nested --wayland
+dbus-run-session -- gnome-shell --nested --wayland     # GNOME 46 to 48
+dbus-run-session -- gnome-shell --devkit --wayland     # GNOME 49 and newer
 ```
+
+Isle supports GNOME Shell 46 to 51. Where they differ (see the porting
+guides on [gjs.guide](https://gjs.guide/extensions/upgrading/)), the
+difference goes in `src/compat.js` so the rest of the code reads the same on
+all of them; check a change on the oldest and the newest.
 
 GNOME Shell caches extension code, so restart the nested shell after each
 change. Logs:

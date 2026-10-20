@@ -9,6 +9,7 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import {timerColor} from './compact.js';
+import {VERTICAL} from './compat.js';
 import * as Format from './format.js';
 import * as Playback from './playback.js';
 import {Bars, PrivacyDots, RecordingDot, Ring, icon, label} from './widgets.js';
@@ -52,7 +53,7 @@ export const ExpandedView = GObject.registerClass({
     },
 }, class ExpandedView extends St.BoxLayout {
     _init(daemon, privacy, settings, pages) {
-        super._init({vertical: true, style_class: 'isle-expanded', width: EXPANDED_WIDTH});
+        super._init({...VERTICAL, style_class: 'isle-expanded', width: EXPANDED_WIDTH});
         this._daemon = daemon;
         this._privacy = privacy;
         this._settings = settings;
@@ -382,15 +383,43 @@ export const ExpandedView = GObject.registerClass({
         // not always marked as emulated; counting both flipped two pages.
         const smooth = event.get_scroll_direction() === Clutter.ScrollDirection.SMOOTH;
         this._smoothScrolling ||= smooth;
-        if (!smooth && (this._smoothScrolling || event.get_flags() & Clutter.EventFlags.POINTER_EMULATED))
-            return Clutter.EVENT_STOP;
+        if (this._isCopy(event))
+            return this._overList(event) ? Clutter.EVENT_PROPAGATE : Clutter.EVENT_STOP;
         this._trackGesture(event);
         return this._isSideways(event) ? this._flipFromScroll(event) : Clutter.EVENT_PROPAGATE;
     }
 
     vfunc_scroll_event(event) {
+        // A click-style copy let through for a list flips nothing.
+        if (this._isCopy(event))
+            return Clutter.EVENT_STOP;
         // An up/down scroll no page part wanted.
         return this._flipFromScroll(event);
+    }
+
+    /** Whether `event` is the click-style copy of a smooth scroll. */
+    _isCopy(event) {
+        return event.get_scroll_direction() !== Clutter.ScrollDirection.SMOOTH &&
+            (this._smoothScrolling || Boolean(event.get_flags() & Clutter.EventFlags.POINTER_EMULATED));
+    }
+
+    /**
+     * Whether `event`, a mouse wheel click up or down, is over a list that
+     * scrolls up and down. St.ScrollView steps only with the click and
+     * ignores its smooth copy, so the click has to reach it.
+     */
+    _overList(event) {
+        const direction = event.get_scroll_direction();
+        if (direction !== Clutter.ScrollDirection.UP && direction !== Clutter.ScrollDirection.DOWN)
+            return false;
+        if (event.get_scroll_source() === Clutter.ScrollSource.FINGER)
+            return false;
+        let actor = global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, ...event.get_coords());
+        for (; actor && actor !== this; actor = actor.get_parent()) {
+            if (actor instanceof St.ScrollView)
+                return actor.vscrollbar_policy !== St.PolicyType.NEVER;
+        }
+        return false;
     }
 
     /** Adds `event` to the gesture in progress, or starts a new one. */

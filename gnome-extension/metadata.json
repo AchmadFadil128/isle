@@ -3,9 +3,14 @@
   "name": "Isle",
   "description": "A dynamic island for the top bar: music with synced lyrics, a focus timer, tasks, a file shelf, charging and system alerts.",
   "shell-version": [
-    "46"
+    "46",
+    "47",
+    "48",
+    "49",
+    "50",
+    "51"
   ],
   "settings-schema": "org.gnome.shell.extensions.isle",
   "url": "https://github.com/zickrian/isle",
-  "version-name": "0.1.1"
+  "version-name": "0.1.2"
 }

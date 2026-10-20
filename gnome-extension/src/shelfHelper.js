@@ -144,7 +144,7 @@ export class ShelfHelper extends Signals.EventEmitter {
                 if (!names.includes(BUS_NAME))
                     return;
                 // The helper starts on the first call rather than right away.
-                ShelfWindowProxy(Gio.DBus.session, BUS_NAME, OBJECT_PATH, (proxy, error) => {
+                new ShelfWindowProxy(Gio.DBus.session, BUS_NAME, OBJECT_PATH, (proxy, error) => {
                     if (error)
                         return;
                     this._proxy = proxy;

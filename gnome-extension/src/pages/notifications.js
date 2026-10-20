@@ -9,6 +9,7 @@ import Gio from 'gi://Gio';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
+import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import {notificationIcon, plainBody} from '../notifications.js';
 import {icon, iconButton, isSymbolic, label, setButtonIcon, setEnabled} from '../widgets.js';
@@ -101,7 +102,7 @@ class NotificationsPage extends Page {
     }
 
     _buildList() {
-        this._list = new St.BoxLayout({vertical: true, style_class: 'isle-notification-list'});
+        this._list = new St.BoxLayout({...VERTICAL, style_class: 'isle-notification-list'});
         this._scroll = new St.ScrollView({
             style_class: 'isle-task-scroll',
             hscrollbar_policy: St.PolicyType.NEVER,
@@ -112,7 +113,7 @@ class NotificationsPage extends Page {
         });
         this._scroll.set_child(this._list);
 
-        this._empty = new St.BoxLayout({vertical: true, style_class: 'isle-empty', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, x_expand: true});
+        this._empty = new St.BoxLayout({...VERTICAL, style_class: 'isle-empty', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, x_expand: true});
         this._empty.add_child(new St.Icon({gicon: icon('isle-bell'), icon_size: 24, style_class: 'isle-empty-icon', x_align: Clutter.ActorAlign.CENTER}));
         this._empty.add_child(label('No notifications', 'isle-empty-title', {x_align: Clutter.ActorAlign.CENTER}));
         this._empty.add_child(label('You’re all caught up', 'isle-empty-hint', {x_align: Clutter.ActorAlign.CENTER}));
@@ -157,7 +158,7 @@ class NotificationsPage extends Page {
      * top, the edge of the next peeking out under it, and "+2 more from …".
      */
     _stack(source, items) {
-        const stack = new St.BoxLayout({vertical: true, style_class: 'isle-notification-stack'});
+        const stack = new St.BoxLayout({...VERTICAL, style_class: 'isle-notification-stack'});
         stack.add_child(this._row(items[0]));
         stack.add_child(new St.Widget({style_class: 'isle-notification-peek', x_expand: true}));
         const more = new St.Button({
@@ -206,7 +207,7 @@ class NotificationsPage extends Page {
         const content = new St.BoxLayout({style_class: 'isle-notification', x_expand: true});
         content.add_child(notificationBadge(notificationIcon(notification)));
 
-        const texts = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const texts = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         const header = new St.BoxLayout({style_class: 'isle-notification-header'});
         const title = label(notification.title || notification.source?.title || '', 'isle-notification-title', {x_expand: true});
         const body = label(plainBody(notification).replace(/\s+/g, ' ').trim(), 'isle-notification-body');

@@ -14,6 +14,8 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
+import {clutterBackend} from './compat.js';
+
 const CLIPBOARD = St.ClipboardType.CLIPBOARD;
 /** Set by password managers (KeePassXC and others) on secrets they copy. */
 const SECRET_HINT = 'x-kde-passwordManagerHint';
@@ -166,7 +168,7 @@ export class ClipboardHistory {
             const keys = terminal
                 ? [Clutter.KEY_Control_L, Clutter.KEY_Shift_L, Clutter.KEY_v]
                 : [Clutter.KEY_Control_L, Clutter.KEY_v];
-            this._keyboard ??= Clutter.get_default_backend().get_default_seat()
+            this._keyboard ??= clutterBackend().get_default_seat()
                 .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
             // Virtual devices take monotonic microseconds.
             const time = GLib.get_monotonic_time();

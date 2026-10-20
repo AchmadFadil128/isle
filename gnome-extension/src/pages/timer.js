@@ -9,6 +9,7 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import {timerColor} from '../compact.js';
+import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import {Ring, chipButton, iconButton, label, setButtonIcon, setChip, setEnabled} from '../widgets.js';
 import {Page} from './page.js';
@@ -40,7 +41,7 @@ class TimerPage extends Page {
         this._ring.y_align = Clutter.ActorAlign.CENTER;
         this.add_child(this._ring);
 
-        const side = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-timer-side'});
+        const side = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-timer-side'});
         this._caption = label('', 'isle-timer-caption');
         // Today's focus, or how to begin.
         this._stats = label('', 'isle-timer-stats');

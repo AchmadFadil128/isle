@@ -11,6 +11,7 @@ import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
+import {VERTICAL} from '../compat.js';
 import {Ring, icon, iconButton, label} from '../widgets.js';
 import {Page} from './page.js';
 
@@ -47,13 +48,13 @@ class TasksPage extends Page {
     // Building
 
     _buildSummary() {
-        const side = new St.BoxLayout({vertical: true, style_class: 'isle-tasks-side', y_align: Clutter.ActorAlign.CENTER});
+        const side = new St.BoxLayout({...VERTICAL, style_class: 'isle-tasks-side', y_align: Clutter.ActorAlign.CENTER});
         this._count = label('0/0', 'isle-tasks-ring-count');
         this._ring = new Ring({size: RING_SIZE, lineWidth: 5, child: this._count});
         side.add_child(this._ring);
 
         this._ring.x_align = Clutter.ActorAlign.CENTER;
-        const info = new St.BoxLayout({vertical: true, x_align: Clutter.ActorAlign.CENTER});
+        const info = new St.BoxLayout({...VERTICAL, x_align: Clutter.ActorAlign.CENTER});
         this._headline = label('', 'isle-tasks-headline', {x_align: Clutter.ActorAlign.CENTER});
         this._caption = label('', 'isle-tasks-caption', {x_align: Clutter.ActorAlign.CENTER});
         for (const line of [this._headline, this._caption]) {
@@ -65,7 +66,7 @@ class TasksPage extends Page {
     }
 
     _buildList() {
-        const column = new St.BoxLayout({vertical: true, style_class: 'isle-tasks-column', x_expand: true, y_expand: true});
+        const column = new St.BoxLayout({...VERTICAL, style_class: 'isle-tasks-column', x_expand: true, y_expand: true});
 
         this._entry = new St.Entry({
             style_class: 'isle-entry isle-task-add',
@@ -91,7 +92,7 @@ class TasksPage extends Page {
         });
         column.add_child(this._entry);
 
-        this._list = new St.BoxLayout({vertical: true, style_class: 'isle-task-list'});
+        this._list = new St.BoxLayout({...VERTICAL, style_class: 'isle-task-list'});
         this._scroll = new St.ScrollView({
             style_class: 'isle-task-scroll isle-tasks-scroll',
             hscrollbar_policy: St.PolicyType.NEVER,

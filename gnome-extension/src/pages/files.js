@@ -12,6 +12,7 @@ import Gio from 'gi://Gio';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
+import {VERTICAL} from '../compat.js';
 import {icon, iconButton, label} from '../widgets.js';
 
 const TILE_ICON_SIZE = 40;
@@ -35,7 +36,7 @@ class FilesView extends St.Widget {
         this.add_child(this._scroll);
 
         this._empty = new St.BoxLayout({
-            vertical: true,
+            ...VERTICAL,
             style_class: 'isle-empty',
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
@@ -74,7 +75,7 @@ class FilesView extends St.Widget {
 
     _tile(item) {
         const file = Gio.File.new_for_uri(item.uri);
-        const box = new St.BoxLayout({vertical: true});
+        const box = new St.BoxLayout({...VERTICAL});
         // A plain file icon until the file's own one is known (or for good,
         // if the file is gone).
         const preview = new St.Bin({

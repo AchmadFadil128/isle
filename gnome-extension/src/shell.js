@@ -3,11 +3,12 @@
 // Integration with GNOME Shell itself: the top bar, the volume/brightness
 // OSD and keyboard state. Everything here is undone in `destroy()`.
 
-import Clutter from 'gi://Clutter';
 import PangoCairo from 'gi://PangoCairo';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
+
+import {clutterBackend} from './compat.js';
 
 /**
  * Isle's rule for the top bar's colour, per `top-bar-style`. It is added to
@@ -142,31 +143,53 @@ function toggleStyleClass(actor, name, on) {
 /**
  * Routes GNOME's volume and brightness pop-ups to `handler`, which returns
  * whether it showed them; if not, GNOME's own OSD appears as usual.
+ *
+ * GNOME 46–48 show them all through `show(monitorIndex, icon, label, level,
+ * maxLevel)`. GNOME 49 made that `show(icon, label, levels)`, with a level
+ * per monitor (`showOne()` goes through it), and added `showAll()` beside it.
  */
 export class OsdHook {
     constructor(handler) {
         const manager = Main.osdWindowManager;
         this._manager = manager;
-        const original = manager.show;
-        // Set when another extension wrapped it before us.
-        this._ownOriginal = Object.hasOwn(manager, 'show') ? original : null;
-        this._show = function (monitorIndex, icon, label, level, maxLevel) {
-            if (handler(icon, label, level, maxLevel))
-                return;
-            original.call(this, monitorIndex, icon, label, level, maxLevel);
-        };
-        manager.show = this._show;
+        const perMonitor = typeof manager.showAll === 'function';
+        const adapters = perMonitor
+            ? {
+                show: (icon, label, levels) => {
+                    const {level, maxLevel} = levels?.[Main.layoutManager.primaryIndex] ??
+                        Object.values(levels ?? {}).find(Boolean) ?? {};
+                    return handler(icon, label, level, maxLevel);
+                },
+                showAll: (icon, label, level, maxLevel) => handler(icon, label, level, maxLevel),
+            }
+            : {
+                show: (_monitorIndex, icon, label, level, maxLevel) => handler(icon, label, level, maxLevel),
+            };
+        this._hooks = Object.entries(adapters).map(([name, handled]) => {
+            const original = manager[name];
+            const hook = function (...args) {
+                if (handled(...args))
+                    return;
+                original.apply(this, args);
+            };
+            // Set when another extension wrapped it before us.
+            const ownOriginal = Object.hasOwn(manager, name) ? original : null;
+            manager[name] = hook;
+            return {name, hook, ownOriginal};
+        });
     }
 
     destroy() {
-        // Only undo our own override; another extension may have wrapped it
-        // since. GNOME's `show` lives on the prototype.
-        if (this._manager.show !== this._show)
-            return;
-        if (this._ownOriginal)
-            this._manager.show = this._ownOriginal;
-        else
-            delete this._manager.show;
+        // Only undo our own overrides; another extension may have wrapped
+        // them since. GNOME's methods live on the prototype.
+        for (const {name, hook, ownOriginal} of this._hooks) {
+            if (this._manager[name] !== hook)
+                continue;
+            if (ownOriginal)
+                this._manager[name] = ownOriginal;
+            else
+                delete this._manager[name];
+        }
     }
 }
 
@@ -174,7 +197,7 @@ export class OsdHook {
 export class KeyboardWatcher extends Signals.EventEmitter {
     constructor() {
         super();
-        this._keymap = Clutter.get_default_backend().get_default_seat().get_keymap();
+        this._keymap = clutterBackend().get_default_seat().get_keymap();
         this._capsLock = this._keymap.get_caps_lock_state();
         this._keymapChanged = this._keymap.connect('state-changed', () => {
             const capsLock = this._keymap.get_caps_lock_state();

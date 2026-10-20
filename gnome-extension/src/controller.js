@@ -106,7 +106,7 @@ export class Controller {
 
         for (const view of [this._compact, this._peek, this._expanded])
             this._island.addView(view);
-        Main.layoutManager.addChrome(this._island, {affectsInputRegion: true, trackFullscreen: true});
+        Main.layoutManager.addChrome(this._island, {trackFullscreen: true});
         this._connectSignals();
         this._keyboard = new KeyboardWatcher();
         this._keyboard.connect('caps-lock', (_watcher, on) => this._postSystemAlert(Alerts.capsLock(on)));

@@ -89,9 +89,12 @@ glib-compile-schemas "$DEST/schemas"
 step "Starting isled"
 # Let the session bus see the new activation files.
 busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus ReloadConfig >/dev/null 2>&1 || true
-systemctl --user daemon-reload
-systemctl --user enable isled.service >/dev/null 2>&1
-systemctl --user restart isled.service
+# Without a user service manager (over SSH, say) isled still starts on its
+# own when the extension first calls it.
+if systemctl --user daemon-reload 2>/dev/null; then
+    systemctl --user enable isled.service >/dev/null 2>&1
+    systemctl --user restart isled.service
+fi
 
 # A running GNOME Shell on Wayland does not know a new extension until the
 # next login, so add it to the enabled list directly when enabling fails.

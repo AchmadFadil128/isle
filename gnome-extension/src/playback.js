@@ -2,8 +2,7 @@
 
 // Helpers for the daemon's `NowPlaying` and `Lyrics` state.
 
-import Gio from 'gi://Gio';
-
+import {DesktopAppInfo} from './appInfo.js';
 import {nowMs} from './format.js';
 
 export function isPlaying(nowPlaying) {
@@ -75,10 +74,10 @@ export function playerApp({desktop_entry: entry, identity}) {
         if (entry)
             ids.push(`${entry}.desktop`);
         if (identity)
-            ids.push(...Gio.DesktopAppInfo.search(identity).flat());
+            ids.push(...DesktopAppInfo.search(identity).flat());
         let app = null;
         for (const id of ids) {
-            app = Gio.DesktopAppInfo.new(id);
+            app = DesktopAppInfo.new(id);
             if (app)
                 break;
         }

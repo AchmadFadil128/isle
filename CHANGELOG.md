@@ -6,6 +6,30 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-20
+
+### Added
+
+- Support for GNOME Shell 47, 48, 49, 50 and 51 besides 46, so Isle installs
+  on Ubuntu 24.04 up to 26.10 and the Fedora releases with those versions,
+  looking and moving the same on each. Volume and brightness alerts follow
+  GNOME 49's new way of showing them, per monitor.
+- An [installation guide](docs/install.md): checking the desktop, installing,
+  updating, uninstalling, installing offline and troubleshooting.
+
+### Fixed
+
+- Lists scroll with a mouse wheel again: notifications, sound outputs and
+  tasks only followed a touchpad.
+- The music bars in the closed island keep dancing when the song changes;
+  players that drop the title for a moment between songs (Spotify) froze
+  them until the island was opened and closed.
+- The playing app's badge stays on the cover's corner: with Spotify the
+  cover drifted left, leaving a gap before the title, and the badge sat
+  apart from it. The same in the song alert.
+- `install.sh` finishes without a user service manager (over SSH, say);
+  isled then starts when the extension first calls it.
+
 ## [0.1.1] - 2026-10-20
 
 ### Added
@@ -148,6 +172,7 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/zickrian/isle/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/zickrian/isle/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/zickrian/isle/releases/tag/v0.1.0

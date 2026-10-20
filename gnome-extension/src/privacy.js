@@ -10,11 +10,12 @@
 // - Screen sharing and recording: Mutter's remote access handles.
 
 import GLib from 'gi://GLib';
-import Meta from 'gi://Meta';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 import {getMixerControl} from 'resource:///org/gnome/shell/ui/status/volume.js';
+
+import {isWayland} from './compat.js';
 
 /** Apps that open the microphone only to show its level. */
 const LEVEL_METERS = ['org.gnome.VolumeControl', 'org.PulseAudio.pavucontrol'];
@@ -52,7 +53,7 @@ export class PrivacyMonitor extends Signals.EventEmitter {
 
         // Screen sharing is only reliably known on Wayland, where Mutter
         // does the sharing itself; GNOME makes the same choice.
-        this._remote = Meta.is_wayland_compositor() ? global.backend.get_remote_access_controller() : null;
+        this._remote = isWayland() ? global.backend.get_remote_access_controller() : null;
         this._remoteId = this._remote?.connect('new-handle', (_controller, handle) => this._onHandle(handle));
 
         this._syncMicrophone();

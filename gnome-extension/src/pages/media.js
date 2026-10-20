@@ -11,6 +11,7 @@ import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
+import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import * as Playback from '../playback.js';
 import {Art, Slider, icon, iconButton, label, setButtonIcon} from '../widgets.js';
@@ -98,7 +99,7 @@ class LyricsPane extends St.Widget {
         this._current = -2;
         this._manualUntil = 0;
 
-        this._column = new St.BoxLayout({vertical: true, x_expand: true, y_expand: true, x_align: Clutter.ActorAlign.FILL, y_align: Clutter.ActorAlign.START});
+        this._column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true, x_align: Clutter.ActorAlign.FILL, y_align: Clutter.ActorAlign.START});
         this._message = label('', 'isle-lyrics-message', {x_align: Clutter.ActorAlign.CENTER});
         this.add_child(this._column);
         this.add_child(this._message);
@@ -288,14 +289,22 @@ class MediaPage extends Page {
         });
         this._badges.push({badge, icon: badgeIcon});
 
-        const box = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
+        // The badge expands to reach the corner; kept from spreading to the
+        // box, which would then take a share of the row and leave the art
+        // stranded at one end and the badge at the other.
+        const box = new St.Widget({
+            layout_manager: new Clutter.BinLayout(),
+            x_expand: false,
+            y_expand: false,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
         box.add_child(art);
         box.add_child(badge);
         return box;
     }
 
     _texts(titleClass, artistClass) {
-        const box = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-player-texts'});
+        const box = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-player-texts'});
         const title = label('', titleClass);
         const artist = label('', artistClass);
         for (const text of [title, artist]) {
@@ -354,7 +363,7 @@ class MediaPage extends Page {
         const player = new St.BoxLayout({style_class: 'isle-player', x_expand: true, y_expand: true});
         player.add_child(this._art(ART_SIZE, 16));
 
-        const column = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-player-column'});
+        const column = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-player-column'});
         // Title and artist, with lyrics and output as small buttons at the right.
         const head = new St.BoxLayout({style_class: 'isle-player-head'});
         const texts = this._texts('isle-track-title', 'isle-track-subtitle');
@@ -376,7 +385,7 @@ class MediaPage extends Page {
     _buildLyricsLayout() {
         const layout = new St.BoxLayout({style_class: 'isle-lyrics-layout', x_expand: true, y_expand: true, visible: false});
 
-        const side = new St.BoxLayout({vertical: true, style_class: 'isle-lyrics-side', y_align: Clutter.ActorAlign.CENTER});
+        const side = new St.BoxLayout({...VERTICAL, style_class: 'isle-lyrics-side', y_align: Clutter.ActorAlign.CENTER});
         const top = new St.BoxLayout({style_class: 'isle-player-top'});
         top.add_child(this._art(60, 12));
         top.add_child(this._texts('isle-side-title', 'isle-side-artist'));
@@ -397,7 +406,7 @@ class MediaPage extends Page {
 
     /** Volume, then the outputs to choose from, like macOS's Sound menu. */
     _buildAudioLayout() {
-        const layout = new St.BoxLayout({vertical: true, style_class: 'isle-audio-layout', x_expand: true, y_expand: true, visible: false});
+        const layout = new St.BoxLayout({...VERTICAL, style_class: 'isle-audio-layout', x_expand: true, y_expand: true, visible: false});
 
         const volume = new St.BoxLayout({style_class: 'isle-volume-row'});
         this._muteButton = iconButton('audio-volume-high-symbolic', 'isle-button-flat',
@@ -411,7 +420,7 @@ class MediaPage extends Page {
         volume.add_child(this._modeButton('audio', 'isle-output', 'Back to the player', true));
         layout.add_child(volume);
 
-        this._outputList = new St.BoxLayout({vertical: true, style_class: 'isle-output-list'});
+        this._outputList = new St.BoxLayout({...VERTICAL, style_class: 'isle-output-list'});
         const scroll = new St.ScrollView({
             hscrollbar_policy: St.PolicyType.NEVER,
             // Scrolls with the wheel or touchpad; no scrollbar over the rows.
@@ -426,7 +435,7 @@ class MediaPage extends Page {
 
     _buildEmpty() {
         const box = new St.BoxLayout({
-            vertical: true,
+            ...VERTICAL,
             style_class: 'isle-empty',
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
@@ -490,7 +499,7 @@ class MediaPage extends Page {
         for (const output of audio.outputs) {
             const row = new St.BoxLayout({style_class: 'isle-output-row', x_expand: true, x_align: Clutter.ActorAlign.FILL});
             row.add_child(new St.Icon({gicon: output.gicon, fallback_icon_name: 'audio-speakers-symbolic', icon_size: 18, y_align: Clutter.ActorAlign.CENTER}));
-            const texts = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+            const texts = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
             texts.add_child(label(output.name, 'isle-output-name'));
             if (output.detail)
                 texts.add_child(label(output.detail, 'isle-output-detail'));
