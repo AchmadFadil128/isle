@@ -40,10 +40,12 @@ const PAGE_MEMORY_MS = 5 * 60 * 1000;
 
 // Corner and shoulder radii per presentation. The shoulders ("ears") grow
 // with the island.
+// The compact island hangs 22 px by default: just enough for a 14 px corner
+// and an 8 px shoulder, so it is fully round without hanging low.
 const COMPACT_RADIUS = 14;
-const COMPACT_SHOULDER = 10;
-const PEEK_RADIUS = 24;
-const PEEK_SHOULDER = 16;
+const COMPACT_SHOULDER = 8;
+const PEEK_RADIUS = 22;
+const PEEK_SHOULDER = 13;
 const EXPANDED_RADIUS = 32;
 const EXPANDED_SHOULDER = 22;
 
@@ -76,6 +78,8 @@ export class Controller {
         this._expanded = this._buildExpanded();
         this._shelfHelper = new ShelfHelper(this._island, this._expanded.pageNamed('shelf'));
 
+        for (const view of [this._compact, this._peek, this._expanded])
+            this._island.addView(view);
         Main.layoutManager.addChrome(this._island, {affectsInputRegion: true, trackFullscreen: true});
         this._connectSignals();
         this._keyboard = new KeyboardWatcher();
@@ -192,6 +196,9 @@ export class Controller {
         this._presentation = presentation;
         const top = this._topBar.height;
 
+        // The compact island and alerts hang below the top bar, with their
+        // content in the part that hangs down; the open island's header row
+        // sits in the top bar itself.
         let size, view;
         switch (presentation) {
         case 'expanded':
@@ -204,10 +211,9 @@ export class Controller {
             view = this._expanded;
             break;
         case 'peek':
-            // Alerts are centred in the whole island; the top bar is black,
-            // so there is no visible line between the two.
-            size = {width: PEEK_WIDTH, height: Math.max(PEEK_HEIGHT, top + 40), radius: PEEK_RADIUS, shoulder: PEEK_SHOULDER};
+            size = {width: PEEK_WIDTH, height: top + PEEK_HEIGHT, radius: PEEK_RADIUS, shoulder: PEEK_SHOULDER};
             view = this._peek;
+            view.style = `padding-top: ${top}px;`;
             break;
         default:
             size = {
@@ -217,6 +223,7 @@ export class Controller {
                 shoulder: COMPACT_SHOULDER,
             };
             view = this._compact;
+            view.style = `padding-top: ${top}px;`;
         }
         view.set_size(size.width, size.height);
         this._topBar.reserveWidth(this._compact.preferredWidth);
@@ -478,11 +485,6 @@ export class Controller {
         this._keyboard.destroy();
         this._shelfHelper.destroy();
 
-        // Views not currently inside the island are not destroyed with it.
-        for (const view of [this._compact, this._peek, this._expanded]) {
-            if (!view.get_parent())
-                view.destroy();
-        }
         this._island.destroy();
         this._notifications.destroy();
         this._topBar.destroy();

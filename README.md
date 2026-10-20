@@ -11,6 +11,8 @@ physics to show what is going on:
   closed island.
 - **Tasks** with quick-add: `Call mum @18:30`, `Stretch in 20m`, `Report @3pm`.
 - **File shelf**: drop files on the island, drag them out later.
+- **Notifications** from GNOME shown in the island, a list to catch up on,
+  and **Do Not Disturb** right there.
 - **Alerts**: charging, low battery, Wi-Fi, Bluetooth earbuds with their
   battery level, volume and brightness, Caps Lock, keyboard layout, a new song.
 - **Sleepy eyes** when you step away.

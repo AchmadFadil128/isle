@@ -55,19 +55,36 @@ export function pillButton(text, styleClass, onClick) {
     return button;
 }
 
-/**
- * A pill with an icon and a label. Its label is reachable as `.caption`;
- * the `checked` pseudo class highlights it.
- */
-export function chipButton(iconName, text, onClick) {
+/** A pill with an icon and a label; change its state with `setChip`. */
+export function chipButton(iconName, text, onClick, styleClass = '') {
     const box = new St.BoxLayout({style_class: 'pulau-chip-box'});
-    box.add_child(new St.Icon({gicon: icon(iconName), icon_size: 14}));
+    const glyph = new St.Icon({gicon: icon(iconName), icon_size: 14});
     const caption = new St.Label({text, y_align: Clutter.ActorAlign.CENTER});
+    box.add_child(glyph);
     box.add_child(caption);
-    const button = new St.Button({style_class: 'pulau-chip', child: box, can_focus: true, y_align: Clutter.ActorAlign.CENTER});
+    const button = new St.Button({style_class: `pulau-chip ${styleClass}`, child: box, can_focus: true, y_align: Clutter.ActorAlign.CENTER});
     button.connect('clicked', () => onClick());
-    button.caption = caption;
+    button._pulauIcon = glyph;
+    button._pulauCaption = caption;
     return button;
+}
+
+/**
+ * Updates a chip's state. A state change always changes the icon too (e.g.
+ * outline to filled), never just the colour.
+ */
+export function setChip(button, {active = false, icon: iconName = null, label: text = null, enabled = true}) {
+    if (iconName)
+        button._pulauIcon.gicon = icon(iconName);
+    if (text)
+        button._pulauCaption.text = text;
+    if (active)
+        button.add_style_pseudo_class('checked');
+    else
+        button.remove_style_pseudo_class('checked');
+    // Disabled chips stay in place, dimmed, so the layout never jumps.
+    button.reactive = enabled;
+    button.can_focus = enabled;
 }
 
 /** Sets an icon button's icon. */

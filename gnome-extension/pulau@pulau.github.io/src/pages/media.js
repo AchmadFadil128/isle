@@ -382,7 +382,7 @@ class MediaPage extends Page {
     }
 
     _lyricsToggle(on) {
-        return iconButton('pulau-lyrics', `pulau-button-flat pulau-lyrics-toggle${on ? ' on' : ''}`,
+        return iconButton(on ? 'pulau-lyrics-fill' : 'pulau-lyrics', `pulau-button-flat pulau-lyrics-toggle${on ? ' on' : ''}`,
             () => this._toggleLyrics(), {size: 18, accessibleName: on ? 'Hide lyrics' : 'Show lyrics'});
     }
 

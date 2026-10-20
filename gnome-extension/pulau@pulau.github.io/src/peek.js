@@ -29,7 +29,8 @@ import St from 'gi://St';
 import {Art, LevelBar, Ring, icon, pillButton} from './widgets.js';
 
 export const PEEK_WIDTH = 380;
-export const PEEK_HEIGHT = 80;
+/** Height of the part that hangs below the top bar. */
+export const PEEK_HEIGHT = 56;
 
 /** The ring starts sweeping once the island has made room. */
 const RING_DELAY = 350;

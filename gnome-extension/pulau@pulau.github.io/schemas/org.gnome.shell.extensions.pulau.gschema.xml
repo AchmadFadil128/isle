@@ -7,10 +7,10 @@
       <description>Paint the top bar black so the island blends into it.</description>
     </key>
     <key name="notch-depth" type="i">
-      <range min="0" max="16"/>
-      <default>10</default>
-      <summary>Notch depth</summary>
-      <description>How far the compact island hangs below the top bar, in pixels.</description>
+      <range min="22" max="36"/>
+      <default>22</default>
+      <summary>Island height</summary>
+      <description>How far the closed island hangs below the top bar, in pixels.</description>
     </key>
     <key name="replace-osd" type="b">
       <default>true</default>

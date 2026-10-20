@@ -138,6 +138,20 @@ export const Island = GObject.registerClass({
         this._showView(view);
     }
 
+    /**
+     * Adds a view, hidden. Every view is added up front so it is always on
+     * the stage, even before it is first shown.
+     */
+    addView(view) {
+        view.x_expand = view.y_expand = true;
+        view.x_align = Clutter.ActorAlign.CENTER;
+        view.y_align = Clutter.ActorAlign.START;
+        view.opacity = 0;
+        view.reactive = false;
+        view.hide();
+        this._stage.add_child(view);
+    }
+
     _showView(view) {
         if (view === this._view)
             return;
@@ -158,12 +172,6 @@ export const Island = GObject.registerClass({
         }
 
         this._view = view;
-        if (view.get_parent() !== this._stage) {
-            view.x_expand = view.y_expand = true;
-            view.x_align = Clutter.ActorAlign.CENTER;
-            view.y_align = Clutter.ActorAlign.START;
-            this._stage.add_child(view);
-        }
         view.remove_all_transitions();
         view.reactive = true;
         view.show();

@@ -8,7 +8,7 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as Format from '../format.js';
-import {chipButton, icon, iconButton, label} from '../widgets.js';
+import {chipButton, icon, iconButton, label, setChip} from '../widgets.js';
 import {Page} from './page.js';
 
 /** Due times refresh each minute so "in 5 min" stays honest. */
@@ -122,11 +122,11 @@ class TasksPage extends Page {
 
     _toggleEditing() {
         this._editing = !this._editing;
-        this._editButton.caption.text = this._editing ? 'Done' : 'Edit Task';
-        if (this._editing)
-            this._editButton.add_style_pseudo_class('checked');
-        else
-            this._editButton.remove_style_pseudo_class('checked');
+        setChip(this._editButton, {
+            active: this._editing,
+            icon: this._editing ? 'object-select-symbolic' : 'document-edit-symbolic',
+            label: this._editing ? 'Done' : 'Edit Task',
+        });
         this._update();
     }
 

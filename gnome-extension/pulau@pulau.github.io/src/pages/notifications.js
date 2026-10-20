@@ -9,7 +9,7 @@ import St from 'gi://St';
 
 import * as Format from '../format.js';
 import {notificationIcon, plainBody} from '../notifications.js';
-import {chipButton, iconButton, label} from '../widgets.js';
+import {chipButton, iconButton, label, setChip} from '../widgets.js';
 import {Page} from './page.js';
 
 export const NotificationsPage = GObject.registerClass(
@@ -50,9 +50,9 @@ class NotificationsPage extends Page {
         side.add_child(this._caption);
 
         const buttons = new St.BoxLayout({vertical: true, style_class: 'pulau-notifications-buttons', x_align: Clutter.ActorAlign.START});
-        this._dndButton = chipButton('notifications-disabled-symbolic', 'Do Not Disturb', () => {
+        this._dndButton = chipButton('pulau-bell', 'Do Not Disturb', () => {
             this._center.dnd = !this._center.dnd;
-        });
+        }, 'pulau-chip-dnd');
         this._clearButton = chipButton('edit-clear-all-symbolic', 'Clear All', () => this._center.clearAll());
         for (const button of [this._dndButton, this._clearButton]) {
             button.x_align = Clutter.ActorAlign.START;
@@ -88,7 +88,7 @@ class NotificationsPage extends Page {
         const notifications = this._center.notifications;
         this._count.text = String(notifications.length);
         this._caption.text = notifications.length === 1 ? 'Notification' : 'Notifications';
-        this._clearButton.visible = notifications.some(n => !n.resident);
+        setChip(this._clearButton, {enabled: notifications.some(n => !n.resident)});
 
         this._list.destroy_all_children();
         for (const notification of notifications)
@@ -102,10 +102,8 @@ class NotificationsPage extends Page {
     }
 
     _updateDnd() {
-        if (this._center.dnd)
-            this._dndButton.add_style_pseudo_class('checked');
-        else
-            this._dndButton.remove_style_pseudo_class('checked');
+        const on = this._center.dnd;
+        setChip(this._dndButton, {active: on, icon: on ? 'pulau-moon' : 'pulau-bell'});
     }
 
     _row(notification) {

@@ -13,6 +13,7 @@ disagrees with this document is a bug in one or the other; fix both together.
 | not forget small tasks | add tasks in one line (`Call mum @18:30`), get reminded, tick them off; tasks survive reboots and power cuts |
 | move files between apps | park files on the island and drag them out later |
 | know when something changes | show short, consistent alerts: charging, battery, Wi-Fi, earbuds, volume, brightness, keyboard, new song |
+| still get my notifications now that the clock is gone | show GNOME's notifications in the island, keep them in a list, and offer Do Not Disturb right there |
 | keep my laptop fast and cool | never poll; animate only while something moves |
 
 Out of scope for v1: water reminders (removed), notification banners in the
@@ -25,12 +26,32 @@ The island is always in exactly one presentation. `P` is the top bar height
 
 | Presentation | Size (w × h) | Corner | Shoulder | Content |
 |---|---|---|---|---|
-| Compact | 150 × (P + 10); 232 with an activity; 400 with live lyrics | 14 | 10 | Clock, or lyric line, or eyes; activity slots left/right |
-| Peek (alert) | 380 × 80 | 24 | 16 | Badge · title/subtitle · value, level bar or button |
+| Compact | 150 × (P + 22); 232 with an activity; 400 with live lyrics | 14 | 8 | Clock, or lyric line, or eyes; activity slots left/right |
+| Peek (alert) | 380 × (P + 56) | 22 | 13 | Badge · title/subtitle · value, level bar or button |
 | Expanded | 600 × (P + 170); 720 for lyrics | 32 | 22 | Header row · page · dots |
 
 The top bar is painted black; the island hangs from it with concave
-shoulders, so bar and island read as one shape.
+shoulders, so bar and island read as one shape. The compact island and
+alerts hang fully below the bar with their content in the hanging part, so
+their corners and shoulders are always fully round; the open island's header
+row sits inside the bar itself.
+
+### State details
+
+Every state change shows in the icon, not only in colour, so it reads at a
+glance (and for colour-blind users):
+
+| Control | Off | On |
+|---|---|---|
+| Do Not Disturb | bell outline, grey chip | filled moon, indigo chip; moon in the closed island |
+| Short Break / Focus Time | outline icon | filled icon, lit chip |
+| Lyrics | speech bubble outline | filled bubble, lit button |
+| Edit Task | pencil, "Edit Task" | check mark, "Done" |
+| Play / pause | play | pause |
+| Task | empty circle | green circle with a check; title struck through |
+
+Controls that cannot act right now (Clear All with nothing to clear) stay in
+place, dimmed, so the layout never jumps.
 
 ### Motion
 
@@ -59,16 +80,18 @@ shoulders, so bar and island read as one shape.
 | Esc | – | Stop typing a task |
 
 **Default page on open**, first match wins: the page of the alert being
-shown → Music if something plays → Focus if the timer runs → Tasks if one is
-due within an hour → the page last viewed (remembered for 5 minutes) → Music.
+shown → Notifications if some arrived unseen (during Do Not Disturb) → Music
+if something plays → Focus if the timer runs → Tasks if one is due within an
+hour → the page last viewed (remembered for 5 minutes) → Music.
 
-Pages, in order: **Music · Focus · Shelf · Tasks**. Arrows at the sides go to
+Pages, in order: **Music · Notifications · Focus · Shelf · Tasks**. Lists
+scroll with the wheel or touchpad and never show a scrollbar. Arrows at the sides go to
 the neighbouring page (hidden at the ends); dots show where you are.
 
 ## 4. Closed island
 
 - Left slot, first that applies: focus timer ring → cover art (music
-  playing) → white dot (unread GNOME notifications).
+  playing) → white dot (unseen notifications) → moon (Do Not Disturb on).
 - Right slot: music bars while playing (static, to save power).
 - Centre: the clock (follows GNOME's 12/24-hour setting); or the current
   lyric line if *Live lyrics* is on and synced lyrics exist; or the eyes.
@@ -92,6 +115,12 @@ divider. Right: synced lines, the current one white, others dimmed, faded at
 the top and bottom; click a line to jump there; scrolling by hand pauses
 following for 4 s. The island takes a soft wash of the cover's colour.
 States: looking for lyrics, no lyrics found, instrumental, offline.
+
+**Notifications** (title "Notifications"). Left: how many there are,
+**Do Not Disturb** and **Clear All** (see state details above). Right: newest first,
+each with its app icon, title, one line of text and how long ago; click to
+open it (the island closes), × to dismiss. Opening the page marks them seen.
+Empty: "No notifications · You're all caught up".
 
 **Focus** (title "Pomodoro"). A thin white ring that fills clockwise as the
 phase runs (green during breaks), with a clock icon inside; the remaining
@@ -130,9 +159,20 @@ One at a time. *Instant* alerts replace whatever is showing; the rest queue
 | New song | cover | title / artist | – | 2.6 s |
 | Timer phase ends (+ chime) | timer | Focus session done… | Start break | 8 s |
 | Task due (+ chime) | tasks | task title / Due now | Done | 8 s |
+| Notification (GNOME's sound) | app icon, large | title / first line | – | 5 s; urgent 8 s and instant |
 
 When a window is fullscreen the island hides and GNOME's own volume pop-up
 is used.
+
+### Notifications and Do Not Disturb
+
+The island replaces GNOME's banners while the extension runs; GNOME's
+notification list (right-click → calendar) keeps working as before. Rules
+match GNOME's: low-urgency and already-seen notifications never pop up, and
+apps whose banners are turned off in Settings stay quiet. Do Not Disturb is
+GNOME's own setting, so it stays in sync with Quick Settings; while it is on,
+only critical notifications pop up. Clicking a notification alert opens it;
+hovering opens the Notifications page.
 
 ## 7. Data and reliability
 

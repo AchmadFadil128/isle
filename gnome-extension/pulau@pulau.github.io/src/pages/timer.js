@@ -7,7 +7,7 @@ import St from 'gi://St';
 
 import {timerColor} from '../compact.js';
 import * as Format from '../format.js';
-import {Ring, chipButton, icon, iconButton, label, setButtonIcon} from '../widgets.js';
+import {Ring, chipButton, icon, iconButton, label, setButtonIcon, setChip} from '../widgets.js';
 import {Page} from './page.js';
 
 const CAPTIONS = {
@@ -86,12 +86,11 @@ class TimerPage extends Page {
         this._caption.text = state.running || idle ? CAPTIONS[state.phase] : `${CAPTIONS[state.phase]} · paused`;
 
         setButtonIcon(this._play, state.running ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic');
-        for (const [button, phase] of [[this._shortBreak, 'short_break'], [this._focus, 'focus']]) {
-            if (state.phase === phase)
-                button.add_style_pseudo_class('checked');
-            else
-                button.remove_style_pseudo_class('checked');
-        }
+        // The chip of the running phase lights up and its icon fills in.
+        const shortBreak = state.phase === 'short_break';
+        const focus = state.phase === 'focus';
+        setChip(this._shortBreak, {active: shortBreak, icon: shortBreak ? 'pulau-coffee-fill' : 'pulau-coffee'});
+        setChip(this._focus, {active: focus, icon: focus ? 'pulau-target-fill' : 'pulau-target'});
 
         this._scheduleTick(state);
     }

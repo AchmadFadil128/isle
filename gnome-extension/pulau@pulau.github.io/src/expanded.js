@@ -38,6 +38,7 @@ export const ExpandedView = GObject.registerClass({
         this._pages = pages;
         this._index = 0;
         this._active = false;
+        this._width = EXPANDED_WIDTH;
         this._lastFlip = 0;
         this._smoothScroll = 0;
         this._clockTimeout = 0;
@@ -226,9 +227,12 @@ export const ExpandedView = GObject.registerClass({
     }
 
     _syncWidth() {
+        // Compare with the width we set, not `this.width`: reading that makes
+        // St style the actor, which fails before it is on the stage.
         const width = this.preferredWidth;
-        if (width === this.width)
+        if (width === this._width)
             return;
+        this._width = width;
         this.width = width;
         this.emit('width-changed');
     }
