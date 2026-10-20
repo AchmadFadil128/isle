@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use isle_core::pomodoro::{FocusStats, Phase, Pomodoro, PomodoroConfig, PomodoroView};
+use isle_core::pomodoro::{FocusStats, Phase, Pomodoro, PomodoroConfig, PomodoroView, TimerState};
 use log::warn;
 use serde::Serialize;
 use tokio::sync::Notify;
@@ -24,6 +24,8 @@ struct State {
 pub struct PomodoroService {
     timer: Pomodoro,
     store: Store<PomodoroConfig>,
+    /// The running or paused phase, so it survives isled restarting.
+    timer_store: Store<TimerState>,
     stats: FocusStats,
     stats_store: Store<FocusStats>,
     wake: Arc<Notify>,
@@ -31,19 +33,25 @@ pub struct PomodoroService {
 
 impl PomodoroService {
     pub fn load() -> Self {
-        let store = Store::new("pomodoro");
-        let stats_store = Store::new("focus-stats");
+        let mut store = Store::new("pomodoro");
+        let mut timer_store = Store::new("pomodoro-timer");
+        let mut stats_store = Store::new("focus-stats");
+        // A phase that ran out while isled was down is finished by `run`'s
+        // first tick, like any other.
         Self {
-            timer: Pomodoro::new(store.load()),
+            timer: Pomodoro::restore(store.load(), timer_store.load()),
             store,
+            timer_store,
             stats: stats_store.load(),
             stats_store,
             wake: Arc::default(),
         }
     }
 
-    /// Publishes the new state and reschedules the phase-end wake-up.
+    /// Saves and publishes the new state, and reschedules the phase-end
+    /// wake-up. Only called when the state changes, never on a mere tick.
     async fn changed(&self, emitter: &SignalEmitter<'_>) -> zbus::Result<()> {
+        self.timer_store.save(&self.timer.state());
         self.wake.notify_one();
         self.state_changed(emitter).await
     }
@@ -153,11 +161,16 @@ pub async fn run(iface: InterfaceRef<PomodoroService>) {
 
         let mut service = iface.get_mut().await;
         let now = now_ms();
+        // The length the session was started with, even if the config has
+        // changed since.
         let focus_ms = service.timer.view(now).duration_ms;
         let transition = service.timer.tick(now);
         if transition.is_some_and(|t| t.finished == Phase::Focus) {
             service.stats.record(&today(), focus_ms);
             service.stats_store.save(&service.stats);
+        }
+        if transition.is_some() {
+            service.timer_store.save(&service.timer.state());
         }
 
         let emitter = iface.signal_emitter();

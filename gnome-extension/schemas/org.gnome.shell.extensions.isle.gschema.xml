@@ -29,15 +29,6 @@
       <default>false</default>
       <summary>Briefly show the new song when the track changes</summary>
     </key>
-    <key name="sleepy-eyes" type="b">
-      <default>true</default>
-      <summary>Show sleepy eyes when the computer is idle</summary>
-    </key>
-    <key name="idle-seconds" type="i">
-      <range min="15" max="3600"/>
-      <default>90</default>
-      <summary>Seconds without input before the eyes appear</summary>
-    </key>
     <key name="privacy-indicators" type="b">
       <default>true</default>
       <summary>Show when the camera, microphone or screen sharing is in use</summary>
@@ -45,6 +36,11 @@
     <key name="focus-dnd" type="b">
       <default>true</default>
       <summary>Turn on Do Not Disturb during focus sessions</summary>
+    </key>
+    <key name="focus-dnd-owned" type="b">
+      <default>false</default>
+      <summary>Internal: Do Not Disturb was turned on by a focus session</summary>
+      <description>Kept across restarts and the lock screen so Isle can turn it off again afterwards.</description>
     </key>
     <key name="chimes" type="b">
       <default>true</default>

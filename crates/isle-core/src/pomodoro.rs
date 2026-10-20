@@ -78,6 +78,21 @@ pub struct PomodoroView {
     pub sessions_before_long_break: u32,
 }
 
+/// The timer's progress, saved so a running or paused phase survives a
+/// restart of the daemon. The configuration is stored on its own.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TimerState {
+    pub phase: Phase,
+    pub running: bool,
+    /// When the phase ends, if running.
+    pub ends_at_ms: Option<i64>,
+    /// Time left, if paused.
+    pub remaining_ms: i64,
+    pub duration_ms: i64,
+    pub completed_sessions: u32,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Pomodoro {
     config: PomodoroConfig,
@@ -86,6 +101,9 @@ pub struct Pomodoro {
     ends_at: Option<i64>,
     /// Time left while not running.
     remaining_ms: i64,
+    /// Length of the current phase, fixed when it began: a config change
+    /// mid-phase must not change what the phase counts as (see `set_config`).
+    duration_ms: i64,
     /// Focus sessions completed since the last long break.
     completed_sessions: u32,
 }
@@ -95,6 +113,40 @@ impl Pomodoro {
         Self {
             config,
             ..Self::default()
+        }
+    }
+
+    /// Picks up where a saved timer left off. A running phase keeps its end
+    /// time, so one that ran out in the meantime finishes on the next
+    /// [`tick`](Self::tick), exactly as if the daemon had been there.
+    pub fn restore(config: PomodoroConfig, state: TimerState) -> Self {
+        if state.phase == Phase::Idle {
+            return Self::new(config);
+        }
+        let duration_ms = if state.duration_ms > 0 {
+            state.duration_ms
+        } else {
+            config.duration_ms(state.phase)
+        };
+        Self {
+            phase: state.phase,
+            ends_at: state.ends_at_ms.filter(|_| state.running),
+            remaining_ms: state.remaining_ms.clamp(0, duration_ms),
+            duration_ms,
+            completed_sessions: state.completed_sessions,
+            config,
+        }
+    }
+
+    /// What [`restore`](Self::restore) needs to bring this timer back.
+    pub fn state(&self) -> TimerState {
+        TimerState {
+            phase: self.phase,
+            running: self.ends_at.is_some(),
+            ends_at_ms: self.ends_at,
+            remaining_ms: self.remaining_ms,
+            duration_ms: self.duration_ms,
+            completed_sessions: self.completed_sessions,
         }
     }
 
@@ -121,7 +173,7 @@ impl Pomodoro {
             duration_ms: if self.phase == Phase::Idle {
                 self.config.duration_ms(Phase::Focus)
             } else {
-                self.config.duration_ms(self.phase)
+                self.duration_ms
             },
             completed_sessions: self.completed_sessions,
             sessions_before_long_break: self.config.sessions_before_long_break,
@@ -216,6 +268,7 @@ impl Pomodoro {
     fn enter(&mut self, phase: Phase, now: i64, running: bool) {
         let duration = self.config.duration_ms(phase);
         self.phase = phase;
+        self.duration_ms = duration;
         self.remaining_ms = duration;
         self.ends_at = running.then_some(now + duration);
     }
@@ -331,6 +384,66 @@ mod tests {
         assert_eq!(view.phase, Phase::ShortBreak);
         assert!(!view.running);
         assert_eq!(view.remaining_ms, 5 * MINUTE_MS);
+    }
+
+    #[test]
+    fn config_changes_keep_the_current_phase_length() {
+        let mut timer = quick();
+        timer.start(0);
+        timer.set_config(PomodoroConfig {
+            focus_minutes: 50,
+            ..timer.config().clone()
+        });
+        assert_eq!(timer.view(0).duration_ms, 2 * MINUTE_MS);
+        assert_eq!(timer.deadline(), Some(2 * MINUTE_MS));
+        // The next focus session uses the new length.
+        timer.start_phase(Phase::Focus, 0);
+        assert_eq!(timer.view(0).duration_ms, 50 * MINUTE_MS);
+    }
+
+    #[test]
+    fn restores_a_paused_phase_paused() {
+        let mut timer = quick();
+        timer.start(0);
+        timer.pause(30_000);
+        let restored = Pomodoro::restore(timer.config().clone(), timer.state());
+        let view = restored.view(5_000_000);
+        assert_eq!(view.phase, Phase::Focus);
+        assert!(!view.running);
+        assert_eq!(view.remaining_ms, 90_000);
+        assert_eq!(view.duration_ms, 2 * MINUTE_MS);
+    }
+
+    #[test]
+    fn restores_a_running_phase_with_its_end_time() {
+        let mut timer = quick();
+        timer.start(0);
+        let restored = Pomodoro::restore(timer.config().clone(), timer.state());
+        assert_eq!(restored.deadline(), Some(2 * MINUTE_MS));
+        assert_eq!(restored.view(60_000).remaining_ms, MINUTE_MS);
+    }
+
+    #[test]
+    fn overdue_phase_finishes_on_the_first_tick() {
+        let mut timer = quick();
+        timer.start(0);
+        let mut restored = Pomodoro::restore(timer.config().clone(), timer.state());
+        // Back long after the session should have ended.
+        let now = 10 * MINUTE_MS;
+        let transition = restored.tick(now).unwrap();
+        assert_eq!(transition.finished, Phase::Focus);
+        assert_eq!(transition.next, Phase::ShortBreak);
+        let view = restored.view(now);
+        assert_eq!(view.completed_sessions, 1);
+        // auto_start_breaks: the break starts now.
+        assert_eq!(view.ends_at_ms, Some(now + MINUTE_MS));
+    }
+
+    #[test]
+    fn idle_state_restores_to_idle() {
+        let restored = Pomodoro::restore(PomodoroConfig::default(), TimerState::default());
+        assert_eq!(restored.phase(), Phase::Idle);
+        assert_eq!(restored.deadline(), None);
     }
 
     #[test]

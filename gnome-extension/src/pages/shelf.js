@@ -3,7 +3,7 @@
 // The file shelf. GNOME Shell itself cannot take part in drag and drop with
 // apps, so when the `isle-shelf` helper is installed it draws the shelf in a
 // small window placed exactly over this page. Without it, the page shows the
-// shelf read-only: click a file to open it.
+// shelf without drag and drop: click a file to open it, × to remove it.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -12,15 +12,14 @@ import Gio from 'gi://Gio';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
-import {icon, label} from '../widgets.js';
+import {icon, iconButton, label} from '../widgets.js';
 import {Page} from './page.js';
 
 const TILE_ICON_SIZE = 40;
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'];
 
-export const ShelfPage = GObject.registerClass({
-    Signals: {'helper-area-changed': {}},
-}, class ShelfPage extends Page {
+export const ShelfPage = GObject.registerClass(
+class ShelfPage extends Page {
     _init(daemon, {height}) {
         super._init(daemon, {
             style_class: 'isle-page isle-shelf',
@@ -89,14 +88,35 @@ export const ShelfPage = GObject.registerClass({
 
     _tile(item) {
         const file = Gio.File.new_for_uri(item.uri);
-        const tile = new St.Button({style_class: 'isle-shelf-tile', can_focus: true, accessible_name: item.name});
         const box = new St.BoxLayout({vertical: true});
         const preview = new St.Bin({style_class: 'isle-shelf-preview', width: TILE_ICON_SIZE, height: TILE_ICON_SIZE, x_align: Clutter.ActorAlign.CENTER});
         const name = label(item.name, 'isle-shelf-name', {x_align: Clutter.ActorAlign.CENTER});
         name.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
         box.add_child(preview);
         box.add_child(name);
-        tile.set_child(box);
+        const open = new St.Button({style_class: 'isle-shelf-open', child: box, can_focus: true, accessible_name: item.name, x_expand: true, y_expand: true});
+        open.connect('clicked', () => {
+            Gio.AppInfo.launch_default_for_uri_async(item.uri, global.create_app_launch_context(0, -1), null, null);
+        });
+
+        // × in the tile's corner while hovered, as in the helper's shelf.
+        const remove = iconButton('window-close-symbolic', 'isle-shelf-remove',
+            () => this.daemon.call('shelf', 'Remove', item.uri), {size: 10, accessibleName: 'Remove from the shelf'});
+        // BinLayout only honours the alignment of children that expand.
+        remove.set({x_expand: true, y_expand: true, x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.START, opacity: 0});
+
+        // Explicitly not expanding, so its expanding children do not widen it.
+        const tile = new St.Widget({
+            style_class: 'isle-shelf-tile',
+            layout_manager: new Clutter.BinLayout(),
+            reactive: true,
+            track_hover: true,
+            x_expand: false,
+            y_expand: false,
+        });
+        tile.add_child(open);
+        tile.add_child(remove);
+        tile.connect('notify::hover', () => remove.ease({opacity: tile.hover ? 255 : 0, duration: 120}));
 
         let destroyed = false;
         tile.connect('destroy', () => (destroyed = true));
@@ -116,10 +136,6 @@ export const ShelfPage = GObject.registerClass({
                     preview.child = new St.Icon({gicon: info.get_icon(), icon_size: TILE_ICON_SIZE});
                 }
             });
-
-        tile.connect('clicked', () => {
-            Gio.AppInfo.launch_default_for_uri_async(item.uri, global.create_app_launch_context(0, -1), null, null);
-        });
         return tile;
     }
 

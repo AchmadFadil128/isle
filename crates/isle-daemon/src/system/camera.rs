@@ -4,9 +4,13 @@
 //!
 //! The kernel reports every open and close of `/dev/video*` through inotify,
 //! so this costs nothing while nobody touches a camera. Opens minus closes
-//! gives the number of handles held. Short-lived probes (udev, PipeWire
-//! enumerating devices) open and close a camera within a blink, so a change
-//! only counts once it has lasted [`SETTLE`].
+//! gives the number of handles held on each device node. Short-lived probes
+//! (udev, PipeWire enumerating devices) open and close a camera within a
+//! blink, so a change only counts once it has lasted [`SETTLE`].
+//!
+//! Counts are kept per node, so a webcam unplugged mid-call takes its open
+//! handles with it, and they are counted afresh whenever the kernel's event
+//! queue overflowed and events may have been lost.
 
 use std::collections::HashMap;
 use std::fs;
@@ -24,20 +28,27 @@ use super::{SystemService, publish};
 const DEVICES: &str = "/dev";
 const SETTLE: Duration = Duration::from_millis(1500);
 
+/// A watched `/dev/video*` node.
+struct Camera {
+    path: PathBuf,
+    /// Handles currently held on it.
+    open: usize,
+}
+
 pub async fn watch(iface: InterfaceRef<SystemService>) -> anyhow::Result<()> {
     let inotify = Inotify::init()?;
     let mut watches = inotify.watches();
     // Cameras come and go (USB webcams), so watch the directory too.
     let directory = watches.add(DEVICES, WatchMask::CREATE | WatchMask::DELETE)?;
-    let mut cameras: HashMap<WatchDescriptor, PathBuf> = HashMap::new();
-    for path in camera_paths() {
-        add_camera(&mut watches, &mut cameras, path);
-    }
+    let mut cameras: HashMap<WatchDescriptor, Camera> = HashMap::new();
+    // Count the handles held right now, e.g. a call already running when
+    // isled starts.
+    rescan(&mut watches, &mut cameras);
 
-    // Handles held right now, e.g. a call already running when isled starts.
-    let mut open = cameras.values().map(|path| holders(path)).sum::<usize>();
-    let mut published = false;
-    let mut settle_at = (open > 0).then(|| Instant::now() + SETTLE);
+    // Start from what is published, which after a restart of this watcher
+    // may be a stale "in use" that needs clearing.
+    let mut published = iface.get().await.state.camera_in_use;
+    let mut settle_at = (in_use(&cameras) != published).then(|| Instant::now() + SETTLE);
 
     let mut events = inotify.into_event_stream([0u8; 1024])?;
     loop {
@@ -45,7 +56,10 @@ pub async fn watch(iface: InterfaceRef<SystemService>) -> anyhow::Result<()> {
             event = events.next() => {
                 let Some(event) = event else { return Ok(()) };
                 let event = event?;
-                if event.wd == directory {
+                if event.mask.contains(EventMask::Q_OVERFLOW) {
+                    debug!("camera events were lost; counting open handles afresh");
+                    rescan(&mut watches, &mut cameras);
+                } else if event.wd == directory {
                     let Some(name) = event.name.as_ref().and_then(|n| n.to_str()) else { continue };
                     if !name.starts_with("video") {
                         continue;
@@ -53,27 +67,29 @@ pub async fn watch(iface: InterfaceRef<SystemService>) -> anyhow::Result<()> {
                     let path = Path::new(DEVICES).join(name);
                     if event.mask.contains(EventMask::CREATE) {
                         add_camera(&mut watches, &mut cameras, path);
+                    } else if event.mask.contains(EventMask::DELETE) {
+                        // Unplugged. Its handles die with the device even if
+                        // an app has yet to close them, so stop counting them
+                        // now rather than waiting for the watch to go away.
+                        cameras.retain(|_, camera| camera.path != path);
                     }
-                    continue;
-                }
-                if event.mask.contains(EventMask::OPEN) {
-                    open += 1;
-                } else if event.mask.intersects(EventMask::CLOSE_WRITE | EventMask::CLOSE_NOWRITE) {
-                    open = open.saturating_sub(1);
-                } else if event.mask.contains(EventMask::IGNORED) {
-                    // The device went away; its watch is gone with it.
-                    cameras.remove(&event.wd);
-                    if cameras.is_empty() {
-                        open = 0;
+                } else if let Some(camera) = cameras.get_mut(&event.wd) {
+                    if event.mask.contains(EventMask::OPEN) {
+                        camera.open += 1;
+                    } else if event.mask.intersects(EventMask::CLOSE_WRITE | EventMask::CLOSE_NOWRITE) {
+                        camera.open = camera.open.saturating_sub(1);
+                    } else if event.mask.contains(EventMask::IGNORED) {
+                        // The device went away; its watch is gone with it.
+                        cameras.remove(&event.wd);
                     }
                 }
-                if (open > 0) != published {
+                if in_use(&cameras) != published {
                     settle_at = Some(Instant::now() + SETTLE);
                 }
             }
             () = sleep_until(settle_at.unwrap_or_else(Instant::now)), if settle_at.is_some() => {
                 settle_at = None;
-                let in_use = open > 0;
+                let in_use = in_use(&cameras);
                 if in_use != published {
                     published = in_use;
                     debug!("camera in use: {in_use}");
@@ -81,6 +97,22 @@ pub async fn watch(iface: InterfaceRef<SystemService>) -> anyhow::Result<()> {
                 }
             }
         }
+    }
+}
+
+fn in_use(cameras: &HashMap<WatchDescriptor, Camera>) -> bool {
+    cameras.values().any(|camera| camera.open > 0)
+}
+
+/// Rebuilds the camera list and every count from scratch: at start-up, and
+/// when inotify lost events so the counts can no longer be trusted.
+fn rescan(watches: &mut Watches, cameras: &mut HashMap<WatchDescriptor, Camera>) {
+    cameras.clear();
+    for path in camera_paths() {
+        add_camera(watches, cameras, path);
+    }
+    for camera in cameras.values_mut() {
+        camera.open = holders(&camera.path);
     }
 }
 
@@ -101,13 +133,17 @@ fn camera_paths() -> Vec<PathBuf> {
 
 fn add_camera(
     watches: &mut Watches,
-    cameras: &mut HashMap<WatchDescriptor, PathBuf>,
+    cameras: &mut HashMap<WatchDescriptor, Camera>,
     path: PathBuf,
 ) {
     let mask = WatchMask::OPEN | WatchMask::CLOSE_WRITE | WatchMask::CLOSE_NOWRITE;
     match watches.add(&path, mask) {
+        // Adding a node that is already watched returns its existing
+        // descriptor; keep the count it has.
         Ok(descriptor) => {
-            cameras.insert(descriptor, path);
+            cameras
+                .entry(descriptor)
+                .or_insert(Camera { path, open: 0 });
         }
         Err(err) => debug!("cannot watch {}: {err}", path.display()),
     }
@@ -115,7 +151,8 @@ fn add_camera(
 
 /// How many open file handles point at `device`, from our own processes'
 /// `/proc/*/fd` (others are not readable, and do not affect this user's
-/// privacy indicator). Only used once, at start-up.
+/// privacy indicator). Only used when the counts from inotify events are not
+/// available or not trustworthy: at start-up and after lost events.
 fn holders(device: &Path) -> usize {
     let Ok(processes) = fs::read_dir("/proc") else {
         return 0;

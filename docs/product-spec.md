@@ -29,7 +29,7 @@ sizes are logical pixels.
 
 | Presentation | Size (w × h) | Corner | Shoulder | Content |
 |---|---|---|---|---|
-| Compact | 164 × (P + 30); 256 with an activity | 16 | 10 | Clock, or lyric line, or eyes; activity slots left/right |
+| Compact | 164 × (P + 30); 256 with an activity | 16 | 10 | Clock, or lyric line; activity slots left/right |
 | Peek (alert) | 380 × (P + 56) | 22 | 13 | Badge · title/subtitle · value, level bar or button |
 | Expanded | 600 × (P + 170); 720 for lyrics | 32 | 22 | Header row · page · dots |
 
@@ -80,9 +80,9 @@ place, dimmed, so the layout never jumps.
 | Pointer leaves | – | Close after 300 ms (not while typing or dragging a file) |
 | Click | Open now (an alert opens on its page) | Normal button clicks |
 | Middle-click | Play / pause | Play / pause |
-| Right-click | GNOME calendar and notifications | GNOME calendar |
+| Super+V (GNOME's calendar shortcut) | Open on Notifications, held open | Close |
 | Scroll / two-finger swipe | – | Previous / next page |
-| Esc | – | Stop typing a task |
+| Esc | – | Stop typing a task; close when opened with Super+V |
 
 **Default page on open**, first match wins: the page of the alert being
 shown → Notifications if some arrived unseen (during Do Not Disturb) → Music
@@ -101,13 +101,10 @@ the neighbouring page (hidden at the ends); dots show where you are.
 - While the screen records, the centre shows how long it has been recording
   instead of the clock.
 - Right slot: music bars while playing. They dance only while the closed
-  island is on screen.
+  island is on screen, and rest after a minute without input.
 - Far right: privacy dots, as on iPhone: green camera, orange microphone,
   blue screen sharing (the island widens by 22 px while any is shown).
-- Centre: the clock (follows GNOME's 12/24-hour setting), or the eyes.
-- Idle: after *Idle after* seconds (90) without input and nothing playing,
-  the eyes open, blink twice and doze off. Any input wakes them, then the
-  clock returns after 1.2 s.
+- Centre: the clock (follows GNOME's 12/24-hour setting).
 
 ## 5. Pages
 
@@ -118,8 +115,9 @@ the music bars.
 
 **Music** (no title). Cover (click: bring the player forward), title, artist
 — album, scrubber with elapsed / remaining time, lyrics toggle, previous ·
-play/pause · next, the player's app icon. With nothing playing: "Nothing
-playing" and a hint.
+play/pause · next, the player's app icon. Built for Spotify and YouTube in
+the browser; any MPRIS player works. With nothing playing: "Nothing
+playing" and "Play something in Spotify or on YouTube".
 
 **Volume and output** (Music page, the output button at the bottom right).
 The volume with a mute button and percentage, then the outputs (speakers,
@@ -151,12 +149,15 @@ today, a line underneath reads "Today · 3 sessions · 1h 15m".
 While a focus phase runs (paused included), Do Not Disturb is on, like a
 Focus mode; it goes off when the phase ends. Isle only undoes what it did:
 if Do Not Disturb was already on, or the user turns it off mid-session, it
-is left alone. ("Do Not Disturb" in Focus Timer settings.)
+is left alone. It stays on across the lock screen, and is turned off on the
+next start if the shell stopped mid-session. ("Do Not Disturb" in Focus
+Timer settings.)
 
 **Shelf** (title "Shelf"). With `isle-shelf` installed: a drop zone, file
 tiles with previews; drag out to any app, double-click to open, × to remove,
 trash to clear. Dragging a file near the island opens this page by itself.
-Without the helper: read-only tiles and an install hint.
+Without the helper: tiles that open on click, × on hover to remove, and an
+install hint when empty.
 
 **Tasks** (title "Todo**List**"). Left: done / total today (e.g. 4/5) and
 "Task Done Today", **Add Task** and **Edit Task**. Right: the list, open
@@ -169,7 +170,9 @@ midnight.
 ## 6. Alerts
 
 One at a time. *Instant* alerts replace whatever is showing; the rest queue
-(same kind replaces in place) and wait while the island is open.
+(same kind replaces in place) and wait while the island is open. Volume,
+brightness and Caps Lock are dropped instead of waiting, since they are
+stale by the time the island closes.
 
 | Alert | Badge | Title / subtitle | Right | Time |
 |---|---|---|---|---|
@@ -192,8 +195,9 @@ is used.
 
 ### Notifications and Do Not Disturb
 
-The island replaces GNOME's banners while the extension runs; GNOME's
-notification list (right-click → calendar) keeps working as before. Rules
+The island replaces GNOME's banners and its calendar drop-down while the
+extension runs, so nothing shows twice; Super+V opens the Notifications
+page instead of the drop-down. Rules
 match GNOME's: low-urgency and already-seen notifications never pop up, and
 apps whose banners are turned off in Settings stay quiet. Do Not Disturb is
 GNOME's own setting, so it stays in sync with Quick Settings; while it is on,
@@ -216,4 +220,4 @@ hovering opens the Notifications page.
 - `isled` sleeps until a D-Bus signal arrives. The camera is watched with
   inotify, so the kernel reports opens and closes; nothing is polled.
 - Moving parts that loop (music bars, the recording dot) run only while on
-  screen.
+  screen; the music bars also rest after a minute without input.

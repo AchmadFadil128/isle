@@ -23,6 +23,15 @@ const ShelfWindowProxy = Gio.DBusProxy.makeProxyWrapper(`
   <method name="Hide"/>
 </interface></node>`);
 
+/** Errors meaning the helper cannot be started at all. */
+const CANNOT_START = [
+    Gio.DBusError.SERVICE_UNKNOWN,
+    Gio.DBusError.SPAWN_EXEC_FAILED,
+    Gio.DBusError.SPAWN_FAILED,
+    Gio.DBusError.SPAWN_CHILD_EXITED,
+    Gio.DBusError.SPAWN_CHILD_SIGNALED,
+];
+
 /** How close (in pixels) a drag must come to the island to open the shelf. */
 const DRAG_PROXIMITY = 90;
 
@@ -42,10 +51,6 @@ export class ShelfHelper extends Signals.EventEmitter {
 
         this._checkAvailable();
         this._watchDrags();
-    }
-
-    get available() {
-        return this._proxy !== null;
     }
 
     /** Whether the pointer is over the helper window. */
@@ -73,9 +78,13 @@ export class ShelfHelper extends Signals.EventEmitter {
         this._shownRect = rect;
         this._page.helperActive = true;
         this._proxy.ShowRemote(rect.x, rect.y, rect.width, rect.height, (_result, error) => {
-            if (!error)
+            if (!error || !this._proxy) // fine, or destroyed meanwhile
                 return;
             console.warn(`Isle: shelf helper failed to show: ${error.message}`);
+            // A helper that cannot even start (removed, broken install) is
+            // not tried again; the shelf stays read-only until next login.
+            if (CANNOT_START.some(code => error.matches(Gio.DBusError, code)))
+                this._proxy = null;
             // Forget the placement so the next sync tries again.
             this._shownRect = null;
             this._page.helperActive = false;
@@ -152,11 +161,12 @@ export class ShelfHelper extends Signals.EventEmitter {
     }
 
     destroy() {
+        // Tell no one about changes made while tearing down.
+        this.disconnectAll();
         this._cancellable.cancel();
         this._dnd.disconnect(this._dndPosition);
         this._dnd.disconnect(this._dndLeave);
         this._hide();
         this._proxy = null;
-        this.disconnectAll();
     }
 }

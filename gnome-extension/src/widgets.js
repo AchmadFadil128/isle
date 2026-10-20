@@ -202,6 +202,7 @@ class Bars extends St.BoxLayout {
             this._bars.push(bar);
             this.add_child(bar);
         }
+        this.connect('destroy', () => this._onDestroy());
     }
 
     _restHeight(index) {
@@ -218,8 +219,10 @@ class Bars extends St.BoxLayout {
             bar.remove_all_transitions();
             if (playing)
                 this._bounce(bar);
-            else
+            else if (this.mapped)
                 bar.ease({height: this._restHeight(index), duration: 200});
+            else
+                bar.height = this._restHeight(index);
         });
     }
 
@@ -237,9 +240,8 @@ class Bars extends St.BoxLayout {
         });
     }
 
-    vfunc_destroy() {
+    _onDestroy() {
         this._playing = false;
-        super.vfunc_destroy();
     }
 });
 
@@ -279,6 +281,15 @@ class Art extends St.Bin {
     }
 });
 
+/**
+ * Places `actor` inside its parent at the given rectangle. Used from
+ * `vfunc_allocate`, where moving children through their position and size
+ * properties would queue another layout mid-layout.
+ */
+function allocateAt(actor, x, y, width, height) {
+    actor.allocate(Clutter.ActorBox.new(x, y, x + width, y + height));
+}
+
 /** A thin horizontal level meter. */
 export const LevelBar = GObject.registerClass(
 class LevelBar extends St.Widget {
@@ -287,13 +298,11 @@ class LevelBar extends St.Widget {
             style_class: `isle-level ${styleClass}`,
             width,
             y_align: Clutter.ActorAlign.CENTER,
-            layout_manager: new Clutter.FixedLayout(),
         });
-        this._fill = new St.Widget({style_class: 'isle-level-fill'});
+        this._fill = new St.Widget({style_class: 'isle-level-fill', width: 0});
         this.add_child(this._fill);
         this._width = width;
         this._level = 0;
-        this.connect('notify::allocation', () => this._layout());
     }
 
     // Sized by its `width`; the fill inside never widens it.
@@ -304,7 +313,12 @@ class LevelBar extends St.Widget {
     /** Sets the level; on screen, the fill glides to it. */
     set level(value) {
         this._level = Math.min(1, Math.max(0, value));
-        this._layout(this.mapped);
+        const fill = Math.round(this._width * this._level);
+        this._fill.remove_transition('width');
+        if (this.mapped)
+            this._fill.ease({width: fill, duration: 160, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        else
+            this._fill.width = fill;
     }
 
     get level() {
@@ -316,20 +330,10 @@ class LevelBar extends St.Widget {
         this._fill.style = `background-color: ${color};`;
     }
 
-    _layout(animate = false) {
-        // Before the first allocation there is nothing to lay out (and asking
-        // for a size would make St style an actor that is not on stage yet).
-        if (!this.has_allocation())
-            return;
-        const box = this.get_allocation_box();
-        const [width, height] = [box.get_width(), box.get_height()];
-        const fill = Math.round(width * this._level);
-        this._fill.height = height;
-        this._fill.remove_transition('width');
-        if (animate)
-            this._fill.ease({width: fill, duration: 160, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
-        else
-            this._fill.width = fill;
+    vfunc_allocate(box) {
+        this.set_allocation(box);
+        // The fill's width is the (possibly easing) value set in `level`.
+        allocateAt(this._fill, 0, 0, this._fill.width, box.get_height());
     }
 });
 
@@ -350,7 +354,6 @@ export const Slider = GObject.registerClass({
             track_hover: true,
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
-            layout_manager: new Clutter.FixedLayout(),
         });
         this._scrollStep = scrollStep;
         this._track = new St.Widget({style_class: 'isle-slider-track'});
@@ -361,7 +364,6 @@ export const Slider = GObject.registerClass({
         this.add_child(this._knob);
         this._value = 0;
         this._grab = null;
-        this.connect('notify::allocation', () => this._layout());
         this.connect('notify::hover', () => this._syncKnob());
     }
 
@@ -381,27 +383,22 @@ export const Slider = GObject.registerClass({
         if (this._grab)
             return;
         this._value = Math.min(1, Math.max(0, value || 0));
-        this._layout();
+        this.queue_relayout();
     }
 
     _syncKnob() {
         this._knob.ease({opacity: this.hover || this._grab ? 255 : 0, duration: 120});
     }
 
-    _layout() {
-        if (!this.has_allocation())
-            return;
-        const box = this.get_allocation_box();
+    vfunc_allocate(box) {
+        this.set_allocation(box);
         const [width, height] = [box.get_width(), box.get_height()];
         const trackHeight = 4;
         const y = Math.round((height - trackHeight) / 2);
-        this._track.set_position(0, y);
-        this._track.set_size(width, trackHeight);
-        this._fill.set_position(0, y);
-        this._fill.set_size(Math.round(width * this._value), trackHeight);
+        allocateAt(this._track, 0, y, width, trackHeight);
+        allocateAt(this._fill, 0, y, Math.round(width * this._value), trackHeight);
         const knob = 12;
-        this._knob.set_size(knob, knob);
-        this._knob.set_position(Math.round(width * this._value - knob / 2), Math.round((height - knob) / 2));
+        allocateAt(this._knob, Math.round(width * this._value - knob / 2), Math.round((height - knob) / 2), knob, knob);
     }
 
     _moveTo(event) {
@@ -409,7 +406,7 @@ export const Slider = GObject.registerClass({
         const [ok, localX] = this.transform_stage_point(x, 0);
         if (ok)
             this._value = Math.min(1, Math.max(0, localX / this.width));
-        this._layout();
+        this.queue_relayout();
         this.emit('value-changed', this._value);
     }
 
@@ -451,7 +448,7 @@ export const Slider = GObject.registerClass({
         if (!delta)
             return Clutter.EVENT_STOP;
         this._value = Math.min(1, Math.max(0, this._value + delta));
-        this._layout();
+        this.queue_relayout();
         this.emit('value-changed', this._value);
         this.emit('released', this._value);
         return Clutter.EVENT_STOP;
@@ -515,90 +512,5 @@ class RecordingDot extends St.Widget {
             autoReverse: true,
             repeatCount: -1,
         });
-    }
-});
-
-/**
- * Two eyes that blink, doze off and wake up again: the island's idle state.
- * Animations only run while the eyes are visible and end once asleep, so a
- * computer left alone costs no redraws.
- */
-export const Eyes = GObject.registerClass(
-class Eyes extends St.BoxLayout {
-    _init() {
-        super._init({style_class: 'isle-eyes', y_align: Clutter.ActorAlign.CENTER});
-        this._eyes = [0, 1].map(() => {
-            const eye = new St.Widget({style_class: 'isle-eye', y_align: Clutter.ActorAlign.CENTER});
-            eye.set_pivot_point(0.5, 0.5);
-            this.add_child(eye);
-            return eye;
-        });
-        this._zzz = new St.Label({text: 'z', style_class: 'isle-zzz', opacity: 0, y_align: Clutter.ActorAlign.START});
-        this.add_child(this._zzz);
-        this._timeouts = new Set();
-    }
-
-    /** Eyes open, blink a couple of times, then slowly close. */
-    doze() {
-        this._clear();
-        this._setLids(1, 0);
-        this._later(1800, () => this._blink());
-        this._later(3600, () => this._blink());
-        this._later(6000, () => this._setLids(0.45, 900));
-        this._later(8500, () => {
-            this._setLids(0.12, 1200);
-            this._zzz.ease({opacity: 200, translation_y: -3, duration: 1500, delay: 600});
-        });
-    }
-
-    /** Eyes pop wide open. */
-    wake() {
-        this._clear();
-        this._zzz.ease({opacity: 0, translation_y: 0, duration: 150});
-        for (const eye of this._eyes) {
-            eye.ease({
-                scale_y: 1.25,
-                scale_x: 1.1,
-                duration: 160,
-                mode: Clutter.AnimationMode.EASE_OUT_BACK,
-                onComplete: () => eye.ease({scale_x: 1, scale_y: 1, duration: 220}),
-            });
-        }
-    }
-
-    _blink() {
-        for (const eye of this._eyes) {
-            eye.ease({
-                scale_y: 0.1,
-                duration: 90,
-                mode: Clutter.AnimationMode.EASE_IN_QUAD,
-                onComplete: () => eye.ease({scale_y: 1, duration: 140, mode: Clutter.AnimationMode.EASE_OUT_QUAD}),
-            });
-        }
-    }
-
-    _setLids(openness, duration) {
-        for (const eye of this._eyes)
-            eye.ease({scale_y: openness, scale_x: 1, duration, mode: Clutter.AnimationMode.EASE_IN_OUT_SINE});
-    }
-
-    _later(ms, callback) {
-        const id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
-            this._timeouts.delete(id);
-            callback();
-            return GLib.SOURCE_REMOVE;
-        });
-        this._timeouts.add(id);
-    }
-
-    _clear() {
-        for (const id of this._timeouts)
-            GLib.source_remove(id);
-        this._timeouts.clear();
-    }
-
-    vfunc_destroy() {
-        this._clear();
-        super.vfunc_destroy();
     }
 });

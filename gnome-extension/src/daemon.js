@@ -109,10 +109,6 @@ export class Daemon extends Signals.EventEmitter {
             });
     }
 
-    get available() {
-        return Object.values(this._proxies).some(proxy => proxy.g_name_owner !== null);
-    }
-
     _connect(name, xml, properties) {
         const Proxy = Gio.DBusProxy.makeProxyWrapper(xml);
         // The proxy is created even while isled is not running, and picks up
@@ -185,10 +181,11 @@ export class Daemon extends Signals.EventEmitter {
     }
 
     destroy() {
+        // Tell no one about changes made while tearing down.
+        this.disconnectAll();
         this._cancellable.cancel();
         for (const proxy of Object.values(this._proxies))
             proxy.run_dispose();
         this._proxies = {};
-        this.disconnectAll();
     }
 }

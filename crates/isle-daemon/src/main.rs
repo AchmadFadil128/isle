@@ -53,7 +53,6 @@ async fn main() -> anyhow::Result<()> {
             warn!("media monitoring stopped: {err}");
         }
     });
-    tokio::spawn(pomodoro::run(pomodoro));
     tokio::spawn(todo::run(todo));
 
     match zbus::Connection::system().await {
@@ -67,6 +66,10 @@ async fn main() -> anyhow::Result<()> {
         .await
         .with_context(|| format!("could not own {BUS_NAME}; is isled already running?"))?;
     info!("isled is running as {BUS_NAME}");
+    // Started only now: a phase restored from disk that ran out while isled
+    // was down finishes at once, and its PhaseFinished signal must come from
+    // the claimed name for clients to see it.
+    tokio::spawn(pomodoro::run(pomodoro));
 
     std::future::pending::<()>().await;
     Ok(())

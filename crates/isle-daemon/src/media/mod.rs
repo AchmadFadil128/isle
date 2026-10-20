@@ -7,13 +7,14 @@ mod art;
 mod lyrics;
 mod mpris;
 
+use log::warn;
 use serde::Serialize;
 use zbus::zvariant::OwnedObjectPath;
 use zbus::{fdo, interface};
 
 pub use self::lyrics::Lyrics;
-use self::mpris::PlayerProxy;
 pub use self::mpris::watch;
+use self::mpris::{PlayerProxy, bounded};
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct NowPlaying {
@@ -51,53 +52,79 @@ pub struct MediaService {
 }
 
 impl MediaService {
-    fn player(&self) -> fdo::Result<&PlayerProxy<'static>> {
-        self.active
-            .as_ref()
-            .map(|(player, _)| player)
-            .ok_or_else(|| fdo::Error::Failed("no media player is running".into()))
+    /// Sends a command to the active player without waiting for it.
+    ///
+    /// zbus holds this interface for as long as a method runs, and the media
+    /// watcher needs it to publish anything. Awaiting a slow or hung player
+    /// here would freeze every media update, so the call runs in a task of
+    /// its own, bounded by a timeout, and a failure is only logged; callers
+    /// fire and forget these commands anyway.
+    fn send<F, Fut>(&self, command: &'static str, call: F) -> fdo::Result<()>
+    where
+        F: FnOnce(PlayerProxy<'static>, Option<OwnedObjectPath>) -> Fut + Send + 'static,
+        Fut: Future<Output = zbus::Result<()>> + Send + 'static,
+    {
+        let (player, track) = self
+            .active
+            .clone()
+            .ok_or_else(|| fdo::Error::Failed("no media player is running".into()))?;
+        let name = player.inner().destination().to_string();
+        tokio::spawn(async move {
+            if let Err(err) = bounded(call(player, track)).await {
+                warn!("{name} did not handle {command}: {err}");
+            }
+        });
+        Ok(())
     }
 }
 
 #[interface(name = "io.github.isle.Media1")]
 impl MediaService {
-    async fn play_pause(&self) -> fdo::Result<()> {
-        Ok(self.player()?.play_pause().await?)
+    fn play_pause(&self) -> fdo::Result<()> {
+        self.send(
+            "PlayPause",
+            |player, _| async move { player.play_pause().await },
+        )
     }
 
-    async fn next(&self) -> fdo::Result<()> {
-        Ok(self.player()?.next().await?)
+    fn next(&self) -> fdo::Result<()> {
+        self.send("Next", |player, _| async move { player.next().await })
     }
 
-    async fn previous(&self) -> fdo::Result<()> {
-        Ok(self.player()?.previous().await?)
+    fn previous(&self) -> fdo::Result<()> {
+        self.send(
+            "Previous",
+            |player, _| async move { player.previous().await },
+        )
     }
 
     /// Seeks to an absolute position in microseconds.
-    async fn set_position(&self, position_us: i64) -> fdo::Result<()> {
-        let player = self.player()?;
-        let track = self.active.as_ref().and_then(|(_, track)| track.as_ref());
-        match track {
-            Some(track) => Ok(player.set_position(track, position_us.max(0)).await?),
-            // Without a track id, a relative seek is the only option.
-            None => {
-                let offset = position_us - self.now_playing.position_us;
-                Ok(player.seek(offset).await?)
+    fn set_position(&self, position_us: i64) -> fdo::Result<()> {
+        let position_us = position_us.max(0);
+        self.send("SetPosition", move |player, track| async move {
+            match track {
+                Some(track) => player.set_position(&track, position_us).await,
+                // Without a track id only a relative seek is possible. Measure
+                // it from where the player is now: our own sample may be
+                // seconds old.
+                None => {
+                    let current = player.position().await?;
+                    player.seek(position_us.saturating_sub(current)).await
+                }
             }
-        }
+        })
     }
 
     /// Brings the player's window to the front.
-    async fn raise(&self) -> fdo::Result<()> {
-        let (player, _) = self
-            .active
-            .as_ref()
-            .ok_or_else(|| fdo::Error::Failed("no media player is running".into()))?;
-        let app = mpris::AppProxy::builder(player.inner().connection())
-            .destination(player.inner().destination().to_owned())?
-            .build()
-            .await?;
-        Ok(app.raise().await?)
+    fn raise(&self) -> fdo::Result<()> {
+        self.send("Raise", |player, _| async move {
+            let app = mpris::AppProxy::builder(player.inner().connection())
+                .destination(player.inner().destination().to_owned())?
+                .cache_properties(zbus::proxy::CacheProperties::No)
+                .build()
+                .await?;
+            app.raise().await
+        })
     }
 
     /// JSON `NowPlaying`.

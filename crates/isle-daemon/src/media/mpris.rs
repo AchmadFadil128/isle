@@ -3,11 +3,13 @@
 //! Watches every MPRIS player on the session bus and publishes the active one.
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use futures_util::StreamExt;
 use log::{debug, warn};
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
+use tokio::time::Instant;
 use zbus::fdo::{DBusProxy, PropertiesProxy};
 use zbus::names::{InterfaceName, OwnedBusName};
 use zbus::object_server::InterfaceRef;
@@ -25,6 +27,16 @@ const IGNORED: &[&str] = &["org.mpris.MediaPlayer2.playerctld"];
 const OBJECT_PATH: &str = "/org/mpris/MediaPlayer2";
 const APP_INTERFACE: &str = "org.mpris.MediaPlayer2";
 const PLAYER_INTERFACE: &str = "org.mpris.MediaPlayer2.Player";
+/// The bus connection has no method timeout, and a hung player would
+/// otherwise stall whatever awaits it for good.
+const PLAYER_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long cover art that failed to download is left alone. Without this,
+/// every update would try the dead link (offline, 404, oversized) again.
+const ART_RETRY: Duration = Duration::from_secs(5 * 60);
+/// First wait before looking up lyrics again after a failed lookup; it
+/// doubles with every failure for the same track, up to [`LYRICS_RETRY_MAX`].
+const LYRICS_RETRY: Duration = Duration::from_secs(30);
+const LYRICS_RETRY_MAX: Duration = Duration::from_secs(10 * 60);
 
 #[proxy(
     interface = "org.mpris.MediaPlayer2.Player",
@@ -37,6 +49,8 @@ pub trait Player {
     fn previous(&self) -> zbus::Result<()>;
     fn seek(&self, offset: i64) -> zbus::Result<()>;
     fn set_position(&self, track_id: &ObjectPath<'_>, position: i64) -> zbus::Result<()>;
+    #[zbus(property)]
+    fn position(&self) -> zbus::Result<i64>;
     #[zbus(signal)]
     fn seeked(&self, position: i64) -> zbus::Result<()>;
 }
@@ -53,9 +67,12 @@ pub trait App {
 enum Event {
     /// A player's properties changed or it seeked.
     Player(OwnedBusName),
-    /// Remote cover art finished downloading.
-    ArtReady,
-    Lyrics(Lyrics),
+    /// A cover art download finished, successfully or not.
+    ArtDone { url: String, ok: bool },
+    /// The result of lyrics lookup number `lookup`.
+    Lyrics { lookup: u64, lyrics: Lyrics },
+    /// Time to retry lyrics lookup number `lookup`, which failed.
+    RetryLyrics { lookup: u64 },
 }
 
 /// Everything read from one player's `GetAll`.
@@ -102,8 +119,16 @@ struct Watcher {
     events: mpsc::UnboundedSender<Event>,
     /// Remote art currently downloading, to avoid starting it twice.
     downloading_art: Option<String>,
+    /// Remote art that could not be downloaded, and when; it is not tried
+    /// again until [`ART_RETRY`] has passed and the player next updates.
+    failed_art: HashMap<String, Instant>,
     /// The track whose lyrics are loaded or loading.
-    lyrics_track: Option<String>,
+    lyrics_query: Option<TrackQuery>,
+    /// Numbers each lyrics lookup, so late results and retry timers that
+    /// belong to an earlier one are recognised and dropped.
+    lyrics_lookup: u64,
+    /// Failed lookups in a row for the current track, for the retry backoff.
+    lyrics_failures: u32,
 }
 
 /// Runs forever, keeping `iface` in sync with the active player.
@@ -119,7 +144,10 @@ pub async fn watch(conn: Connection, iface: InterfaceRef<MediaService>) -> anyho
         play_counter: 0,
         events,
         downloading_art: None,
-        lyrics_track: None,
+        failed_art: HashMap::new(),
+        lyrics_query: None,
+        lyrics_lookup: 0,
+        lyrics_failures: 0,
     };
 
     for name in dbus.list_names().await? {
@@ -144,9 +172,13 @@ pub async fn watch(conn: Connection, iface: InterfaceRef<MediaService>) -> anyho
             }
             Some(event) = received.recv() => match event {
                 Event::Player(name) => watcher.refresh(&name).await,
-                Event::ArtReady => watcher.downloading_art = None,
-                Event::Lyrics(lyrics) => {
-                    watcher.set_lyrics(lyrics).await;
+                Event::ArtDone { url, ok } => watcher.art_done(url, ok),
+                Event::Lyrics { lookup, lyrics } => {
+                    watcher.lyrics_done(lookup, lyrics).await;
+                    continue;
+                }
+                Event::RetryLyrics { lookup } => {
+                    watcher.retry_lyrics(lookup);
                     continue;
                 }
             },
@@ -158,6 +190,18 @@ pub async fn watch(conn: Connection, iface: InterfaceRef<MediaService>) -> anyho
 
 fn is_player(name: &str) -> bool {
     name.starts_with(NAME_PREFIX) && !IGNORED.contains(&name)
+}
+
+/// Awaits a call to a player, giving up after [`PLAYER_TIMEOUT`].
+pub(super) async fn bounded<T, E: From<zbus::Error>>(
+    call: impl Future<Output = Result<T, E>>,
+) -> Result<T, E> {
+    tokio::time::timeout(PLAYER_TIMEOUT, call)
+        .await
+        .unwrap_or_else(|_| {
+            let err = zbus::Error::Failure("the media player did not answer in time".into());
+            Err(err.into())
+        })
 }
 
 impl Watcher {
@@ -185,10 +229,10 @@ impl Watcher {
             .build()
             .await?;
 
-        let app = properties
-            .get_all(InterfaceName::from_static_str_unchecked(APP_INTERFACE))
-            .await
-            .unwrap_or_default();
+        let app =
+            bounded(properties.get_all(InterfaceName::from_static_str_unchecked(APP_INTERFACE)))
+                .await
+                .unwrap_or_default();
         let identity = app
             .get("Identity")
             .and_then(|v| string(v))
@@ -230,10 +274,12 @@ impl Watcher {
         let Some(entry) = self.players.get_mut(name) else {
             return;
         };
-        let all = entry
-            .properties
-            .get_all(InterfaceName::from_static_str_unchecked(PLAYER_INTERFACE))
-            .await;
+        let all = bounded(
+            entry
+                .properties
+                .get_all(InterfaceName::from_static_str_unchecked(PLAYER_INTERFACE)),
+        )
+        .await;
         let snapshot = match all {
             Ok(all) => snapshot(&all),
             Err(err) => {
@@ -309,41 +355,106 @@ impl Watcher {
     }
 
     fn download_art(&mut self, url: String) {
-        if self.downloading_art.as_ref() == Some(&url) {
+        if self.downloading_art.as_ref() == Some(&url)
+            || self
+                .failed_art
+                .get(&url)
+                .is_some_and(|failed| failed.elapsed() < ART_RETRY)
+        {
             return;
         }
         self.downloading_art = Some(url.clone());
         let events = self.events.clone();
         tokio::task::spawn_blocking(move || {
-            if let Err(err) = art::download(&url) {
+            let result = art::download(&url);
+            if let Err(err) = &result {
                 debug!("could not download cover art {url}: {err}");
             }
-            let _ = events.send(Event::ArtReady);
+            let ok = result.is_ok();
+            let _ = events.send(Event::ArtDone { url, ok });
         });
+    }
+
+    fn art_done(&mut self, url: String, ok: bool) {
+        if self.downloading_art.as_ref() == Some(&url) {
+            self.downloading_art = None;
+        }
+        // Expired entries go here, which keeps the map from growing.
+        self.failed_art
+            .retain(|_, failed| failed.elapsed() < ART_RETRY);
+        if ok {
+            self.failed_art.remove(&url);
+        } else {
+            self.failed_art.insert(url, Instant::now());
+        }
     }
 
     /// Starts loading lyrics when the track changes.
     async fn load_lyrics(&mut self, query: Option<TrackQuery>) {
-        let key = query.as_ref().map(TrackQuery::key);
-        if key == self.lyrics_track {
+        if query.as_ref().map(TrackQuery::key) == self.lyrics_query.as_ref().map(TrackQuery::key) {
             return;
         }
-        self.lyrics_track = key;
+        self.lyrics_query = query.clone();
+        self.lyrics_failures = 0;
         match query {
             Some(query) => {
                 self.set_lyrics(query.status(LyricsStatus::Loading)).await;
-                let events = self.events.clone();
-                tokio::task::spawn_blocking(move || {
-                    let _ = events.send(Event::Lyrics(lyrics::fetch(&query)));
-                });
+                self.fetch_lyrics(query);
             }
-            None => self.set_lyrics(Lyrics::default()).await,
+            None => {
+                // Forget any lookup still running for the previous track.
+                self.lyrics_lookup += 1;
+                self.set_lyrics(Lyrics::default()).await;
+            }
+        }
+    }
+
+    fn fetch_lyrics(&mut self, query: TrackQuery) {
+        self.lyrics_lookup += 1;
+        let lookup = self.lyrics_lookup;
+        let events = self.events.clone();
+        tokio::task::spawn_blocking(move || {
+            let lyrics = lyrics::fetch(&query);
+            let _ = events.send(Event::Lyrics { lookup, lyrics });
+        });
+    }
+
+    /// Shows a lookup's result, and schedules another try if it failed
+    /// (e.g. while offline). A track that simply has no lyrics is not retried
+    /// until it next starts.
+    async fn lyrics_done(&mut self, lookup: u64, lyrics: Lyrics) {
+        if lookup != self.lyrics_lookup {
+            return;
+        }
+        if lyrics.status == LyricsStatus::Error {
+            let delay = LYRICS_RETRY
+                .saturating_mul(1 << self.lyrics_failures.min(8))
+                .min(LYRICS_RETRY_MAX);
+            self.lyrics_failures += 1;
+            let events = self.events.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(delay).await;
+                let _ = events.send(Event::RetryLyrics { lookup });
+            });
+        }
+        self.set_lyrics(lyrics).await;
+    }
+
+    /// Looks the lyrics up again, unless the track has changed since.
+    fn retry_lyrics(&mut self, lookup: u64) {
+        if lookup != self.lyrics_lookup {
+            return;
+        }
+        if let Some(query) = self.lyrics_query.clone() {
+            // The failed state stays on screen until the new result is in.
+            self.fetch_lyrics(query);
         }
     }
 
     async fn set_lyrics(&self, lyrics: Lyrics) {
         // Drop results for a track that is no longer playing.
-        if lyrics.status != LyricsStatus::None && self.lyrics_track.as_ref() != Some(&lyrics.track)
+        if lyrics.status != LyricsStatus::None
+            && self.lyrics_query.as_ref().map(TrackQuery::key).as_ref() != Some(&lyrics.track)
         {
             return;
         }

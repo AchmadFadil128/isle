@@ -2,7 +2,7 @@
 
 // The resting island: the clock, flanked by live activities (a screen
 // recording or focus timer on the left, music on the right, privacy dots at
-// the far right), or sleepy eyes when idle.
+// the far right).
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -11,7 +11,7 @@ import St from 'gi://St';
 
 import * as Format from './format.js';
 import * as Playback from './playback.js';
-import {Art, Bars, Eyes, PrivacyDots, RecordingDot, Ring, icon} from './widgets.js';
+import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon} from './widgets.js';
 
 const WIDTH_CLOCK = 164;
 const WIDTH_ACTIVITIES = 256;
@@ -35,7 +35,7 @@ export const CompactView = GObject.registerClass({
         this._daemon = daemon;
         this._settings = settings;
         this._privacy = privacy;
-        this._eyesShown = false;
+        this._idle = false;
         this._timeouts = {};
 
         const row = new St.BoxLayout({style_class: 'isle-compact-row', x_expand: true, y_expand: true});
@@ -50,13 +50,9 @@ export const CompactView = GObject.registerClass({
 
         const center = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true});
         this._clock = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
-        this._eyes = new Eyes();
-        this._eyes.x_align = Clutter.ActorAlign.CENTER;
-        this._eyes.visible = false;
         // How long the screen has been recording, in place of the clock.
         this._elapsed = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, visible: false});
         center.add_child(this._clock);
-        center.add_child(this._eyes);
         center.add_child(this._elapsed);
 
         this._right = new St.Bin({style_class: 'isle-compact-slot', y_align: Clutter.ActorAlign.CENTER});
@@ -79,6 +75,7 @@ export const CompactView = GObject.registerClass({
         this.connect('notify::mapped', () => this._syncBars());
         this._tickClock();
         this._refresh();
+        this.connect('destroy', () => this._onDestroy());
     }
 
     /** The width the island should have to fit what is shown. */
@@ -103,24 +100,10 @@ export const CompactView = GObject.registerClass({
         this._refresh();
     }
 
-    /** Swaps the clock for eyes that slowly fall asleep. */
-    doze() {
-        if (Playback.isPlaying(this._daemon.state.nowPlaying) || this._privacy.recording)
-            return;
-        this._eyesShown = true;
-        this._crossfade(this._eyes);
-        this._eyes.doze();
-    }
-
-    /** Wakes the eyes up, then goes back to the clock. */
-    wake() {
-        if (!this._eyesShown)
-            return;
-        this._eyes.wake();
-        this._later('wake', 1200, () => {
-            this._eyesShown = false;
-            this._refresh();
-        });
+    /** While the user is away the music bars rest; nobody is watching them. */
+    set idle(idle) {
+        this._idle = idle;
+        this._syncBars();
     }
 
     _refresh() {
@@ -164,8 +147,7 @@ export const CompactView = GObject.registerClass({
             this._tickRecording();
         } else {
             this._cancel('recording');
-            if (!this._eyesShown)
-                this._crossfade(this._clock);
+            this._crossfade(this._clock);
         }
 
         if (this.preferredWidth !== widthBefore)
@@ -174,7 +156,7 @@ export const CompactView = GObject.registerClass({
 
     /** Fades `actor` in and the other centre actors out. */
     _crossfade(actor) {
-        for (const other of [this._clock, this._eyes, this._elapsed]) {
+        for (const other of [this._clock, this._elapsed]) {
             if (other === actor) {
                 if (!other.visible) {
                     other.opacity = 0;
@@ -200,7 +182,7 @@ export const CompactView = GObject.registerClass({
     }
 
     _syncBars() {
-        this._bars.playing = this.mapped && Playback.isPlaying(this._daemon.state.nowPlaying);
+        this._bars.playing = this.mapped && !this._idle && Playback.isPlaying(this._daemon.state.nowPlaying);
     }
 
     /** Shows how long the screen has been recording, once a second. */
@@ -234,7 +216,7 @@ export const CompactView = GObject.registerClass({
         }
     }
 
-    vfunc_destroy() {
+    _onDestroy() {
         for (const name of Object.keys(this._timeouts))
             this._cancel(name);
         this._daemon.disconnect(this._daemonChanged);
@@ -245,6 +227,5 @@ export const CompactView = GObject.registerClass({
             if (!actor.get_parent())
                 actor.destroy();
         }
-        super.vfunc_destroy();
     }
 });

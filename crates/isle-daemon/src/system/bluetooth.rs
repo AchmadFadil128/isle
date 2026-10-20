@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_util::StreamExt;
@@ -18,6 +19,12 @@ const DEVICE: &str = "org.bluez.Device1";
 const BATTERY: &str = "org.bluez.Battery1";
 /// Headsets usually report their battery a moment after connecting.
 const BATTERY_GRACE: Duration = Duration::from_millis(2500);
+
+/// How many times each device's `Connected` property has changed, by object
+/// path. A connection is only announced after [`BATTERY_GRACE`], and only if
+/// nothing changed in the meantime: a device that disconnected (or bounced)
+/// within the grace period must not be listed as connected.
+type Generations = Arc<Mutex<HashMap<String, u64>>>;
 
 pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> anyhow::Result<()> {
     let manager = ObjectManagerProxy::builder(&system)
@@ -43,10 +50,14 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
             .and_then(|v| bool::try_from(v).ok())
             .unwrap_or(false);
         if is_connected {
-            connected.push(read_device(&system, &path).await?);
+            // One device that cannot be read must not cost us the others.
+            if let Ok(device) = read_device(&system, &path).await {
+                connected.push(device);
+            }
         }
     }
     publish(&iface, |state| state.bluetooth = connected, None).await;
+    let generations = Generations::default();
 
     loop {
         tokio::select! {
@@ -61,7 +72,7 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
                 };
                 if interface == DEVICE {
                     if let Some(now) = changed.get("Connected").and_then(|v| bool::try_from(v).ok()) {
-                        connection_changed(&system, &iface, path.to_owned(), now).await;
+                        connection_changed(&system, &iface, &generations, path.to_owned(), now).await;
                     }
                 } else if interface == BATTERY {
                     if let Some(percent) = changed.get("Percentage").and_then(|v| u8::try_from(v).ok()) {
@@ -88,18 +99,41 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
 async fn connection_changed(
     system: &Connection,
     iface: &InterfaceRef<SystemService>,
+    generations: &Generations,
     path: ObjectPath<'static>,
     now_connected: bool,
 ) {
+    let generation = {
+        let mut generations = generations.lock().unwrap_or_else(|e| e.into_inner());
+        let generation = generations.entry(path.to_string()).or_default();
+        *generation += 1;
+        *generation
+    };
+
     if now_connected {
+        let generations = generations.clone();
+        let still_current = move |path: &ObjectPath<'_>| {
+            let generations = generations.lock().unwrap_or_else(|e| e.into_inner());
+            generations.get(path.as_str()) == Some(&generation)
+        };
         // Wait for the battery level in a separate task, so other devices'
         // updates are not held up.
         let (system, iface) = (system.clone(), iface.clone());
         tokio::spawn(async move {
             tokio::time::sleep(BATTERY_GRACE).await;
+            if !still_current(&path) {
+                return;
+            }
             let Ok(device) = read_device(&system, &path).await else {
                 return;
             };
+            // Reading the device took a round trip, so check again. From here
+            // on this task queues for the state lock without yielding first;
+            // a disconnect handled after this point queues behind it, and so
+            // finds the device listed and removes it again.
+            if !still_current(&path) {
+                return;
+            }
             let event = SystemEvent::Bluetooth {
                 connected: true,
                 device: device.clone(),

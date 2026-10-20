@@ -20,7 +20,7 @@ export default class IslePreferences extends ExtensionPreferences {
         const settings = this.getSettings();
         window.set_default_size(560, 680);
         window.add(this._islandPage(settings));
-        window.add(this._timerPage(settings));
+        window.add(this._timerPage(settings, window));
     }
 
     _islandPage(settings) {
@@ -32,11 +32,6 @@ export default class IslePreferences extends ExtensionPreferences {
         look.add(spinRow(settings, 'notch-depth', 'Island height', 'How far the closed island hangs below the top bar, in pixels', 24, 40));
         page.add(look);
 
-        const idle = new Adw.PreferencesGroup({title: 'When Idle'});
-        idle.add(switchRow(settings, 'sleepy-eyes', 'Sleepy eyes', 'Eyes appear and doze off when you step away'));
-        idle.add(spinRow(settings, 'idle-seconds', 'Idle after', 'Seconds without input', 15, 3600));
-        page.add(idle);
-
         const alerts = new Adw.PreferencesGroup({title: 'Alerts'});
         alerts.add(switchRow(settings, 'replace-osd', 'Volume and brightness', 'Show them in the island instead of the centre of the screen'));
         alerts.add(switchRow(settings, 'system-alerts', 'Charging, network and Bluetooth', 'Also Caps Lock'));
@@ -47,7 +42,7 @@ export default class IslePreferences extends ExtensionPreferences {
         return page;
     }
 
-    _timerPage(settings) {
+    _timerPage(settings, window) {
         const page = new Adw.PreferencesPage({title: 'Focus Timer', icon_name: 'alarm-symbolic'});
         const focus = new Adw.PreferencesGroup({title: 'While Focusing'});
         focus.add(switchRow(settings, 'focus-dnd', 'Do Not Disturb', 'Silence notifications during focus sessions, and restore them afterwards'));
@@ -87,6 +82,20 @@ export default class IslePreferences extends ExtensionPreferences {
                 return GLib.SOURCE_REMOVE;
             });
         };
+        // Don't lose the last change when the window closes before it is saved.
+        window.connect('close-request', () => {
+            if (!saveId)
+                return false;
+            GLib.source_remove(saveId);
+            saveId = 0;
+            try {
+                proxy.call_sync('SetConfig', new GLib.Variant('(s)', [JSON.stringify(config)]),
+                    Gio.DBusCallFlags.NONE, -1, null);
+            } catch (e) {
+                console.warn(`Isle: could not save the timer settings: ${e.message}`);
+            }
+            return false;
+        });
         const number = (key, title, min, max) => {
             const row = Adw.SpinRow.new_with_range(min, max, 1);
             row.title = title;

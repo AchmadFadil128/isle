@@ -126,6 +126,9 @@ class TimerPage extends Page {
         if (!this.active || !state.running)
             return;
         const remaining = this._remaining(state);
+        // At zero, isled's PhaseFinished brings the next state.
+        if (remaining <= 0)
+            return;
         this.later('tick', (remaining % 1000) + 15, () => this._update());
     }
 

@@ -135,13 +135,14 @@ export class NotificationCenter extends Signals.EventEmitter {
     }
 
     destroy() {
+        // Tell no one about changes made while tearing down.
+        this.disconnectAll();
         this._tray.disconnect(this._sourceAdded);
         this._tray.disconnect(this._sourceRemoved);
         for (const source of [...this._sources.keys()])
             this._unwatch(source);
         this._settings.disconnect(this._settingsChanged);
         this._unblockBanners();
-        this.disconnectAll();
     }
 }
 

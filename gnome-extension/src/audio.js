@@ -124,8 +124,9 @@ export class AudioOutputs extends Signals.EventEmitter {
     }
 
     destroy() {
+        // Tell no one about changes made while tearing down.
+        this.disconnectAll();
         this._sinkIds.forEach(id => this._sink.disconnect(id));
         this._mixerIds.forEach(id => this._mixer.disconnect(id));
-        this.disconnectAll();
     }
 }

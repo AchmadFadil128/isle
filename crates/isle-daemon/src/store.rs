@@ -7,49 +7,77 @@ use std::io::Write;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use log::warn;
+use log::{debug, warn};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 pub struct Store<T> {
     path: PathBuf,
+    /// Set when the file exists but could not be read (e.g. permission
+    /// denied). Saving would replace data we never saw, so it is skipped.
+    read_only: bool,
     _value: PhantomData<T>,
 }
 
 impl<T: Serialize + DeserializeOwned + Default> Store<T> {
     /// A store at `~/.local/share/isle/<name>.json`.
     pub fn new(name: &str) -> Self {
+        Self::at(data_dir().join(format!("{name}.json")))
+    }
+
+    fn at(path: PathBuf) -> Self {
         Self {
-            path: data_dir().join(format!("{name}.json")),
+            path,
+            read_only: false,
             _value: PhantomData,
         }
     }
 
     /// Loads the stored value, falling back to the default if the file is
-    /// missing or unreadable. A corrupt file is kept aside rather than lost.
-    pub fn load(&self) -> T {
-        let text = match fs::read_to_string(&self.path) {
-            Ok(text) => text,
+    /// missing, unreadable or corrupt. The user's data is never lost to that
+    /// fallback: a corrupt file is moved aside to `<name>.json.corrupt`, and
+    /// a file that cannot be read at all (or moved aside) is left alone, with
+    /// saving switched off until isled restarts.
+    pub fn load(&mut self) -> T {
+        let bytes = match fs::read(&self.path) {
+            Ok(bytes) => bytes,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return T::default(),
             Err(err) => {
-                warn!("could not read {}: {err}", self.path.display());
+                warn!(
+                    "could not read {}: {err}; changes will not be saved, so it is not overwritten",
+                    self.path.display()
+                );
+                self.read_only = true;
                 return T::default();
             }
         };
-        serde_json::from_str(&text).unwrap_or_else(|err| {
+        serde_json::from_slice(&bytes).unwrap_or_else(|err| {
             let backup = self.path.with_extension("json.corrupt");
-            warn!(
-                "{} is invalid ({err}); moved to {}",
-                self.path.display(),
-                backup.display()
-            );
-            let _ = fs::rename(&self.path, backup);
+            match fs::rename(&self.path, &backup) {
+                Ok(()) => warn!(
+                    "{} is invalid ({err}); moved to {}",
+                    self.path.display(),
+                    backup.display()
+                ),
+                Err(rename_err) => {
+                    warn!(
+                        "{} is invalid ({err}) and could not be moved aside ({rename_err}); \
+                         changes will not be saved, so it is not overwritten",
+                        self.path.display()
+                    );
+                    self.read_only = true;
+                }
+            }
             T::default()
         })
     }
 
     /// Saves atomically, so a crash mid-write never leaves a truncated file.
     pub fn save(&self, value: &T) {
+        if self.read_only {
+            debug!("not saving {}: it could not be loaded", self.path.display());
+            return;
+        }
         if let Err(err) = write_atomic(&self.path, value) {
             warn!("could not save {}: {err}", self.path.display());
         }
@@ -83,4 +111,56 @@ pub fn cache_dir() -> PathBuf {
     dirs::cache_dir()
         .unwrap_or_else(std::env::temp_dir)
         .join("isle")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::*;
+
+    /// A fresh, empty directory for one test.
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("isle-store-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn corrupt_files_are_moved_aside() {
+        let dir = scratch("corrupt");
+        let path = dir.join("list.json");
+        fs::write(&path, "{ not json").unwrap();
+
+        let mut store = Store::<Vec<u32>>::at(path.clone());
+        assert_eq!(store.load(), Vec::<u32>::new());
+        assert_eq!(
+            fs::read_to_string(dir.join("list.json.corrupt")).unwrap(),
+            "{ not json"
+        );
+        store.save(&vec![1]);
+        assert_eq!(store.load(), [1]);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn unreadable_files_are_never_overwritten() {
+        let dir = scratch("unreadable");
+        let path = dir.join("list.json");
+        fs::write(&path, "[1, 2]").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o200)).unwrap();
+        // Root reads anything, so there is nothing to test then.
+        if fs::read(&path).is_ok() {
+            fs::remove_dir_all(dir).unwrap();
+            return;
+        }
+
+        let mut store = Store::<Vec<u32>>::at(path.clone());
+        assert_eq!(store.load(), Vec::<u32>::new());
+        store.save(&vec![3]);
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "[1, 2]");
+        fs::remove_dir_all(dir).unwrap();
+    }
 }

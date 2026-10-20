@@ -38,7 +38,8 @@ pub enum LyricsStatus {
     Plain,
     Instrumental,
     NotFound,
-    /// The lookup failed, e.g. while offline. Retried on the next play.
+    /// The lookup failed, e.g. while offline. Never cached, and retried
+    /// after a growing delay for as long as the track stays current.
     Error,
 }
 

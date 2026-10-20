@@ -3,7 +3,7 @@
 //! To-do list with optional due times, plus a quick-add syntax:
 //! "Call mum @18:30", "Stretch in 20m", "Send report @3pm".
 
-use chrono::{DateTime, Duration, NaiveTime, TimeZone};
+use chrono::{DateTime, NaiveTime, TimeDelta, TimeZone};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -113,7 +113,8 @@ impl TodoList {
 /// Splits quick-add text into a title and an optional due time.
 ///
 /// Understands a trailing `@HH:MM`, `@H`, `@Hpm`/`@Ham` (the next time that
-/// clock time comes round) or `in Nm`/`in Nh` (relative to now).
+/// clock time comes round) or `in Nm`/`in Nh` (relative to now). A delay too
+/// large to be a real date is not a due time, so the text stays as typed.
 pub fn parse_quick_add<Tz: TimeZone>(text: &str, now: &DateTime<Tz>) -> (String, Option<i64>) {
     let text = text.trim();
     let words: Vec<&str> = text.split_whitespace().collect();
@@ -123,11 +124,9 @@ pub fn parse_quick_add<Tz: TimeZone>(text: &str, now: &DateTime<Tz>) -> (String,
             return (rest.join(" "), next_occurrence(now, time));
         }
         if let [head @ .., "in", amount] = words.as_slice() {
-            if let Some(delay) = parse_delay(amount) {
-                return (
-                    head.join(" "),
-                    Some((now.clone() + delay).timestamp_millis()),
-                );
+            let due = parse_delay(amount).and_then(|delay| now.clone().checked_add_signed(delay));
+            if let Some(due) = due {
+                return (head.join(" "), Some(due.timestamp_millis()));
             }
         }
     }
@@ -154,12 +153,15 @@ fn parse_clock(text: &str) -> Option<NaiveTime> {
     NaiveTime::from_hms_opt(hour, minute, 0)
 }
 
-fn parse_delay(text: &str) -> Option<Duration> {
+/// Parses `20m`, `2h` and the like. The `try_` constructors matter: the
+/// amount comes straight from the user, and the plain ones panic when it is
+/// out of range.
+fn parse_delay(text: &str) -> Option<TimeDelta> {
     let split = text.find(|c: char| !c.is_ascii_digit())?;
     let amount: i64 = text[..split].parse().ok()?;
     match &text[split..] {
-        "m" | "min" | "mins" => Some(Duration::minutes(amount)),
-        "h" | "hr" | "hrs" => Some(Duration::hours(amount)),
+        "m" | "min" | "mins" => TimeDelta::try_minutes(amount),
+        "h" | "hr" | "hrs" => TimeDelta::try_hours(amount),
         _ => None,
     }
 }
@@ -233,6 +235,23 @@ mod tests {
             ("Fly in style".into(), None)
         );
         assert_eq!(parse_quick_add("Bad @25:00", &now).1, None);
+    }
+
+    #[test]
+    fn quick_add_absurd_delays_are_plain_text() {
+        let now = at(20, 10, 0);
+        // Too many minutes for a time span at all.
+        assert_eq!(
+            parse_quick_add("x in 999999999999999m", &now),
+            ("x in 999999999999999m".into(), None)
+        );
+        // A valid span, but it ends past the last representable date.
+        assert_eq!(
+            parse_quick_add("x in 99999999999h", &now),
+            ("x in 99999999999h".into(), None)
+        );
+        // Too many digits for a number.
+        assert_eq!(parse_quick_add("x in 99999999999999999999m", &now).1, None);
     }
 
     #[test]

@@ -21,6 +21,10 @@ The active MPRIS player: the one playing, or else the one that played last.
 The position is only sampled when something changes. While playing, the
 current position is `position_us + (now - sampled_at_ms) * 1000 * rate`.
 
+The control methods only fail when no player is running. They return
+without waiting for the player, so a slow player cannot hold the daemon up;
+if the player then rejects the command, isled only logs it.
+
 ## io.github.isle.Pomodoro1
 
 | Member | Signature | |
@@ -39,14 +43,14 @@ current position is `position_us + (now - sampled_at_ms) * 1000 * rate`.
 |---|---|---|
 | `Add(s text) → t id` | | Quick-add: a trailing `@18:30`, `@7`, `@3pm` or `in 20m` / `in 2h` sets the due time. |
 | `SetDone(t id, b done)`, `Rename(t id, s title)`, `Remove(t id)`, `ClearDone()` | | Finished tasks are cleared at midnight. |
-| `Items` | `s` | `[{id, title, due_at_ms, done, alerted}]` |
+| `Items` | `s` | `[{id, title, due_at_ms, done, alerted, done_at_ms}]`; `done_at_ms` is when the task was ticked off, or null. |
 | `Due(t id, s title)` | signal | A task's due time arrived. |
 
 ## io.github.isle.Shelf1
 
 | Member | Signature | |
 |---|---|---|
-| `Add(as uris)` | | Add local `file://` URIs (moved to the front if already there). |
+| `Add(as uris)` | | Add local `file://` URIs (moved to the front if already there). Other URIs are skipped and reported with an `InvalidArgs` error once the rest are added. |
 | `Remove(s uri)`, `Clear()` | | |
 | `Refresh()` | | Drop items whose files no longer exist. |
 | `Items` | `s` | `[{uri, name, added_at_ms}]`, newest first. |

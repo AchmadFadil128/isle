@@ -234,6 +234,7 @@ class MediaPage extends Page {
         this._audioChanged = audio.connect('changed', () => this._updateAudio());
         this._update();
         this._updateAudio();
+        this.connect('destroy', () => this._onDestroy());
     }
 
     get relevant() {
@@ -410,7 +411,7 @@ class MediaPage extends Page {
         });
         box.add_child(new St.Icon({gicon: icon('isle-music'), icon_size: 28, style_class: 'isle-empty-icon'}));
         box.add_child(label('Nothing playing', 'isle-empty-title', {x_align: Clutter.ActorAlign.CENTER}));
-        box.add_child(label('Play music in Spotify, a browser or any media player', 'isle-empty-hint', {x_align: Clutter.ActorAlign.CENTER}));
+        box.add_child(label('Play something in Spotify or on YouTube', 'isle-empty-hint', {x_align: Clutter.ActorAlign.CENTER}));
         return box;
     }
 
@@ -524,8 +525,7 @@ class MediaPage extends Page {
             this._toggleMode('audio');
     }
 
-    vfunc_destroy() {
+    _onDestroy() {
         this._audio.disconnect(this._audioChanged);
-        super.vfunc_destroy();
     }
 });

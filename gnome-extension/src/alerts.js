@@ -36,6 +36,7 @@ export function osd(gicon, text, level, maxLevel) {
     return {
         key: 'osd',
         priority: 'instant',
+        transient: true,
         gicon,
         title: kind ?? text ?? '',
         subtitle: kind && text ? text : '',
@@ -50,6 +51,7 @@ export function capsLock(on) {
     return {
         key: 'keyboard',
         priority: 'instant',
+        transient: true,
         glyph: '⇪',
         title: on ? 'Caps Lock on' : 'Caps Lock off',
         tone: on ? 'warn' : 'neutral',
@@ -187,7 +189,8 @@ export function notification(item, urgent) {
     const body = plainBody(item).replace(/\s+/g, ' ').trim();
     const title = item.title || item.source?.title || '';
     return {
-        key: 'notification',
+        // A critical one is never replaced by a routine one behind it.
+        key: urgent ? 'notification-urgent' : 'notification',
         appIcon: true,
         gicon: notificationIcon(item),
         icon: 'dialog-information-symbolic',

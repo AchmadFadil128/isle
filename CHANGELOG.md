@@ -17,11 +17,15 @@ All notable changes to Isle are listed here. The format follows
 - File shelf with drag and drop through the `isle-shelf` helper.
 - Alerts for charging, battery, losing the connection, Bluetooth, volume,
   brightness and Caps Lock.
-- Sleepy eyes when idle.
 - Privacy dots for the camera, microphone and screen sharing; a screen
   recording timer with a stop button.
 - Volume and output device switching on the music page.
 - Daily focus totals and Do Not Disturb during focus sessions.
 - Rubber-band stretch when the volume is pressed past its limit.
+- Super+V opens the Notifications page in the island; GNOME's calendar
+  drop-down no longer appears twice.
+- Shelf files can be removed with × even without the `isle-shelf` helper.
+- The focus timer, and Do Not Disturb during focus, survive the lock screen
+  and an `isled` restart.
 - `isled` D-Bus service, install and uninstall scripts, product spec and
   D-Bus API docs.

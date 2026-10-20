@@ -19,7 +19,7 @@ pub struct LyricLine {
 }
 
 /// Parses synced lyrics, returning lines sorted by time. Lines without a
-/// timestamp and metadata tags are skipped.
+/// timestamp, metadata tags and timestamps too large to be real are skipped.
 pub fn parse(source: &str) -> Vec<LyricLine> {
     let mut offset_ms = 0;
     let mut lines = Vec::new();
@@ -41,7 +41,8 @@ pub fn parse(source: &str) -> Vec<LyricLine> {
 
         let text = rest.trim();
         lines.extend(times.into_iter().map(|time_ms| LyricLine {
-            time_ms: (time_ms - offset_ms).max(0),
+            // Saturating: the offset comes from the file and may be absurd.
+            time_ms: time_ms.saturating_sub(offset_ms).max(0),
             text: text.to_owned(),
         }));
     }
@@ -61,13 +62,15 @@ pub fn plain(source: &str) -> Vec<LyricLine> {
         .collect()
 }
 
-/// Parses `mm:ss`, `mm:ss.xx` or `mm:ss.xxx` into milliseconds.
+/// Parses `mm:ss`, `mm:ss.xx` or `mm:ss.xxx` into milliseconds. Returns
+/// `None` for negative fields and for minutes too large to fit in an `i64`
+/// of milliseconds.
 fn parse_timestamp(tag: &str) -> Option<i64> {
     let (minutes, seconds) = tag.split_once(':')?;
     let minutes: i64 = minutes.parse().ok()?;
     let (whole, fraction) = seconds.split_once(['.', ':']).unwrap_or((seconds, ""));
     let whole: i64 = whole.parse().ok()?;
-    if whole >= 60 || !fraction.chars().all(|c| c.is_ascii_digit()) {
+    if minutes < 0 || !(0..60).contains(&whole) || !fraction.chars().all(|c| c.is_ascii_digit()) {
         return None;
     }
     // Scale ".5", ".50" and ".500" all to 500 ms.
@@ -77,7 +80,9 @@ fn parse_timestamp(tag: &str) -> Option<i64> {
         2 => fraction.parse::<i64>().ok()? * 10,
         _ => fraction[..3].parse::<i64>().ok()?,
     };
-    Some(minutes * 60_000 + whole * 1000 + fraction_ms)
+    minutes
+        .checked_mul(60_000)?
+        .checked_add(whole * 1000 + fraction_ms)
 }
 
 #[cfg(test)]
@@ -126,5 +131,28 @@ mod tests {
         assert_eq!(parse_timestamp("ab:cd"), None);
         assert_eq!(parse_timestamp("01:75.00"), None);
         assert_eq!(parse_timestamp("01:02"), Some(62_000));
+        assert_eq!(parse_timestamp("-1:02"), None);
+        assert_eq!(parse_timestamp("01:-2"), None);
+    }
+
+    #[test]
+    fn skips_timestamps_that_overflow() {
+        assert_eq!(parse_timestamp("99999999999999999:00.00"), None);
+        let lines = parse("[99999999999999999:00.00]Never\n[00:01.00]Line");
+        assert_eq!(
+            lines,
+            vec![LyricLine {
+                time_ms: 1000,
+                text: "Line".into()
+            }]
+        );
+    }
+
+    #[test]
+    fn extreme_offsets_saturate() {
+        let early = parse(&format!("[offset:{}]\n[00:02.00]Line", i64::MAX));
+        assert_eq!(early[0].time_ms, 0);
+        let late = parse(&format!("[offset:{}]\n[00:02.00]Line", i64::MIN));
+        assert_eq!(late[0].time_ms, i64::MAX);
     }
 }

@@ -21,6 +21,7 @@
 //     onActivate,// called when the alert itself is clicked
 //     page,      // expanded page to open when hovered
 //     priority,  // 'instant' alerts (OSD) replace whatever is showing
+//     transient, // dropped rather than queued while the island is open
 //   }
 
 import Clutter from 'gi://Clutter';
@@ -83,6 +84,7 @@ class PeekView extends St.BoxLayout {
 
         this._actionButton = null;
         this._ringKey = null;
+        this.connect('destroy', () => this._onDestroy());
     }
 
     /** Fills the view from an alert (see the top of this file). */
@@ -151,12 +153,11 @@ class PeekView extends St.BoxLayout {
             bin.child = child;
     }
 
-    vfunc_destroy() {
+    _onDestroy() {
         // Pieces not currently shown are not children and must be freed here.
         for (const actor of [this._icon, this._glyph, this._art, this._ring, this._value, this._levelBox]) {
             if (!actor.get_parent())
                 actor.destroy();
         }
-        super.vfunc_destroy();
     }
 });

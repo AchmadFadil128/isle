@@ -17,7 +17,7 @@ pub struct ShelfService {
 
 impl ShelfService {
     pub fn load() -> Self {
-        let store = Store::new("shelf");
+        let mut store = Store::new("shelf");
         let mut shelf: Shelf = store.load();
         // Files may have been moved or deleted while Isle was not running.
         if shelf.retain_existing(|item| file_exists(&item.uri)) {
@@ -34,17 +34,24 @@ impl ShelfService {
 
 #[interface(name = "io.github.isle.Shelf1")]
 impl ShelfService {
-    /// Adds local files by `file://` URI. Other URIs are rejected.
+    /// Adds local files by `file://` URI. Other URIs are rejected, but do not
+    /// stop the rest: a drop mixing files with, say, a web link still shelves
+    /// the files, and is then reported as invalid with the rejected URIs.
     async fn add(
         &mut self,
         uris: Vec<String>,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> fdo::Result<()> {
+        let mut rejected = Vec::new();
+        let mut added = false;
         for uri in uris {
-            let path = Url::parse(&uri)
+            let Some(path) = Url::parse(&uri)
                 .ok()
                 .and_then(|url| url.to_file_path().ok())
-                .ok_or_else(|| fdo::Error::InvalidArgs(format!("not a local file: {uri}")))?;
+            else {
+                rejected.push(uri);
+                continue;
+            };
             let name = path
                 .file_name()
                 .map_or_else(|| uri.clone(), |name| name.to_string_lossy().into_owned());
@@ -53,8 +60,19 @@ impl ShelfService {
                 name,
                 added_at_ms: now_ms(),
             });
+            added = true;
         }
-        Ok(self.changed(&emitter).await?)
+        if added {
+            self.changed(&emitter).await?;
+        }
+        if rejected.is_empty() {
+            Ok(())
+        } else {
+            Err(fdo::Error::InvalidArgs(format!(
+                "not local files: {}",
+                rejected.join(" ")
+            )))
+        }
     }
 
     async fn remove(

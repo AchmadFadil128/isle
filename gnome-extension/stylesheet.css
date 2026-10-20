@@ -135,24 +135,6 @@
   background-color: #ffffff;
 }
 
-.isle-eyes { spacing: 10px; }
-
-.isle-eye {
-  width: 9px;
-  height: 14px;
-  border-radius: 5px;
-  background-color: #ffffff;
-  /* A soft blue glow; drawn once, not per frame. */
-  box-shadow: 0 0 6px 1px rgba(120, 190, 255, 0.6);
-}
-
-.isle-zzz {
-  font-size: 10px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.7);
-  margin-left: -4px;
-}
-
 /* Live activities: privacy dots and screen recording */
 
 .isle-privacy-dots { spacing: 4px; padding-left: 4px; }
@@ -408,10 +390,19 @@
 
 .isle-shelf-tile {
   width: 84px;
-  padding: 8px 4px;
   border-radius: 14px;
   color: #ffffff;
 }
 
+.isle-shelf-open { padding: 8px 4px; }
+
 .isle-shelf-tile:hover { background-color: #1c1c1e; }
 .isle-shelf-name { font-size: 11px; padding-top: 6px; }
+.isle-shelf-remove {
+  padding: 3px;
+  margin: 4px;
+  border-radius: 99px;
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+.isle-shelf-remove:hover { background-color: rgba(255, 255, 255, 0.32); }

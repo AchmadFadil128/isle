@@ -11,14 +11,23 @@ mod power;
 use std::time::Duration;
 
 use futures_util::{Stream, StreamExt};
-use log::warn;
+use log::{debug, warn};
 use serde::Serialize;
+use tokio::time::Instant;
 use zbus::object_server::{InterfaceRef, SignalEmitter};
 use zbus::{Connection, interface};
 
 /// Changes arriving within this window are handled together, so a burst of
 /// property updates (or a network briefly reconnecting) yields one event.
 const SETTLE: Duration = Duration::from_millis(800);
+
+/// First wait before restarting a watcher that stopped; it doubles with
+/// every failure in a row, up to [`RESTART_MAX`].
+const RESTART_MIN: Duration = Duration::from_secs(1);
+const RESTART_MAX: Duration = Duration::from_secs(60);
+/// A watcher that ran at least this long was healthy, so the next restart
+/// after it stops is quick again.
+const HEALTHY_AFTER: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct SystemState {
@@ -95,21 +104,53 @@ impl SystemService {
 }
 
 /// Starts every system watcher. Missing services (no battery, no BlueZ) are
-/// logged and skipped.
+/// logged and retried now and then.
 pub fn spawn_watchers(system: Connection, iface: InterfaceRef<SystemService>) {
-    supervise("battery", power::watch(system.clone(), iface.clone()));
-    supervise("network", network::watch(system.clone(), iface.clone()));
-    supervise("bluetooth", bluetooth::watch(system, iface.clone()));
-    supervise("camera", camera::watch(iface));
+    let (bus, state) = (system.clone(), iface.clone());
+    supervise("battery", move || power::watch(bus.clone(), state.clone()));
+    let (bus, state) = (system.clone(), iface.clone());
+    supervise("network", move || {
+        network::watch(bus.clone(), state.clone())
+    });
+    let state = iface.clone();
+    supervise("bluetooth", move || {
+        bluetooth::watch(system.clone(), state.clone())
+    });
+    supervise("camera", move || camera::watch(iface.clone()));
 }
 
-fn supervise(
-    name: &'static str,
-    watcher: impl Future<Output = anyhow::Result<()>> + Send + 'static,
-) {
+/// Runs the watcher that `start` returns, and starts a new one whenever it
+/// stops. UPower, NetworkManager and BlueZ can restart under us (an update,
+/// a crash), and a watcher talking to the old instance would otherwise leave
+/// the state frozen. Restarts back off from [`RESTART_MIN`] to
+/// [`RESTART_MAX`], so a service that is simply missing costs one cheap
+/// attempt a minute; a healthy watcher is never polled.
+fn supervise<F, W>(name: &'static str, start: F)
+where
+    F: Fn() -> W + Send + 'static,
+    W: Future<Output = anyhow::Result<()>> + Send + 'static,
+{
     tokio::spawn(async move {
-        if let Err(err) = watcher.await {
-            warn!("{name} monitoring stopped: {err}");
+        let mut delay = RESTART_MIN;
+        loop {
+            let started = Instant::now();
+            let result = start().await;
+            if started.elapsed() >= HEALTHY_AFTER {
+                delay = RESTART_MIN;
+            }
+            let reason = match result {
+                Ok(()) => "its events ended".to_owned(),
+                Err(err) => err.to_string(),
+            };
+            // Only the first failure in a row is worth a warning; repeats
+            // (e.g. no BlueZ on this machine) would just fill the journal.
+            if delay == RESTART_MIN {
+                warn!("{name} monitoring stopped ({reason}); restarting in {delay:?}");
+            } else {
+                debug!("{name} monitoring stopped ({reason}); restarting in {delay:?}");
+            }
+            tokio::time::sleep(delay).await;
+            delay = (delay * 2).min(RESTART_MAX);
         }
     });
 }

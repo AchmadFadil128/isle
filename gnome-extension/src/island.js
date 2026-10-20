@@ -13,7 +13,7 @@ import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
-import {GENTLE, ISLAND, Spring, SpringDriver} from './spring.js';
+import {GENTLE, Spring, SpringDriver} from './spring.js';
 
 
 /**
@@ -70,6 +70,7 @@ export const Island = GObject.registerClass({
             clip_to_allocation: true,
         });
         this.add_child(this._stage);
+        this.connect('destroy', () => this._onDestroy());
     }
 
     /** The top bar's height; the island's body starts below it. */
@@ -109,18 +110,9 @@ export const Island = GObject.registerClass({
         });
     }
 
-    get currentView() {
-        return this._view;
-    }
-
     /** Whether the island has finished moving. */
     get isSettled() {
         return this._springs.every(spring => spring.settled);
-    }
-
-    /** The island's size right now, which differs from the target mid-animation. */
-    get bodySize() {
-        return {width: this._width.value, height: this._height.value};
     }
 
     /**
@@ -257,9 +249,8 @@ export const Island = GObject.registerClass({
         cr.$dispose();
     }
 
-    vfunc_destroy() {
+    _onDestroy() {
         this._driver?.destroy();
         this._driver = null;
-        super.vfunc_destroy();
     }
 });

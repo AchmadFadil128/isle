@@ -24,6 +24,7 @@ export const Page = GObject.registerClass({
         this._active = false;
         this._timeouts = new Map();
         this._daemonHandlers = [];
+        this.connect('destroy', () => this._onPageDestroy());
     }
 
     /** Pages only animate and poll while they are on screen. */
@@ -99,11 +100,10 @@ export const Page = GObject.registerClass({
             this.cancel(name);
     }
 
-    vfunc_destroy() {
+    _onPageDestroy() {
         this.cancelAll();
         for (const id of this._daemonHandlers)
             this.daemon.disconnect(id);
         this._daemonHandlers = [];
-        super.vfunc_destroy();
     }
 });

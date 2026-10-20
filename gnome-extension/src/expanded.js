@@ -28,6 +28,8 @@ const SMOOTH_SCROLL_STEP = 1.2;
 export const ExpandedView = GObject.registerClass({
     Signals: {
         'page-changed': {},
+        // The page slide finished; the new page is in its final place.
+        'page-settled': {},
         // The current page wants the island wider or narrower.
         'width-changed': {},
         // The current page's tint colour changed; see `tint`.
@@ -77,6 +79,7 @@ export const ExpandedView = GObject.registerClass({
         this._privacyChanged = privacy.connect('changed', () => this._updateHeader());
         this._syncPage();
         this._syncWidth();
+        this.connect('destroy', () => this._onDestroy());
     }
 
     _buildHeader() {
@@ -208,7 +211,13 @@ export const ExpandedView = GObject.registerClass({
             });
             next.translation_x = direction * SLIDE_DISTANCE;
             next.opacity = 0;
-            next.ease({translation_x: 0, opacity: 255, duration: SLIDE_DURATION, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            next.ease({
+                translation_x: 0,
+                opacity: 255,
+                duration: SLIDE_DURATION,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+                onComplete: () => this.emit('page-settled'),
+            });
         } else {
             previous.hide();
             next.translation_x = 0;
@@ -351,11 +360,10 @@ export const ExpandedView = GObject.registerClass({
         return Clutter.EVENT_STOP;
     }
 
-    vfunc_destroy() {
+    _onDestroy() {
         this._stopClock();
         this._stopRecordingTick();
         this._daemon.disconnect(this._daemonChanged);
         this._privacy.disconnect(this._privacyChanged);
-        super.vfunc_destroy();
     }
 });

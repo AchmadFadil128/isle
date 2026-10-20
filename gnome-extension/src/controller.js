@@ -8,7 +8,7 @@
 //   expanded - the full island with pages, while the pointer is on it
 //
 // Alerts queue up and are shown one at a time; "instant" ones (volume,
-// brightness, keyboard) replace whatever is showing.
+// brightness, keyboard, critical notifications) replace whatever is showing.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -42,6 +42,8 @@ const EXPAND_DELAY_MS = 120;
 const COLLAPSE_DELAY_MS = 300;
 /** A page picked by hand is kept for this long before smart defaults resume. */
 const PAGE_MEMORY_MS = 5 * 60 * 1000;
+/** Without input for this long, the user is away and animations rest. */
+const IDLE_MS = 60 * 1000;
 
 // Corner and shoulder radii per presentation. The shoulders ("ears") grow
 // with the island.
@@ -93,7 +95,7 @@ export class Controller {
         this._keyboard = new KeyboardWatcher();
         this._keyboard.connect('caps-lock', (_watcher, on) => this._postSystemAlert(Alerts.capsLock(on)));
         this._osd = new OsdHook((icon, label, level, maxLevel) => this._showOsd(icon, label, level, maxLevel));
-        this._armIdleWatch();
+        this._watchIdle();
 
         this._updateGeometry();
         this._render();
@@ -117,6 +119,7 @@ export class Controller {
             this._pagePickedAt = Date.now();
             this._shelfHelper?.sync();
         });
+        expanded.connect('page-settled', () => this._shelfHelper?.sync());
         // Lyrics widen the island and wash it with the cover's colour.
         expanded.connect('width-changed', () => {
             if (this._presentation === 'expanded')
@@ -144,21 +147,15 @@ export class Controller {
                 this._render();
         });
 
-        this._settingsChanged = this._settings.connect('changed', (_settings, key) => {
-            if (key === 'notch-depth')
-                this._render();
-            else if (key === 'idle-seconds')
-                this._armIdleWatch();
-        });
+        this._settingsChanged = this._settings.connect('changed::notch-depth', () => this._render());
 
         this._topBar.connect('height-changed', () => this._updateGeometry());
-        this._topBar.connect('calendar-toggled', (_bar, open) => {
-            // The calendar drops down from behind the island; let it show on top.
-            const group = Main.layoutManager.uiGroup;
-            if (open)
-                group.set_child_below_sibling(this._island, this._topBar.calendarActor);
-            else
-                group.set_child_below_sibling(this._island, global.top_window_group);
+        this._topBar.connect('calendar-requested', () => this._toggleFromKeyboard());
+        island.connect('key-press-event', (_actor, event) => {
+            if (event.get_key_symbol() !== Clutter.KEY_Escape)
+                return Clutter.EVENT_PROPAGATE;
+            this.collapse();
+            return Clutter.EVENT_STOP;
         });
         this._monitorsChanged = Main.layoutManager.connect('monitors-changed', () => this._updateGeometry());
 
@@ -291,10 +288,6 @@ export class Controller {
         case Clutter.BUTTON_MIDDLE:
             this._daemon.call('media', 'PlayPause');
             return Clutter.EVENT_STOP;
-        case Clutter.BUTTON_SECONDARY:
-            this.collapse();
-            this._topBar.toggleCalendar();
-            return Clutter.EVENT_STOP;
         default:
             return Clutter.EVENT_PROPAGATE;
         }
@@ -303,7 +296,6 @@ export class Controller {
     /** Opens the island, on `pageName` or the most useful page. */
     expand(pageName = null) {
         this._cancel('expand');
-        this._compact.wake();
         const target = pageName ?? this._alert?.page ?? this._defaultPage();
         if (target)
             this._expanded.showPage(target, {animate: this._expandWanted});
@@ -337,10 +329,32 @@ export class Controller {
 
     // Keyboard
 
+    /**
+     * GNOME's calendar shortcut (Super+V) opens the island on Notifications
+     * and holds it open without the pointer; pressing it again, Esc or a
+     * click elsewhere closes it.
+     */
+    _toggleFromKeyboard() {
+        if (this._expandWanted) {
+            this.collapse();
+            return;
+        }
+        this.expand('notifications');
+        this._setKeyboard(true);
+        if (this._keyboardGrab)
+            global.stage.set_key_focus(this._island);
+    }
+
     /** Grabs the keyboard for typing into the island (e.g. a new task). */
     _setKeyboard(wanted) {
         if (wanted && !this._keyboardGrab) {
-            this._keyboardGrab = Main.pushModal(this._island, {actionMode: Shell.ActionMode.POPUP});
+            const grab = Main.pushModal(this._island, {actionMode: Shell.ActionMode.POPUP});
+            // Another grab (a menu, a dialog) may hold the keyboard already.
+            if (!(grab.get_seat_state() & Clutter.GrabState.KEYBOARD)) {
+                Main.popModal(grab);
+                return;
+            }
+            this._keyboardGrab = grab;
             // Clicking anywhere else ends typing and closes the island.
             this._stageCapture = global.stage.connect('captured-event', (_stage, event) => {
                 if (event.type() === Clutter.EventType.BUTTON_PRESS &&
@@ -372,8 +386,8 @@ export class Controller {
             return;
         }
         if (this._expandWanted) {
-            // Instant alerts are stale by the time the island closes.
-            if (alert.priority !== 'instant')
+            // Volume and the like are stale by the time the island closes.
+            if (!alert.transient)
                 this._enqueue(alert);
             return;
         }
@@ -399,7 +413,6 @@ export class Controller {
     _showAlert(alert) {
         this._alert = alert;
         this._peek.setAlert(alert);
-        this._compact.wake();
         this._later('alert', alert.duration ?? 3000, () => this._dismissAlert(true));
         this._render();
     }
@@ -450,20 +463,16 @@ export class Controller {
             global.display.get_sound_player().play_from_theme(soundName, 'Isle', null);
     }
 
-    // Idle eyes
+    // Idle
 
-    _armIdleWatch() {
+    _watchIdle() {
         const monitor = global.backend.get_core_idle_monitor();
-        if (this._idleWatch)
-            monitor.remove_watch(this._idleWatch);
-        this._idleWatch = monitor.add_idle_watch(this._settings.get_int('idle-seconds') * 1000, () => {
-            if (!this._settings.get_boolean('sleepy-eyes') || this._presentation !== 'compact')
-                return;
-            this._compact.doze();
+        this._idleWatch = monitor.add_idle_watch(IDLE_MS, () => {
+            this._compact.idle = true;
             if (!this._activeWatch) {
                 this._activeWatch = monitor.add_user_active_watch(() => {
                     this._activeWatch = 0;
-                    this._compact.wake();
+                    this._compact.idle = false;
                 });
             }
         });
@@ -472,6 +481,8 @@ export class Controller {
     // Timeouts
 
     _later(name, ms, callback) {
+        if (!this._settings)
+            return; // destroyed
         this._cancel(name);
         this._timeouts.set(name, GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
             this._timeouts.delete(name);
@@ -489,9 +500,10 @@ export class Controller {
     }
 
     destroy() {
+        // Releasing the keyboard may schedule a collapse; cancel it after.
+        this._setKeyboard(false);
         for (const name of [...this._timeouts.keys()])
             this._cancel(name);
-        this._setKeyboard(false);
 
         const monitor = global.backend.get_core_idle_monitor();
         if (this._idleWatch)
@@ -504,9 +516,12 @@ export class Controller {
         this._osd.destroy();
         this._keyboard.destroy();
         this._shelfHelper.destroy();
-
-        this._island.destroy();
+        // Ending focus mode can turn Do Not Disturb off, which the views
+        // still show.
         this._focusMode.destroy();
+
+        // The views listen to the services below, so they go first.
+        this._island.destroy();
         this._privacy.destroy();
         this._audio.destroy();
         this._notifications.destroy();

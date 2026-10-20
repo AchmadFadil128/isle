@@ -20,7 +20,7 @@ pub struct TodoService {
 
 impl TodoService {
     pub fn load() -> Self {
-        let store = Store::new("todo");
+        let mut store = Store::new("todo");
         let mut list: TodoList = store.load();
         if list.drop_done_before(start_of_today()) {
             store.save(&list);

@@ -4,7 +4,7 @@ A dynamic island for the GNOME desktop. Isle turns the centre of the top bar
 into a black island that grows and shrinks with spring physics to show what is
 going on, and opens on hover:
 
-- **Music** from any MPRIS player (Spotify, Firefox, Chrome, mpv…) with cover
+- **Music** from Spotify or YouTube in your browser (any MPRIS player works) with cover
   art, a scrubber and controls, plus **synced lyrics** from
   [LRCLIB](https://lrclib.net). Click a line to jump to it.
 - **Notifications** from GNOME, shown in the island instead of banners, with a
@@ -19,10 +19,9 @@ going on, and opens on hover:
 - **Volume and output** switching right from the music page.
 - **Alerts**: charging, low battery, losing the connection, Bluetooth earbuds
   with their battery, volume and brightness, Caps Lock.
-- **Sleepy eyes** when you step away.
 
 Hover to open; scroll, swipe or use the arrows to change page. Middle-click
-plays or pauses; right-click opens GNOME's calendar.
+plays or pauses; Super+V opens the notifications.
 
 ## Requirements
 

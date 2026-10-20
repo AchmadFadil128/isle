@@ -34,6 +34,7 @@ class NotificationsPage extends Page {
         ];
         this._update();
         this._updateDnd();
+        this.connect('destroy', () => this._onDestroy());
     }
 
     get headerTitle() {
@@ -149,8 +150,7 @@ class NotificationsPage extends Page {
         this._update();
     }
 
-    vfunc_destroy() {
+    _onDestroy() {
         this._centerHandlers.forEach(id => this._center.disconnect(id));
-        super.vfunc_destroy();
     }
 });

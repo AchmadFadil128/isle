@@ -28,7 +28,8 @@ export class PrivacyMonitor extends Signals.EventEmitter {
     constructor(daemon) {
         super();
         this._daemon = daemon;
-        this._shares = new Set();
+        /** Screen-sharing handles and their `stopped` handler ids. */
+        this._shares = new Map();
         this.microphone = false;
         this.camera = false;
         this.screenShare = false;
@@ -93,11 +94,11 @@ export class PrivacyMonitor extends Signals.EventEmitter {
         // Recordings are covered by the screen recorder state above.
         if (handle.is_recording)
             return;
-        this._shares.add(handle);
-        handle.connect('stopped', () => {
+        this._shares.set(handle, handle.connect('stopped', () => {
+            handle.disconnect(this._shares.get(handle));
             this._shares.delete(handle);
             this._set('screenShare', this._shares.size > 0);
-        });
+        }));
         this._set('screenShare', true);
     }
 
@@ -109,11 +110,13 @@ export class PrivacyMonitor extends Signals.EventEmitter {
     }
 
     destroy() {
+        // Tell no one about changes made while tearing down.
+        this.disconnectAll();
         this._mixerIds.forEach(id => this._mixer.disconnect(id));
         this._daemon.disconnect(this._daemonId);
         this._screenshotUI.disconnect(this._recordingId);
         if (this._remoteId)
             this._remote.disconnect(this._remoteId);
-        this.disconnectAll();
+        this._shares.forEach((id, handle) => handle.disconnect(id));
     }
 }

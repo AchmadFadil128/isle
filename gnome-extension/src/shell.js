@@ -14,8 +14,12 @@ const COMPACT_BAR_CLASS = 'isle-compact-bar';
 
 /**
  * Restyles the top bar around the island: paints it black so the island
- * blends in, and hides the clock (the island shows the time) while keeping
- * its calendar menu reachable.
+ * blends in, and hides the clock with its calendar menu, since the island
+ * shows the time and the notifications.
+ *
+ * Signals:
+ * - `height-changed` ()
+ * - `calendar-requested` (): the calendar shortcut (Super+V) was pressed
  */
 export class TopBar extends Signals.EventEmitter {
     constructor(settings) {
@@ -34,25 +38,22 @@ export class TopBar extends Signals.EventEmitter {
 
         this._heightChanged = Main.panel.connect('notify::height', () => this.emit('height-changed'));
 
-        this._menuChanged = this._dateMenu.menu.connect('open-state-changed', (_menu, open) =>
-            this.emit('calendar-toggled', open));
+        // The calendar shortcut opens the island instead, and the menu is
+        // closed again should anything else open it.
+        Main.panel.toggleCalendar = () => this.emit('calendar-requested');
+        this._menuChanged = this._dateMenu.menu.connect('open-state-changed', (menu, open) => {
+            if (open)
+                menu.close();
+        });
     }
 
     get height() {
         return Main.panel.height;
     }
 
-    get calendarActor() {
-        return this._dateMenu.menu.actor;
-    }
-
     /** Keeps the top bar's centre clear for the island. */
     reserveWidth(width) {
         this._dateMenu.set_width(Math.ceil(width));
-    }
-
-    toggleCalendar() {
-        this._dateMenu.menu.toggle();
     }
 
     _applyStyle() {
@@ -66,16 +67,18 @@ export class TopBar extends Signals.EventEmitter {
     }
 
     destroy() {
+        // Tell no one about changes made while tearing down.
+        this.disconnectAll();
         this._settingsChanged.forEach(id => this._settings.disconnect(id));
         Main.panel.disconnect(this._heightChanged);
         this._dateMenu.menu.disconnect(this._menuChanged);
+        delete Main.panel.toggleCalendar;
 
         Main.panel.set_style(this._originalPanelStyle);
         Main.panel.remove_style_class_name(COMPACT_BAR_CLASS);
         this._dateMenu.set_width(-1);
         this._dateMenu.opacity = 255;
         this._dateMenu.reactive = true;
-        this.disconnectAll();
     }
 }
 
@@ -87,17 +90,26 @@ export class OsdHook {
     constructor(handler) {
         const manager = Main.osdWindowManager;
         this._manager = manager;
-        this._original = manager.show;
-        const original = this._original;
-        manager.show = function (monitorIndex, icon, label, level, maxLevel) {
+        const original = manager.show;
+        // Set when another extension wrapped it before us.
+        this._ownOriginal = Object.hasOwn(manager, 'show') ? original : null;
+        this._show = function (monitorIndex, icon, label, level, maxLevel) {
             if (handler(icon, label, level, maxLevel))
                 return;
             original.call(this, monitorIndex, icon, label, level, maxLevel);
         };
+        manager.show = this._show;
     }
 
     destroy() {
-        this._manager.show = this._original;
+        // Only undo our own override; another extension may have wrapped it
+        // since. GNOME's `show` lives on the prototype.
+        if (this._manager.show !== this._show)
+            return;
+        if (this._ownOriginal)
+            this._manager.show = this._ownOriginal;
+        else
+            delete this._manager.show;
     }
 }
 
@@ -117,7 +129,8 @@ export class KeyboardWatcher extends Signals.EventEmitter {
     }
 
     destroy() {
-        this._keymap.disconnect(this._keymapChanged);
+        // Tell no one about changes made while tearing down.
         this.disconnectAll();
+        this._keymap.disconnect(this._keymapChanged);
     }
 }
