@@ -8,7 +8,9 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-UUID="isle@isle.github.io"
+UUID="isle@zickrian.github.io"
+# The extension's id before 0.1.0; an install under it is replaced.
+OLD_UUID="isle@isle.github.io"
 BINDIR="$HOME/.local/bin"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -57,6 +59,16 @@ install -Dm644 data/fonts/Inter-LICENSE.txt "$DATA/fonts/isle/Inter-LICENSE.txt"
 fc-cache "$DATA/fonts/isle" >/dev/null 2>&1 || true
 
 step "Installing the GNOME Shell extension"
+# Replace an install under the old id, so two islands never run at once.
+# Settings carry over: the settings schema did not change.
+if [ -d "$DATA/gnome-shell/extensions/$OLD_UUID" ]; then
+    gnome-extensions disable "$OLD_UUID" 2>/dev/null || true
+    rm -rf "$DATA/gnome-shell/extensions/$OLD_UUID"
+    current=$(gsettings get org.gnome.shell enabled-extensions)
+    updated=$(printf '%s' "$current" | sed -e "s/, '$OLD_UUID'//" -e "s/'$OLD_UUID', //" -e "s/\['$OLD_UUID'\]/@as []/")
+    [ "$updated" != "$current" ] && gsettings set org.gnome.shell enabled-extensions "$updated"
+    echo "Replaced the install under the old id $OLD_UUID."
+fi
 DEST="$DATA/gnome-shell/extensions/$UUID"
 rm -rf "$DEST"
 mkdir -p "$DEST"

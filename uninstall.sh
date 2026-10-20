@@ -4,7 +4,7 @@
 # folder to remove them.
 set -uo pipefail
 
-UUID="isle@isle.github.io"
+UUID="isle@zickrian.github.io"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
 

@@ -6,8 +6,13 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-20
+
+The first release.
+
 ### Added
 
+- A code of conduct (Contributor Covenant 2.1) and a security policy.
 - A README with a demo, screenshots, installation steps for Ubuntu and
   Fedora, usage, measured resource use, privacy notes and troubleshooting.
 - One look across every page, as on macOS: Isle's own solid icons for
@@ -89,6 +94,12 @@ All notable changes to Isle are listed here. The format follows
 - `isled` D-Bus service, install and uninstall scripts, product spec and
   D-Bus API docs.
 
+### Changed
+
+- The extension's id is `isle@zickrian.github.io`. `./install.sh` replaces
+  an install under the development id `isle@isle.github.io`, keeping its
+  settings.
+
 ### Fixed
 
 - Lyrics no longer say "Check your connection" when LRCLIB is only busy:
@@ -111,3 +122,6 @@ All notable changes to Isle are listed here. The format follows
 - Lyrics over a grey cover are readable: neutral covers now tint the island
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
+
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/zickrian/isle/releases/tag/v0.1.0

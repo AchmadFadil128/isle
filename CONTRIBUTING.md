@@ -1,6 +1,9 @@
 # Contributing to Isle
 
 Thanks for helping! This guide covers how to build, test and send changes.
+By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+Security problems go privately to the maintainer; see
+[SECURITY.md](SECURITY.md).
 
 ## Ground rules
 

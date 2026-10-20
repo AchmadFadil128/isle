@@ -73,7 +73,7 @@ On Fedora: `sudo dnf install git gcc pkgconf gtk4-devel`, then rustup as above.
 **2. Build and install Isle.**
 
 ```sh
-git clone https://github.com/<you>/isle.git
+git clone https://github.com/zickrian/isle.git
 cd isle
 ./install.sh
 ```
@@ -156,7 +156,7 @@ per song, both then cached.
 
 **The island does not appear after installing.** Log out and back in (on
 Wayland this is required once). Then check that it is enabled:
-`gnome-extensions info isle@isle.github.io`.
+`gnome-extensions info isle@zickrian.github.io`.
 
 **Music or lyrics do not show.** Check that the background service runs:
 `systemctl --user status isled`, and read its log with
@@ -216,7 +216,9 @@ else lives in Rust behind a D-Bus API.
 
 Bug reports, ideas and pull requests are welcome. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for how to build, test and send changes,
-and [CHANGELOG.md](CHANGELOG.md) for what changed.
+and [CHANGELOG.md](CHANGELOG.md) for what changed. Everyone taking part
+follows the [Code of Conduct](CODE_OF_CONDUCT.md); please report security
+problems privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
