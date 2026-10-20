@@ -39,10 +39,9 @@ export default class IslePreferences extends ExtensionPreferences {
 
         const alerts = new Adw.PreferencesGroup({title: 'Alerts'});
         alerts.add(switchRow(settings, 'replace-osd', 'Volume and brightness', 'Show them in the island instead of the centre of the screen'));
-        alerts.add(switchRow(settings, 'system-alerts', 'Charging, network and Bluetooth', 'Also Caps Lock and keyboard layout changes'));
+        alerts.add(switchRow(settings, 'system-alerts', 'Charging, network and Bluetooth', 'Also Caps Lock'));
         alerts.add(switchRow(settings, 'privacy-indicators', 'Privacy indicators', 'Dots when the camera, microphone or screen sharing is in use'));
         alerts.add(switchRow(settings, 'track-peek', 'New song', 'Briefly show the song when the track changes'));
-        alerts.add(switchRow(settings, 'compact-lyrics', 'Live lyrics', 'Show the current lyric line in the closed island'));
         alerts.add(switchRow(settings, 'chimes', 'Sounds', 'Chime when a timer ends or a task is due'));
         page.add(alerts);
         return page;

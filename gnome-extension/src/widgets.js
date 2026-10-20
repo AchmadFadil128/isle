@@ -291,8 +291,14 @@ class LevelBar extends St.Widget {
         });
         this._fill = new St.Widget({style_class: 'isle-level-fill'});
         this.add_child(this._fill);
+        this._width = width;
         this._level = 0;
         this.connect('notify::allocation', () => this._layout());
+    }
+
+    // Sized by its `width`; the fill inside never widens it.
+    vfunc_get_preferred_width(_forHeight) {
+        return [this._width, this._width];
     }
 
     /** Sets the level; on screen, the fill glides to it. */
@@ -361,6 +367,13 @@ export const Slider = GObject.registerClass({
 
     get value() {
         return this._value;
+    }
+
+    // The track inside is sized from this slider's allocation, so its width
+    // must not feed back into the slider's own size: it only ever takes the
+    // space its parent gives it.
+    vfunc_get_preferred_width(_forHeight) {
+        return [0, 0];
     }
 
     /** Sets the value from outside; ignored while the user is dragging. */

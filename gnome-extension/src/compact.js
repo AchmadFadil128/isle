@@ -7,7 +7,6 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
-import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as Format from './format.js';
@@ -16,7 +15,6 @@ import {Art, Bars, Eyes, PrivacyDots, RecordingDot, Ring, icon} from './widgets.
 
 const WIDTH_CLOCK = 164;
 const WIDTH_ACTIVITIES = 256;
-const WIDTH_LYRICS = 420;
 /** Extra width while privacy dots are shown. */
 const WIDTH_PRIVACY = 22;
 /** How often the focus ring is redrawn; it moves too slowly to need more. */
@@ -52,16 +50,12 @@ export const CompactView = GObject.registerClass({
 
         const center = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true});
         this._clock = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
-        // Fills the centre so long lines are cut off with an ellipsis.
-        this._lyric = new St.Label({style_class: 'isle-compact-lyric', x_expand: true, y_align: Clutter.ActorAlign.CENTER, visible: false});
-        this._lyric.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this._eyes = new Eyes();
         this._eyes.x_align = Clutter.ActorAlign.CENTER;
         this._eyes.visible = false;
         // How long the screen has been recording, in place of the clock.
         this._elapsed = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, visible: false});
         center.add_child(this._clock);
-        center.add_child(this._lyric);
         center.add_child(this._eyes);
         center.add_child(this._elapsed);
 
@@ -76,11 +70,10 @@ export const CompactView = GObject.registerClass({
         row.add_child(this._privacyDots);
 
         this._daemonChanged = daemon.connect('changed', (_daemon, key) => {
-            if (['nowPlaying', 'lyrics', 'pomodoro'].includes(key))
+            if (['nowPlaying', 'pomodoro'].includes(key))
                 this._refresh();
         });
-        this._settingsChanged = ['compact-lyrics', 'privacy-indicators'].map(key =>
-            settings.connect(`changed::${key}`, () => this._refresh()));
+        this._settingsChanged = settings.connect('changed::privacy-indicators', () => this._refresh());
         this._privacyChanged = privacy.connect('changed', () => this._refresh());
         // Music bars only dance while this view is on screen.
         this.connect('notify::mapped', () => this._syncBars());
@@ -91,8 +84,6 @@ export const CompactView = GObject.registerClass({
     /** The width the island should have to fit what is shown. */
     get preferredWidth() {
         const privacy = this._showingPrivacy() ? WIDTH_PRIVACY : 0;
-        if (this._showingLyrics())
-            return WIDTH_LYRICS + privacy;
         return (this._left.child || this._right.child ? WIDTH_ACTIVITIES : WIDTH_CLOCK) + privacy;
     }
 
@@ -130,12 +121,6 @@ export const CompactView = GObject.registerClass({
             this._eyesShown = false;
             this._refresh();
         });
-    }
-
-    _showingLyrics() {
-        const {nowPlaying, lyrics} = this._daemon.state;
-        return this._settings.get_boolean('compact-lyrics') &&
-            Playback.isPlaying(nowPlaying) && Playback.hasSyncedLyrics(lyrics);
     }
 
     _refresh() {
@@ -179,14 +164,8 @@ export const CompactView = GObject.registerClass({
             this._tickRecording();
         } else {
             this._cancel('recording');
-            if (!this._eyesShown) {
-                const lyrics = this._showingLyrics();
-                this._crossfade(lyrics ? this._lyric : this._clock);
-                if (lyrics)
-                    this._tickLyric();
-                else
-                    this._cancel('lyric');
-            }
+            if (!this._eyesShown)
+                this._crossfade(this._clock);
         }
 
         if (this.preferredWidth !== widthBefore)
@@ -195,7 +174,7 @@ export const CompactView = GObject.registerClass({
 
     /** Fades `actor` in and the other centre actors out. */
     _crossfade(actor) {
-        for (const other of [this._clock, this._lyric, this._eyes, this._elapsed]) {
+        for (const other of [this._clock, this._eyes, this._elapsed]) {
             if (other === actor) {
                 if (!other.visible) {
                     other.opacity = 0;
@@ -239,21 +218,6 @@ export const CompactView = GObject.registerClass({
         this._later('clock', 60000 - msIntoMinute + 20, () => this._tickClock());
     }
 
-    /** Shows the current lyric line, then sleeps until the next one starts. */
-    _tickLyric() {
-        const {nowPlaying, lyrics} = this._daemon.state;
-        const lines = lyrics.lines;
-        const index = Playback.lineIndexAt(lines, Playback.positionMs(nowPlaying));
-        const text = index >= 0 ? lines[index].text : '';
-        // Instrumental gaps show a note rather than an empty island.
-        this._lyric.text = text || '♪';
-        const wait = Playback.msUntilLine(nowPlaying, lines, index);
-        if (wait === null)
-            this._cancel('lyric');
-        else
-            this._later('lyric', wait + 30, () => this._tickLyric());
-    }
-
     _later(name, ms, callback) {
         this._cancel(name);
         this._timeouts[name] = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Math.max(0, Math.round(ms)), () => {
@@ -274,7 +238,7 @@ export const CompactView = GObject.registerClass({
         for (const name of Object.keys(this._timeouts))
             this._cancel(name);
         this._daemon.disconnect(this._daemonChanged);
-        this._settingsChanged.forEach(id => this._settings.disconnect(id));
+        this._settings.disconnect(this._settingsChanged);
         this._privacy.disconnect(this._privacyChanged);
         // Slots may hold actors that are not currently children.
         for (const actor of [this._ring, this._art, this._dot, this._moon, this._recordingDot, this._bars]) {

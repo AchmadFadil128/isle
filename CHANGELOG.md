@@ -15,8 +15,8 @@ All notable changes to Isle are listed here. The format follows
 - Pomodoro focus timer with phase chips.
 - Tasks with quick-add, due reminders and a daily reset of finished tasks.
 - File shelf with drag and drop through the `isle-shelf` helper.
-- Alerts for charging, battery, Wi-Fi, Bluetooth, volume, brightness and
-  keyboard changes.
+- Alerts for charging, battery, losing the connection, Bluetooth, volume,
+  brightness and Caps Lock.
 - Sleepy eyes when idle.
 - Privacy dots for the camera, microphone and screen sharing; a screen
   recording timer with a stop button.

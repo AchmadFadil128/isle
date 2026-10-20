@@ -25,12 +25,13 @@ cargo build -p isle-shelf       # needs libgtk-4-dev
 
 ## Checks
 
-Run these before sending a pull request (CI runs the same):
+Run these before sending a pull request (CI runs the same). They build
+`isle-shelf` too, so they need the GTK 4 development files (`libgtk-4-dev`):
 
 ```sh
 cargo fmt --all
-cargo clippy -p isle-core -p isle-daemon -p isle-shelf --all-targets -- -D warnings
-cargo test --workspace --exclude isle-island
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
 for f in gnome-extension/*.js gnome-extension/src/*.js gnome-extension/src/pages/*.js; do
     node --experimental-default-type=module --check "$f"
 done

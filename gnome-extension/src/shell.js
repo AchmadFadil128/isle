@@ -7,7 +7,6 @@ import Clutter from 'gi://Clutter';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
-import {getInputSourceManager} from 'resource:///org/gnome/shell/ui/status/keyboard.js';
 
 const BLACK_BAR_STYLE = 'background-color: #000000;';
 /** Style class making the top bar slimmer; see stylesheet.css. */
@@ -102,7 +101,7 @@ export class OsdHook {
     }
 }
 
-/** Emits `caps-lock` (on) and `input-source` (source) when they change. */
+/** Emits `caps-lock` (on) when Caps Lock is turned on or off. */
 export class KeyboardWatcher extends Signals.EventEmitter {
     constructor() {
         super();
@@ -115,18 +114,10 @@ export class KeyboardWatcher extends Signals.EventEmitter {
                 this.emit('caps-lock', capsLock);
             }
         });
-
-        this._sources = getInputSourceManager();
-        this._sourceChanged = this._sources.connect('current-source-changed', (manager, previous) => {
-            // No previous source means the list was just (re)loaded, not switched.
-            if (previous && manager.currentSource)
-                this.emit('input-source', manager.currentSource);
-        });
     }
 
     destroy() {
         this._keymap.disconnect(this._keymapChanged);
-        this._sources.disconnect(this._sourceChanged);
         this.disconnectAll();
     }
 }

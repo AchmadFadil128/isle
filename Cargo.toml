@@ -3,10 +3,9 @@ resolver = "3"
 members = [
     "crates/isle-core",
     "crates/isle-daemon",
-    "crates/isle-island",
     "crates/isle-shelf",
 ]
-# The GTK crates (isle-island, isle-shelf) need the GTK 4 development files,
+# isle-shelf needs the GTK 4 development files,
 # so they are only built when asked for: `cargo build -p isle-shelf`.
 default-members = ["crates/isle-core", "crates/isle-daemon"]
 
@@ -26,7 +25,6 @@ env_logger = "0.11"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 gdk4-x11 = "0.11"
 gtk4 = { version = "0.11", features = ["v4_12"] }
-gtk4-layer-shell = "0.8"
 inotify = { version = "0.11", default-features = false, features = ["stream"] }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }

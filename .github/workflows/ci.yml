@@ -19,10 +19,9 @@ jobs:
         run: cargo fmt --all --check
       - name: Lint
         run: |
-          cargo clippy -p isle-core -p isle-daemon -p isle-shelf --all-targets -- -D warnings
-          cargo clippy -p isle-island --no-default-features --features x11 -- -D warnings
+          cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
-        run: cargo test --workspace --exclude isle-island
+        run: cargo test --workspace
 
   extension:
     runs-on: ubuntu-24.04

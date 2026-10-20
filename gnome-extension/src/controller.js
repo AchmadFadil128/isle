@@ -92,7 +92,6 @@ export class Controller {
         this._connectSignals();
         this._keyboard = new KeyboardWatcher();
         this._keyboard.connect('caps-lock', (_watcher, on) => this._postSystemAlert(Alerts.capsLock(on)));
-        this._keyboard.connect('input-source', (_watcher, source) => this._postSystemAlert(Alerts.inputSource(source)));
         this._osd = new OsdHook((icon, label, level, maxLevel) => this._showOsd(icon, label, level, maxLevel));
         this._armIdleWatch();
 
@@ -351,9 +350,12 @@ export class Controller {
                 return Clutter.EVENT_PROPAGATE;
             });
         } else if (!wanted && this._keyboardGrab) {
-            global.stage.disconnect(this._stageCapture);
-            Main.popModal(this._keyboardGrab);
+            // Clear the grab first: releasing it moves key focus, which can
+            // make a text field ask to release it again.
+            const grab = this._keyboardGrab;
             this._keyboardGrab = null;
+            global.stage.disconnect(this._stageCapture);
+            Main.popModal(grab);
             if (!this._island.hover)
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
         }

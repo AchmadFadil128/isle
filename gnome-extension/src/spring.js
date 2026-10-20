@@ -3,8 +3,6 @@
 // Damped springs drive every island animation. Unlike fixed-duration
 // easing, a spring can be retargeted mid-flight and keeps its velocity, so
 // the island never jolts when the pointer moves in and out quickly.
-//
-// This mirrors crates/isle-core/src/spring.rs.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';

@@ -57,18 +57,6 @@ export function capsLock(on) {
     };
 }
 
-export function inputSource(source) {
-    return {
-        key: 'keyboard',
-        priority: 'instant',
-        icon: 'input-keyboard-symbolic',
-        title: source.displayName,
-        subtitle: 'Keyboard layout',
-        value: source.shortName?.toUpperCase(),
-        duration: OSD_DURATION,
-    };
-}
-
 /** A `SystemEvent` from the daemon, or null if it is not worth showing. */
 export function system(event) {
     switch (event.kind) {
@@ -107,27 +95,19 @@ export function system(event) {
             tone: 'good',
             duration: STATUS_DURATION,
         };
-    case 'network': {
-        if (!event.connected) {
-            return {
-                key: 'network',
-                icon: 'network-wireless-offline-symbolic',
-                title: 'Offline',
-                subtitle: 'The network connection was lost',
-                tone: 'bad',
-                duration: STATUS_DURATION,
-            };
-        }
-        const wifi = event.connection === 'wifi';
+    case 'network':
+        // Only losing the connection is worth a pop-up; connecting is
+        // expected (e.g. after every wake from sleep).
+        if (event.connected)
+            return null;
         return {
             key: 'network',
-            icon: wifi ? 'network-wireless-signal-excellent-symbolic' : 'network-wired-symbolic',
-            title: wifi ? 'Wi-Fi connected' : 'Connected',
-            subtitle: event.name,
-            tone: 'good',
+            icon: 'network-wireless-offline-symbolic',
+            title: 'Offline',
+            subtitle: 'The network connection was lost',
+            tone: 'bad',
             duration: STATUS_DURATION,
         };
-    }
     case 'bluetooth': {
         const {device} = event;
         const battery = event.connected ? device.battery ?? null : null;
@@ -200,6 +180,10 @@ export function track(nowPlaying) {
 
 /** A GNOME notification, shown in place of GNOME's own banner. */
 export function notification(item, urgent) {
+    // The app or GNOME may withdraw the notification while it is shown;
+    // clicking the alert afterwards must not touch the destroyed object.
+    let withdrawn = false;
+    item.connect('destroy', () => (withdrawn = true));
     const body = plainBody(item).replace(/\s+/g, ' ').trim();
     const title = item.title || item.source?.title || '';
     return {
@@ -212,7 +196,10 @@ export function notification(item, urgent) {
         priority: urgent ? 'instant' : undefined,
         duration: urgent ? REMINDER_DURATION : NOTIFICATION_DURATION,
         page: 'notifications',
-        onActivate: () => item.activate(),
+        onActivate: () => {
+            if (!withdrawn)
+                item.activate();
+        },
     };
 }
 

@@ -17,8 +17,8 @@ going on, and opens on hover:
 - **Privacy dots** when the camera, microphone or screen sharing is in use,
   and a timer with a stop button while the screen records.
 - **Volume and output** switching right from the music page.
-- **Alerts**: charging, low battery, Wi-Fi, Bluetooth earbuds with their
-  battery, volume and brightness, Caps Lock, keyboard layout, a new song.
+- **Alerts**: charging, low battery, losing the connection, Bluetooth earbuds
+  with their battery, volume and brightness, Caps Lock.
 - **Sleepy eyes** when you step away.
 
 Hover to open; scroll, swipe or use the arrows to change page. Middle-click
@@ -78,10 +78,9 @@ Isle is built to run all day without being noticed:
 
 | Path | Contents |
 |---|---|
-| `crates/isle-core` | Platform-independent logic: springs, LRC parsing, track-title clean-up, Pomodoro, tasks, shelf. Unit tested. |
+| `crates/isle-core` | Platform-independent logic: LRC parsing, track-title clean-up, Pomodoro, tasks, shelf. Unit tested. |
 | `crates/isle-daemon` | `isled`, the D-Bus service. |
 | `crates/isle-shelf` | `isle-shelf`, the shelf's drag-and-drop window. |
-| `crates/isle-island` | Experimental GTK 4 island for desktops with wlr-layer-shell (KDE Plasma, Hyprland, Sway…) or X11. |
 | `gnome-extension` | The GNOME Shell extension. |
 | `data` | systemd and D-Bus activation files. |
 | `docs/product-spec.md` | How the island looks and behaves: sizes, motion, flows, pages, alerts. |

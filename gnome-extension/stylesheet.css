@@ -127,7 +127,6 @@
 .isle-compact-slot { width: 24px; }
 
 .isle-compact-clock { font-size: 17px; font-weight: 700; }
-.isle-compact-lyric { font-size: 14px; font-weight: 600; text-align: center; }
 
 .isle-unseen-dot {
   width: 6px;
@@ -335,7 +334,7 @@
 /* ── Tasks ────────────────────────────────────────────── */
 
 .isle-tasks { spacing: 22px; }
-.isle-tasks-side { width: 196px; }
+.isle-tasks-side { width: 224px; }
 .isle-tasks-count { font-size: 38px; font-weight: 800; }
 .isle-tasks-caption { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
 .isle-tasks-buttons { spacing: 8px; padding-top: 12px; }
@@ -366,6 +365,8 @@
 .isle-task-check:checked { background-color: #34d67a; border-color: #34d67a; color: #000000; }
 
 .isle-task-title { font-size: 14px; }
+.isle-task-title.editable:hover { color: #5aabff; }
+.isle-task-entry { font-size: 14px; padding: 2px 10px; }
 .isle-task.done .isle-task-title { color: rgba(255, 255, 255, 0.55); text-decoration: line-through; }
 
 .isle-task-due {

@@ -26,6 +26,8 @@ class TasksPage extends Page {
         });
         this.name = 'tasks';
         this._editing = false;
+        /** The task being renamed, if any; the list holds still meanwhile. */
+        this._renaming = null;
 
         this.add_child(this._buildSummary());
         this.add_child(this._buildList());
@@ -133,6 +135,8 @@ class TasksPage extends Page {
     }
 
     _update() {
+        if (this._renaming)
+            return;
         const tasks = [...(this.daemon.state.tasks ?? [])];
         // Open tasks first, soonest due first; finished ones at the bottom.
         tasks.sort((a, b) =>
@@ -170,6 +174,16 @@ class TasksPage extends Page {
         title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         row.add_child(check);
         row.add_child(title);
+        if (this._editing) {
+            // In edit mode, click a title to rename the task in place.
+            title.reactive = true;
+            title.track_hover = true;
+            title.add_style_class_name('editable');
+            title.connect('button-release-event', () => {
+                this._startRenaming(row, title, task);
+                return Clutter.EVENT_STOP;
+            });
+        }
 
         if (task.due_at_ms && !task.done) {
             const overdue = task.due_at_ms < Format.nowMs();
@@ -180,6 +194,37 @@ class TasksPage extends Page {
                 () => this.daemon.call('todo', 'Remove', task.id), {size: 11, accessibleName: 'Remove task'}));
         }
         return row;
+    }
+
+    _startRenaming(row, title, task) {
+        const entry = new St.Entry({style_class: 'isle-entry isle-task-entry', text: task.title, x_expand: true, can_focus: true});
+        row.replace_child(title, entry);
+        this._renaming = task.id;
+        this.emit('request-keyboard', true);
+        entry.grab_key_focus();
+        entry.clutter_text.set_selection(0, -1);
+
+        let finished = false;
+        const finish = save => {
+            if (finished)
+                return;
+            finished = true;
+            const text = entry.text.trim();
+            this._renaming = null;
+            if (save && text && text !== task.title)
+                this.daemon.call('todo', 'Rename', task.id, text);
+            this.emit('request-keyboard', false);
+            this._update();
+        };
+        entry.clutter_text.connect('activate', () => finish(true));
+        // Clicking elsewhere keeps the new name, as in Files.
+        entry.clutter_text.connect('key-focus-out', () => finish(true));
+        entry.clutter_text.connect('key-press-event', (_text, event) => {
+            if (event.get_key_symbol() !== Clutter.KEY_Escape)
+                return Clutter.EVENT_PROPAGATE;
+            finish(false);
+            return Clutter.EVENT_STOP;
+        });
     }
 
     onDeactivate() {

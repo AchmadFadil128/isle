@@ -23,15 +23,11 @@
     </key>
     <key name="system-alerts" type="b">
       <default>true</default>
-      <summary>Show battery, network, Bluetooth and keyboard alerts</summary>
+      <summary>Show battery, network, Bluetooth and Caps Lock alerts</summary>
     </key>
     <key name="track-peek" type="b">
-      <default>true</default>
-      <summary>Briefly show the new song when the track changes</summary>
-    </key>
-    <key name="compact-lyrics" type="b">
       <default>false</default>
-      <summary>Show the current lyric line in the compact island</summary>
+      <summary>Briefly show the new song when the track changes</summary>
     </key>
     <key name="sleepy-eyes" type="b">
       <default>true</default>

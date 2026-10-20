@@ -12,14 +12,14 @@ disagrees with this document is a bug in one or the other; fix both together.
 | focus in blocks | run a Pomodoro timer that stays visible while closed and chimes at the end |
 | not forget small tasks | add tasks in one line (`Call mum @18:30`), get reminded, tick them off; tasks survive reboots and power cuts |
 | move files between apps | park files on the island and drag them out later |
-| know when something changes | show short, consistent alerts: charging, battery, Wi-Fi, earbuds, volume, brightness, keyboard, new song |
+| know when something changes | show short, consistent alerts: charging, battery, losing the connection, earbuds, volume, brightness, Caps Lock |
 | still get my notifications now that the clock is gone | show GNOME's notifications in the island, keep them in a list, and offer Do Not Disturb right there |
 | know when I am being watched or recorded | show privacy dots for the camera, microphone and screen sharing, and a timer while the screen records |
 | control sound without opening Quick Settings | change the volume and the output device from the music page |
 | keep my laptop fast and cool | never poll; animate only while something moves |
 
 Out of scope for v1: water reminders (removed), notification banners in the
-island, other desktops than GNOME 46 (the GTK frontend is experimental).
+island, and desktops other than GNOME.
 
 ## 2. Presentations
 
@@ -29,7 +29,7 @@ sizes are logical pixels.
 
 | Presentation | Size (w × h) | Corner | Shoulder | Content |
 |---|---|---|---|---|
-| Compact | 164 × (P + 30); 256 with an activity; 420 with live lyrics | 16 | 10 | Clock, or lyric line, or eyes; activity slots left/right |
+| Compact | 164 × (P + 30); 256 with an activity | 16 | 10 | Clock, or lyric line, or eyes; activity slots left/right |
 | Peek (alert) | 380 × (P + 56) | 22 | 13 | Badge · title/subtitle · value, level bar or button |
 | Expanded | 600 × (P + 170); 720 for lyrics | 32 | 22 | Header row · page · dots |
 
@@ -104,8 +104,7 @@ the neighbouring page (hidden at the ends); dots show where you are.
   island is on screen.
 - Far right: privacy dots, as on iPhone: green camera, orange microphone,
   blue screen sharing (the island widens by 22 px while any is shown).
-- Centre: the clock (follows GNOME's 12/24-hour setting); or the current
-  lyric line if *Live lyrics* is on and synced lyrics exist; or the eyes.
+- Centre: the clock (follows GNOME's 12/24-hour setting), or the eyes.
 - Idle: after *Idle after* seconds (90) without input and nothing playing,
   the eyes open, blink twice and doze off. Any input wakes them, then the
   clock returns after 1.2 s.
@@ -163,7 +162,8 @@ Without the helper: read-only tiles and an install hint.
 "Task Done Today", **Add Task** and **Edit Task**. Right: the list, open
 tasks first by due time, then finished ones as green struck-through pills.
 Add Task turns the left side into a text field (Enter adds and stays open,
-Esc closes). Edit Task shows × on each task. Finished tasks are cleared at
+Esc closes). Edit Task shows × on each task, and a task's title can be
+clicked to rename it in place (Enter or clicking away saves, Esc cancels). Finished tasks are cleared at
 midnight.
 
 ## 6. Alerts
@@ -178,10 +178,10 @@ One at a time. *Instant* alerts replace whatever is showing; the rest queue
 | Low battery (20, 10, 5%) | red ring | Low Battery / Plug in your charger soon | 10% | 8 s |
 | Fully charged | green ring | Fully Charged | 100% | 2.6 s |
 | Earbuds connected | ring + device icon | AirBuds Pro / Connected | 70% | 2.6 s |
-| Wi-Fi | icon | Wi-Fi connected / network name; Offline | – | 2.6 s |
+| Connection lost | Wi-Fi offline icon | Offline / The network connection was lost | – | 2.6 s |
 | Volume, brightness (instant) | icon | Volume / device | level bar + %, gliding to each new level; pressing on at 0% or 100% stretches the island like a rubber band | 1.5 s |
-| Caps Lock, layout (instant) | ⇪ / keyboard | Caps Lock on; layout name | code | 1.5 s |
-| New song | cover | title / artist | – | 2.6 s |
+| Caps Lock (instant) | ⇪ | Caps Lock on / off | – | 1.5 s |
+| New song (off by default) | cover | title / artist | – | 2.6 s |
 | Timer phase ends (+ chime) | timer | Focus session done… | Start break | 8 s |
 | Task due (+ chime) | tasks | task title / Due now | Done | 8 s |
 | Screen recording started | red record icon | Recording screen | Stop | 2.6 s |

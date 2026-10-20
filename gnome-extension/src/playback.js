@@ -30,10 +30,6 @@ export function lengthMs(nowPlaying) {
     return (nowPlaying?.length_us ?? 0) / 1000;
 }
 
-export function hasSyncedLyrics(lyrics) {
-    return lyrics?.status === 'synced' && lyrics.lines.length > 0;
-}
-
 /** Index of the line being sung at `position`, or -1 before the first line. */
 export function lineIndexAt(lines, position) {
     let low = 0;
