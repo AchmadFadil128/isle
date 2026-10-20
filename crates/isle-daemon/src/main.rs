@@ -32,6 +32,14 @@ const OBJECT_PATH: &str = "/io/github/isle/Daemon";
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // The clipboard history lives here; keep it from other users, including
+    // folders made by older versions.
+    if let Err(err) = store::create_private_dir(&store::data_dir()) {
+        warn!(
+            "could not make {} private: {err}",
+            store::data_dir().display()
+        );
+    }
 
     let session = connection::Builder::session()?
         .serve_at(OBJECT_PATH, MediaService::default())?
