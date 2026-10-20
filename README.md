@@ -50,6 +50,11 @@ Everything is installed for your user only; no root is needed. On Wayland,
 log out and back in once so GNOME Shell loads the extension. Settings are in
 the Extensions app → Isle.
 
+The installer gives every desktop the same look: a slim black top bar the
+island blends into. It also turns off what would get in the way: Blur my
+Shell's top bar blur (the rest of its blur stays) and other extensions that
+take the same place in the top bar.
+
 `./uninstall.sh` removes it again. Your tasks, shelf, clipboard history and
 timer settings stay in `~/.local/share/isle` until you delete that folder.
 
@@ -99,8 +104,8 @@ issues.
 
 ## Notes
 
-- The top bar is painted black so the island blends into it; this can be
-  turned off in the settings.
+- The top bar is painted black so the island blends into it, and stays black
+  when other extensions restyle it; this can be turned off in the settings.
 - Lyrics come from LRCLIB, a free community database; songs it does not know
   show "No lyrics found".
 

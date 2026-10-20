@@ -39,6 +39,12 @@ alerts hang fully below the bar with their content in the hanging part, so
 their corners and shoulders are always fully round; the open island's header
 row sits inside the bar itself.
 
+The black is part of the design, so the installer sets it (and the slim
+bar) on every install, turns off Blur my Shell's top bar blur, and turns
+off extensions that take the island's place. Isle adds its black to the
+bar's own style and puts it back if another extension replaces that style,
+leaving the other extension's rules in place.
+
 ### State details
 
 Every state change shows in the icon, not only in colour, so it reads at a

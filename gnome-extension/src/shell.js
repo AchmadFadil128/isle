@@ -8,6 +8,12 @@ import Clutter from 'gi://Clutter';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
+/**
+ * Isle's rule for a black top bar. It is added to whatever inline style the
+ * bar has, so other extensions keep theirs; and added back whenever one of
+ * them replaces the style (Blur my Shell does, which would otherwise turn
+ * the bar see-through around the island).
+ */
 const BLACK_BAR_STYLE = 'background-color: #000000;';
 /** Style class making the top bar slimmer; see stylesheet.css. */
 const COMPACT_BAR_CLASS = 'isle-compact-bar';
@@ -26,7 +32,6 @@ export class TopBar extends Signals.EventEmitter {
         super();
         this._settings = settings;
         this._dateMenu = Main.panel.statusArea.dateMenu;
-        this._originalPanelStyle = Main.panel.get_style();
         this._dateMenu.opacity = 0;
         this._dateMenu.reactive = false;
 
@@ -35,6 +40,7 @@ export class TopBar extends Signals.EventEmitter {
             settings.connect('changed::compact-top-bar', () => this._applyStyle()),
         ];
         this._applyStyle();
+        this._styleChanged = Main.panel.connect('notify::style', () => this._syncBlack());
 
         this._heightChanged = Main.panel.connect('notify::height', () => this.emit('height-changed'));
 
@@ -57,8 +63,7 @@ export class TopBar extends Signals.EventEmitter {
     }
 
     _applyStyle() {
-        const black = this._settings.get_boolean('black-top-bar');
-        Main.panel.set_style(black ? BLACK_BAR_STYLE : this._originalPanelStyle);
+        this._syncBlack();
         // The bar's height changes with this; `height-changed` re-lays out the island.
         if (this._settings.get_boolean('compact-top-bar'))
             Main.panel.add_style_class_name(COMPACT_BAR_CLASS);
@@ -66,15 +71,26 @@ export class TopBar extends Signals.EventEmitter {
             Main.panel.remove_style_class_name(COMPACT_BAR_CLASS);
     }
 
+    /** Adds or removes Isle's black rule, leaving the rest of the style alone. */
+    _syncBlack(black = this._settings.get_boolean('black-top-bar')) {
+        const style = Main.panel.get_style() ?? '';
+        const others = style.replace(BLACK_BAR_STYLE, '').trim();
+        const wanted = black ? `${others} ${BLACK_BAR_STYLE}`.trim() : others;
+        // Setting it notifies again, and then nothing changes.
+        if (wanted !== style)
+            Main.panel.set_style(wanted || null);
+    }
+
     destroy() {
         // Tell no one about changes made while tearing down.
         this.disconnectAll();
         this._settingsChanged.forEach(id => this._settings.disconnect(id));
         Main.panel.disconnect(this._heightChanged);
+        Main.panel.disconnect(this._styleChanged);
         this._dateMenu.menu.disconnect(this._menuChanged);
         delete Main.panel.toggleCalendar;
 
-        Main.panel.set_style(this._originalPanelStyle);
+        this._syncBlack(false);
         Main.panel.remove_style_class_name(COMPACT_BAR_CLASS);
         this._dateMenu.set_width(-1);
         this._dateMenu.opacity = 255;

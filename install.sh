@@ -74,6 +74,38 @@ if ! gnome-extensions enable "$UUID" 2>/dev/null; then
     esac
 fi
 
+step "Setting up the top bar"
+# Isle's look is the same everywhere: a slim black top bar the island
+# blends into.
+gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle black-top-bar true
+gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle compact-top-bar true
+
+# Settings of another extension, from its user or system install.
+other_settings() {
+    local uuid="$1"; shift
+    local dir
+    for dir in "$DATA/gnome-shell/extensions/$uuid/schemas" "/usr/share/gnome-shell/extensions/$uuid/schemas"; do
+        if [ -d "$dir" ]; then
+            gsettings --schemadir "$dir" "$@" 2>/dev/null
+            return
+        fi
+    done
+    return 1
+}
+# Blur my Shell's top bar blur would only be drawn, unseen, under the
+# black bar.
+if [ "$(other_settings blur-my-shell@aunetx get org.gnome.shell.extensions.blur-my-shell.panel blur)" = "true" ]; then
+    other_settings blur-my-shell@aunetx set org.gnome.shell.extensions.blur-my-shell.panel blur false
+    echo "Turned off Blur my Shell's top bar blur; the rest of its blur is unchanged."
+fi
+# Extensions that take the same place in the top bar.
+for uuid in dynamic-island@bjagetic hidetopbar@mathieu.bidon.ca; do
+    if gnome-extensions info "$uuid" 2>/dev/null | grep -q "Enabled: Yes"; then
+        gnome-extensions disable "$uuid"
+        echo "Turned off $uuid, which would cover the island."
+    fi
+done
+
 step "Done"
 if [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
     echo "Log out and back in once so GNOME Shell loads the extension."
