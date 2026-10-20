@@ -75,10 +75,11 @@ if ! gnome-extensions enable "$UUID" 2>/dev/null; then
 fi
 
 step "Setting up the top bar"
-# Isle's look is the same everywhere: a slim black top bar the island
-# blends into.
-gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle black-top-bar true
+# Isle's look is the same everywhere: a slim glass top bar with the island
+# hanging from the top of the screen like a MacBook's notch.
+gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle top-bar-style glass
 gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle compact-top-bar true
+gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle island-in-top-bar true
 
 # Settings of another extension, from its user or system install.
 other_settings() {
@@ -92,8 +93,8 @@ other_settings() {
     done
     return 1
 }
-# Blur my Shell's top bar blur would only be drawn, unseen, under the
-# black bar.
+# Blur my Shell's top bar blur also darkens it, and the glass bar has no
+# colour of its own.
 if [ "$(other_settings blur-my-shell@aunetx get org.gnome.shell.extensions.blur-my-shell.panel blur)" = "true" ]; then
     other_settings blur-my-shell@aunetx set org.gnome.shell.extensions.blur-my-shell.panel blur false
     echo "Turned off Blur my Shell's top bar blur; the rest of its blur is unchanged."

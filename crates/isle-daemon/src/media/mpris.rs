@@ -420,13 +420,13 @@ impl Watcher {
     }
 
     /// Shows a lookup's result, and schedules another try if it failed
-    /// (e.g. while offline). A track that simply has no lyrics is not retried
-    /// until it next starts.
+    /// (e.g. while offline, or while LRCLIB is busy). A track that simply
+    /// has no lyrics is not retried until it next starts.
     async fn lyrics_done(&mut self, lookup: u64, lyrics: Lyrics) {
         if lookup != self.lyrics_lookup {
             return;
         }
-        if lyrics.status == LyricsStatus::Error {
+        if lyrics.status.is_failure() {
             let delay = LYRICS_RETRY
                 .saturating_mul(1 << self.lyrics_failures.min(8))
                 .min(LYRICS_RETRY_MAX);

@@ -26,7 +26,7 @@ going on, and opens on hover:
 - **Alerts**: charging, low battery, losing the connection, Bluetooth earbuds
   with their battery, volume and brightness, Caps Lock.
 
-Hover to open; scroll, swipe or use the arrows to change page. Middle-click
+Hover to open; pick a page from the tabs at the top, or swipe sideways. Middle-click
 plays or pauses, right-click brings the music player forward, and Super+V
 opens the clipboard history.
 
@@ -50,10 +50,13 @@ Everything is installed for your user only; no root is needed. On Wayland,
 log out and back in once so GNOME Shell loads the extension. Settings are in
 the Extensions app → Isle.
 
-The installer gives every desktop the same look: a slim black top bar the
-island blends into. It also turns off what would get in the way: Blur my
-Shell's top bar blur (the rest of its blur stays) and other extensions that
-take the same place in the top bar.
+The installer gives every desktop the same look: a slim top bar with no
+colour of its own and the island hanging from the top of the screen as a
+black notch, like on a MacBook. The closed island sits inside the bar, so it
+never covers your windows; only alerts and the open island reach below it
+while they are shown. It also turns off what would get in the way: Blur my
+Shell's top bar blur, which darkens the bar (the rest of its blur stays), and
+other extensions that take the same place in the top bar.
 
 `./uninstall.sh` removes it again. Your tasks, shelf, clipboard history and
 timer settings stay in `~/.local/share/isle` until you delete that folder.
@@ -104,8 +107,9 @@ issues.
 
 ## Notes
 
-- The top bar is painted black so the island blends into it, and stays black
-  when other extensions restyle it; this can be turned off in the settings.
+- The top bar is glass by default; in the settings it can be black, so the
+  island blends into it, or keep the theme's colour. Isle's colour stays when
+  other extensions restyle the bar.
 - Lyrics come from LRCLIB, a free community database; songs it does not know
   show "No lyrics found".
 

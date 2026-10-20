@@ -56,9 +56,17 @@ export default class IslePreferences extends ExtensionPreferences {
         const page = new Adw.PreferencesPage({title: 'Island', icon_name: 'preferences-desktop-appearance-symbolic'});
 
         const look = new Adw.PreferencesGroup({title: 'Appearance'});
-        look.add(switchRow(settings, 'black-top-bar', 'Black top bar', 'Blend the top bar into the island'));
+        look.add(choiceRow(settings, 'top-bar-style', 'Top bar', 'Glass shows the island as a notch, like on a Mac', [
+            ['glass', 'Glass'],
+            ['black', 'Black'],
+            ['theme', 'Theme'],
+        ]));
         look.add(switchRow(settings, 'compact-top-bar', 'Compact top bar', 'A slimmer top bar that frames the island like a bezel'));
-        look.add(spinRow(settings, 'notch-depth', 'Island height', 'How far the closed island hangs below the top bar, in pixels', 24, 40));
+        look.add(switchRow(settings, 'island-in-top-bar', 'Island inside the top bar',
+            'Like a MacBook’s notch: the closed island never covers windows'));
+        const depth = spinRow(settings, 'notch-depth', 'Island height', 'How far the closed island hangs below the top bar, in pixels', 24, 40);
+        settings.bind('island-in-top-bar', depth, 'sensitive', Gio.SettingsBindFlags.GET | Gio.SettingsBindFlags.INVERT_BOOLEAN);
+        look.add(depth);
         page.add(look);
 
         const alerts = new Adw.PreferencesGroup({title: 'Alerts'});
@@ -157,6 +165,28 @@ export default class IslePreferences extends ExtensionPreferences {
 function switchRow(settings, key, title, subtitle) {
     const row = new Adw.SwitchRow({title, subtitle});
     settings.bind(key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
+    return row;
+}
+
+/** A drop-down for a string key with `choices`: [[value, label], …]. */
+function choiceRow(settings, key, title, subtitle, choices) {
+    const row = new Adw.ComboRow({
+        title,
+        subtitle,
+        model: Gtk.StringList.new(choices.map(([, label]) => label)),
+    });
+    const sync = () => {
+        const index = choices.findIndex(([value]) => value === settings.get_string(key));
+        row.selected = Math.max(0, index);
+    };
+    sync();
+    const changed = settings.connect(`changed::${key}`, sync);
+    row.connect('notify::selected', () => {
+        const value = choices[row.selected]?.[0];
+        if (value && value !== settings.get_string(key))
+            settings.set_string(key, value);
+    });
+    row.connect('destroy', () => settings.disconnect(changed));
     return row;
 }
 

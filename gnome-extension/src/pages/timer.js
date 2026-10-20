@@ -68,10 +68,6 @@ class TimerPage extends Page {
         this._update();
     }
 
-    get headerTitle() {
-        return 'Pomodoro';
-    }
-
     get relevant() {
         const state = this.daemon.state.pomodoro;
         return Boolean(state && state.phase !== 'idle');

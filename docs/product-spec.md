@@ -29,20 +29,30 @@ sizes are logical pixels.
 
 | Presentation | Size (w × h) | Corner | Shoulder | Content |
 |---|---|---|---|---|
-| Compact | 164 × (P + 30); 256 with an activity | 16 | 10 | Clock, or lyric line; activity slots left/right |
-| Peek (alert) | 380 × (P + 56) | 22 | 13 | Badge · title/subtitle · value, level bar or button |
-| Expanded | 600 × (P + 170); 720 for lyrics | 32 | 22 | Header row · page · dots |
+| Compact | 144 × P; 232 with an activity | 10 | 7 | Clock; activity slots left/right |
+| Compact, hanging | 164 × (P + 30); 256 with an activity | 16 | 10 | As above |
+| Peek (alert) | 380 × (P + 56); 380 × 62 off a black bar | 22 | 13 | Badge · title/subtitle · value, level bar or button |
+| Expanded | 600 × (P + 164); 720 for lyrics | 32 | 22 | Header row (tabs) · page |
 
-The top bar is painted black and slimmed to a thin bezel (status icons and
-the tray stay in it); the island hangs from it with concave shoulders, so bar and island read as one shape. The compact island and
-alerts hang fully below the bar with their content in the hanging part, so
-their corners and shoulders are always fully round; the open island's header
-row sits inside the bar itself.
+The top bar is slimmed to a thin bezel (status icons and the tray stay in
+it) and see-through like glass, with no colour of its own. The
+island is a black notch hanging from the top edge of the screen with concave
+shoulders, like Boring Notch on a MacBook. Closed, it sits inside the bar
+(32 px, against 26 px when it hangs below instead): maximised
+windows start below the bar, so the resting island never covers an app and
+no screen space is lost to it. Alerts and the open island reach below the
+bar; they cover windows only for as long as they are shown. Their content
+sits below the bar's height, and the open island's header row level with
+the bar. In the settings the closed island can hang below the bar instead
+("Compact, hanging").
 
-The black is part of the design, so the installer sets it (and the slim
-bar) on every install, turns off Blur my Shell's top bar blur, and turns
-off extensions that take the island's place. Isle adds its black to the
-bar's own style and puts it back if another extension replaces that style,
+The bar can also be black, so that bar and island read as one shape: the
+shoulders then curve out of the bar's lower edge instead of the screen's
+top, or keep the theme's colour. The installer sets glass (and the slim
+bar) on every install, turns off Blur my Shell's top bar blur (it darkens
+the bar), and turns off
+extensions that take the island's place. Isle adds its colour to the bar's
+own style and puts it back if another extension replaces that style,
 leaving the other extension's rules in place.
 
 ### State details
@@ -88,18 +98,21 @@ place, dimmed, so the layout never jumps.
 | Middle-click | Play / pause | Play / pause |
 | Right-click | Bring the music player to the front | Bring the music player to the front |
 | Super+V (GNOME's calendar shortcut) | Open the clipboard history, search ready, held open | Close |
-| Scroll / two-finger swipe | – | Previous / next page (cards and lists scroll first) |
+| Click a tab | – | Go to that page |
+| Two-finger swipe sideways | – | Previous / next page, one page a swipe |
+| Scroll up / down | – | Lists and lyrics scroll; elsewhere previous / next page, one a wheel click |
 | ← → Enter (search field) | – | Choose a clipboard card; Enter pastes it into the window in front |
 | Esc | – | Clear the search, stop typing or renaming; then close when opened with Super+V |
 
 **Default page on open**, first match wins: the page of the alert being
-shown → Notifications if some arrived unseen (during Do Not Disturb) → Music
-if something plays → Focus if the timer runs → the page last viewed
-(remembered for 5 minutes) → Music.
+shown → the page picked by hand (a tab, a swipe, or the Shelf after a file
+was dragged onto the island), remembered for 5 minutes → Notifications if
+some arrived unseen (during Do Not Disturb) → Music if something plays →
+Focus if the timer runs → Music.
 
-Pages, in order: **Music · Notifications · Focus · Shelf · Tasks**. Lists
-scroll with the wheel or touchpad and never show a scrollbar. Arrows at the sides go to
-the neighbouring page (hidden at the ends); dots show where you are.
+Pages, in order: **Music · Notifications · Focus · Shelf · Tasks**, one tab
+each in the header. Lists scroll with the wheel or touchpad and never show
+a scrollbar.
 
 ## 4. Closed island
 
@@ -116,14 +129,17 @@ the neighbouring page (hidden at the ends); dots show where you are.
 
 ## 5. Pages
 
-Every page shares the header row inside the top bar: page title on the left,
-`[timer ring] Tue 20 Oct 2026 12:26` in the centre, and on the right a red
-"● 0:42" pill while the screen records (click to stop), the privacy dots and
-the music bars.
+Every page shares the header row inside the top bar, like NotchNook's. On
+the left, a tab per page: icons, the open page's in a lit pill with its
+name, and a red dot on Notifications while some are unseen. On the right a
+red "● 0:42" pill while the screen records (click to stop), the privacy
+dots, the music bars and `[timer ring] Tue 20 Oct 2026 12:26`.
 
-**Music** (no title). Cover (click: bring the player forward), title, artist
-— album, scrubber with elapsed / remaining time, lyrics toggle, previous ·
-play/pause · next, the player's app icon. Built for Spotify and YouTube in
+**Music**. Cover (click: bring the player forward) with the playing app's
+icon on its corner (Spotify, Chrome, …; found by name when the player gives
+no desktop entry), title, artist — album (or the app's name), scrubber with
+elapsed / remaining time, lyrics toggle, previous · play/pause · next. An
+app's logo sent in place of a cover is shown whole, without the badge. Built for Spotify and YouTube in
 the browser; any MPRIS player works. With nothing playing: "Nothing
 playing" and "Play something in Spotify or on YouTube".
 

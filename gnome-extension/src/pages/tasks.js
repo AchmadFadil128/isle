@@ -36,10 +36,6 @@ class TasksPage extends Page {
         this._update();
     }
 
-    get headerTitle() {
-        return 'Tasks';
-    }
-
     _tasks() {
         return this.daemon.state.tasks ?? [];
     }

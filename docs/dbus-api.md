@@ -16,7 +16,7 @@ The active MPRIS player: the one playing, or else the one that played last.
 | `SetPosition(x position_us)` | | Seek to an absolute position. |
 | `Raise()` | | Bring the player's window to the front. |
 | `NowPlaying` | `s` | `{available, identity, desktop_entry, status, title, artist, album, art_path, length_us, position_us, sampled_at_ms, rate, can_go_next, can_go_previous, can_play_pause, can_seek}` |
-| `Lyrics` | `s` | `{track, status, lines: [{time_ms, text}]}`; `status` is `none`, `loading`, `synced`, `plain` (lines have `time_ms` -1), `instrumental`, `not_found` or `error`. |
+| `Lyrics` | `s` | `{track, status, lines: [{time_ms, text}]}`; `status` is `none`, `loading`, `synced`, `plain` (lines have `time_ms` -1), `instrumental`, `not_found`, `error` (LRCLIB could not be reached) or `unavailable` (LRCLIB answered but is busy or failing); isled retries the last two on its own. |
 
 The position is only sampled when something changes. While playing, the
 current position is `position_us + (now - sampled_at_ms) * 1000 * rate`.

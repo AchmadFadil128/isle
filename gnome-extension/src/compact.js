@@ -13,10 +13,13 @@ import * as Format from './format.js';
 import * as Playback from './playback.js';
 import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon} from './widgets.js';
 
-const WIDTH_CLOCK = 164;
-const WIDTH_ACTIVITIES = 256;
 /** Extra width while privacy dots are shown. */
 const WIDTH_PRIVACY = 22;
+/** Sizes hanging below the top bar, and inside it with smaller text. */
+const SIZES = {
+    hanging: {clock: 164, activities: 256, art: 24, artRadius: 6, ring: 20, bars: 16, moon: 13},
+    inBar: {clock: 144, activities: 232, art: 22, artRadius: 6, ring: 18, bars: 14, moon: 12},
+};
 /** How often the focus ring is redrawn; it moves too slowly to need more. */
 const RING_REFRESH_S = 5;
 /** The focus timer's colour: white while focusing, green on a break. */
@@ -36,6 +39,7 @@ export const CompactView = GObject.registerClass({
         this._settings = settings;
         this._privacy = privacy;
         this._idle = false;
+        this._inBar = false;
         this._timeouts = {};
 
         const row = new St.BoxLayout({style_class: 'isle-compact-row', x_expand: true, y_expand: true});
@@ -80,8 +84,9 @@ export const CompactView = GObject.registerClass({
 
     /** The width the island should have to fit what is shown. */
     get preferredWidth() {
+        const size = SIZES[this._inBar ? 'inBar' : 'hanging'];
         const privacy = this._showingPrivacy() ? WIDTH_PRIVACY : 0;
-        return (this._left.child || this._right.child ? WIDTH_ACTIVITIES : WIDTH_CLOCK) + privacy;
+        return (this._left.child || this._right.child ? size.activities : size.clock) + privacy;
     }
 
     _showingPrivacy() {
@@ -98,6 +103,22 @@ export const CompactView = GObject.registerClass({
     set doNotDisturb(on) {
         this._dnd = on;
         this._refresh();
+    }
+
+    /** Fits the view inside the top bar, like a MacBook's notch, or below it. */
+    set inBar(inBar) {
+        if (inBar === this._inBar)
+            return;
+        this._inBar = inBar;
+        const size = SIZES[inBar ? 'inBar' : 'hanging'];
+        this._art.resize(size.art, size.artRadius);
+        this._ring.set_size(size.ring, size.ring);
+        this._bars.maxHeight = size.bars;
+        this._moon.icon_size = size.moon;
+        if (inBar)
+            this.add_style_class_name('isle-compact-in-bar');
+        else
+            this.remove_style_class_name('isle-compact-in-bar');
     }
 
     /** While the user is away the music bars rest; nobody is watching them. */

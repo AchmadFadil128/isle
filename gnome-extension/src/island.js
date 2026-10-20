@@ -7,6 +7,10 @@
 //   └───────╮                       ╭─────────┘   <- concave shoulders
 //           │        content        │
 //           ╰───────────────────────╯             <- rounded corners
+//
+// On a bar that is not black it hangs from the screen's top edge instead,
+// shoulders and all, like a MacBook's notch; closed, it can sit inside the
+// bar, rounding its corners within it.
 
 import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
@@ -27,6 +31,11 @@ const FADE_OUT = 160;
 const FADE_IN = 320;
 /** The incoming view waits for the shape to make room before appearing. */
 const FADE_IN_DELAY = 200;
+/**
+ * Below this shoulder size (px) the corners may climb into the top bar, so
+ * an island growing out of the bar rounds smoothly instead of jumping.
+ */
+const SHOULDER_FADE = 4;
 
 export const Island = GObject.registerClass({
     Properties: {
@@ -44,7 +53,7 @@ export const Island = GObject.registerClass({
             layout_manager: new Clutter.FixedLayout(),
         });
 
-        /** Height of the top bar, which the island always covers. */
+        /** Height of the top bar the island grows out of; 0 for none. */
         this._topInset = 0;
         this._monitor = null;
         this._view = null;
@@ -73,7 +82,7 @@ export const Island = GObject.registerClass({
         this.connect('destroy', () => this._onDestroy());
     }
 
-    /** The top bar's height; the island's body starts below it. */
+    /** The height of the bar the island grows out of; its body starts below. */
     set topInset(height) {
         this._topInset = height;
         this._sync();
@@ -217,12 +226,14 @@ export const Island = GObject.registerClass({
         const cr = area.get_context();
         const [, height] = area.get_surface_size();
         const top = Math.min(this._topInset, height);
-        // Shoulders and corners must share the part below the top bar.
+        // Shoulders and corners must share the part below the top bar; an
+        // island without shoulders may round its corners inside the bar.
         const margin = Math.max(0, this._shoulder.value);
         const shoulder = Math.min(margin, Math.max(0, (height - top) / 2));
         const left = margin;
         const right = left + Math.max(0, this._width.value);
-        const radius = Math.max(0, Math.min(this._radius.value, height - top - shoulder, (right - left) / 2));
+        const hanging = Math.min(1, margin / SHOULDER_FADE);
+        const radius = Math.max(0, Math.min(this._radius.value, height - top * hanging - shoulder, (right - left) / 2));
 
         cr.moveTo(left - shoulder, 0);
         cr.lineTo(right + shoulder, 0);

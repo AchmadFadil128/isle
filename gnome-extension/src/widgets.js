@@ -3,6 +3,7 @@
 // Small building blocks shared by the island's views.
 
 import Clutter from 'gi://Clutter';
+import GdkPixbuf from 'gi://GdkPixbuf';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
@@ -205,6 +206,14 @@ class Bars extends St.BoxLayout {
         this.connect('destroy', () => this._onDestroy());
     }
 
+    /** The tallest a bar gets, in pixels. */
+    set maxHeight(height) {
+        this._maxHeight = height;
+        this.height = height;
+        if (!this._playing)
+            this._bars.forEach((bar, index) => (bar.height = this._restHeight(index)));
+    }
+
     _restHeight(index) {
         // A fixed "|ılı" silhouette when not animating.
         return this._maxHeight * [0.45, 1, 0.7, 0.35, 0.8][index % 5];
@@ -245,6 +254,24 @@ class Bars extends St.BoxLayout {
     }
 });
 
+/**
+ * Whether the image at `path` looks like an icon rather than a cover: its
+ * corners are see-through. Covers are opaque all the way to the edge.
+ */
+function isIcon(path) {
+    try {
+        const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(path, 32, 32);
+        if (!pixbuf.has_alpha)
+            return false;
+        const pixels = pixbuf.get_pixels();
+        const {width, height, rowstride} = pixbuf;
+        const alphaAt = (x, y) => pixels[y * rowstride + x * 4 + 3];
+        return alphaAt(0, 0) === 0 && alphaAt(width - 1, height - 1) === 0;
+    } catch {
+        return false;
+    }
+}
+
 /** Square cover art with rounded corners and a placeholder. */
 export const Art = GObject.registerClass(
 class Art extends St.Bin {
@@ -257,12 +284,23 @@ class Art extends St.Bin {
         });
         this._radius = radius;
         this._path = null;
+        this._showsIcon = false;
         this._placeholder = new St.Icon({
             gicon: icon('isle-music'),
             icon_size: Math.round(size * 0.42),
             style_class: 'isle-art-placeholder',
         });
         this.setPath('');
+    }
+
+    /** Resizes the art; `radius` is its new corner radius. */
+    resize(size, radius) {
+        this.set_size(size, size);
+        this._placeholder.icon_size = Math.round(size * 0.42);
+        this._radius = radius;
+        const path = this._path;
+        this._path = null;
+        this.setPath(path);
     }
 
     setPath(path) {
@@ -272,12 +310,24 @@ class Art extends St.Bin {
         const base = `border-radius: ${this._radius}px;`;
         if (path) {
             const uri = GLib.filename_to_uri(path, null).replace(/"/g, '%22');
-            this.style = `${base} background-image: url("${uri}"); background-size: cover;`;
+            // An app's logo instead of a cover (Chrome sends its own when the
+            // page has none) is shown whole, without the tile behind it.
+            this._showsIcon = isIcon(path);
+            const fit = this._showsIcon
+                ? 'background-size: contain; background-color: transparent;'
+                : 'background-size: cover;';
+            this.style = `${base} background-image: url("${uri}"); ${fit}`;
             this.child = null;
         } else {
+            this._showsIcon = false;
             this.style = base;
             this.child = this._placeholder;
         }
+    }
+
+    /** Whether the image is an app's logo rather than a cover. */
+    get showsIcon() {
+        return this._showsIcon;
     }
 });
 

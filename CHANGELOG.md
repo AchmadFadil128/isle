@@ -8,6 +8,23 @@ All notable changes to Isle are listed here. The format follows
 
 ### Added
 
+- Tabs in the open island's header, like NotchNook: one per page, the open
+  one named in a lit pill, and a red dot while notifications are unseen.
+  They replace the side arrows and page dots. The island
+  reopens on the page picked last (for 5 minutes), and stays on the Shelf
+  after a file was dragged onto it.
+- The playing app's icon on the cover's corner, found by name when the
+  player gives no desktop entry (Chrome).
+- A glass top bar, the new default: see-through with no colour of its own,
+  and the island as a black notch hanging from the top of the screen, like
+  a MacBook's notch. "Top bar" in the settings picks glass,
+  black (the island blends in) or the theme's colour.
+- The closed island sits inside the top bar (32 px), like a MacBook's notch:
+  maximised windows start right below it and the island never covers an
+  app. Alerts and the open island still hang below
+  for as long as they are shown. "Island inside the top bar" in the settings
+  turns it off.
+
 - The island in the GNOME top bar: compact, alert and open presentations
   with spring-driven morphs and a black top bar it blends into.
 - Music with cover art, scrubber, controls and synced lyrics (LRCLIB).
@@ -38,3 +55,21 @@ All notable changes to Isle are listed here. The format follows
   and an `isled` restart.
 - `isled` D-Bus service, install and uninstall scripts, product spec and
   D-Bus API docs.
+
+### Fixed
+
+- Lyrics no longer say "Check your connection" when LRCLIB is only busy:
+  busy answers are retried at once, and the island tells a busy service
+  from being offline. Lookups for YouTube titles are more robust, and media
+  without an artist (an Instagram reel) is no longer matched to a random
+  song.
+- Files can be dragged onto the shelf again: its drop window appeared in the
+  middle of the screen instead of over the island.
+- An app's logo sent in place of a cover (Chrome does when a page has none)
+  is shown on its own, without a dark tile behind it.
+- Swiping between pages no longer skips a page or stalls: each swipe was
+  counted twice (as a smooth scroll and as clicks), and the leftover of one
+  swipe carried into the next. Sideways swipes now turn pages even over
+  lists and lyrics.
+- Alerts on a glass bar no longer start with an empty black band.
+- Text is at least 12 px throughout.

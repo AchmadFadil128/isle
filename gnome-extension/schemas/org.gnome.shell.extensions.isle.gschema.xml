@@ -1,21 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
   <schema id="org.gnome.shell.extensions.isle" path="/org/gnome/shell/extensions/isle/">
-    <key name="black-top-bar" type="b">
-      <default>true</default>
-      <summary>Black top bar</summary>
-      <description>Paint the top bar black so the island blends into it.</description>
+    <key name="top-bar-style" type="s">
+      <choices>
+        <choice value="glass"/>
+        <choice value="black"/>
+        <choice value="theme"/>
+      </choices>
+      <default>'glass'</default>
+      <summary>Top bar style</summary>
+      <description>“glass”: see-through, with no colour of its own, with the island as a black notch hanging from the top of the screen, like on a MacBook. “black”: the island blends into a black bar. “theme”: the bar keeps the theme's colour.</description>
     </key>
     <key name="compact-top-bar" type="b">
       <default>true</default>
       <summary>Compact top bar</summary>
       <description>Make the top bar slimmer, so it frames the island like a thin bezel.</description>
     </key>
+    <key name="island-in-top-bar" type="b">
+      <default>true</default>
+      <summary>Closed island inside the top bar</summary>
+      <description>Like a MacBook's notch: the top bar is as tall as the closed island, so it never covers windows. Alerts and the open island still hang below it for a moment.</description>
+    </key>
     <key name="notch-depth" type="i">
       <range min="24" max="40"/>
       <default>30</default>
       <summary>Island height</summary>
-      <description>How far the closed island hangs below the top bar, in pixels.</description>
+      <description>How far the closed island hangs below the top bar, in pixels, when it is not inside the top bar.</description>
     </key>
     <key name="replace-osd" type="b">
       <default>true</default>

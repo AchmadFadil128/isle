@@ -9,22 +9,30 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
 /**
- * Isle's rule for a black top bar. It is added to whatever inline style the
- * bar has, so other extensions keep theirs; and added back whenever one of
- * them replaces the style (Blur my Shell does, which would otherwise turn
- * the bar see-through around the island).
+ * Isle's rule for the top bar's colour, per `top-bar-style`. It is added to
+ * whatever inline style the bar has, so other extensions keep theirs; and
+ * added back whenever one of them replaces the style (Blur my Shell does).
+ * Glass has no colour of its own, like a Mac's menu bar around its notch.
  */
-const BLACK_BAR_STYLE = 'background-color: #000000;';
+const BAR_STYLES = {
+    black: 'background-color: #000000;',
+    glass: 'background-color: transparent;',
+};
+/** Style class giving the glass bar's text a shadow to read on any wallpaper. */
+const GLASS_BAR_CLASS = 'isle-glass-bar';
 /** Style class making the top bar slimmer; see stylesheet.css. */
 const COMPACT_BAR_CLASS = 'isle-compact-bar';
+/** Style class making the top bar as tall as the closed island. */
+const NOTCH_BAR_CLASS = 'isle-notch-bar';
 
 /**
  * Restyles the top bar around the island: paints it black so the island
- * blends in, and hides the clock with its calendar menu, since the island
- * shows the time and the notifications.
+ * blends in, or see-through like glass, and hides the clock with its
+ * calendar menu, since the island shows the time and the notifications.
  *
  * Signals:
  * - `height-changed` ()
+ * - `style-changed` (): `blendsIn` may have changed
  * - `calendar-requested` (): the calendar shortcut (Super+V) was pressed
  */
 export class TopBar extends Signals.EventEmitter {
@@ -36,11 +44,15 @@ export class TopBar extends Signals.EventEmitter {
         this._dateMenu.reactive = false;
 
         this._settingsChanged = [
-            settings.connect('changed::black-top-bar', () => this._applyStyle()),
+            settings.connect('changed::top-bar-style', () => {
+                this._applyStyle();
+                this.emit('style-changed');
+            }),
             settings.connect('changed::compact-top-bar', () => this._applyStyle()),
+            settings.connect('changed::island-in-top-bar', () => this._applyStyle()),
         ];
         this._applyStyle();
-        this._styleChanged = Main.panel.connect('notify::style', () => this._syncBlack());
+        this._styleChanged = Main.panel.connect('notify::style', () => this._syncColor());
 
         this._heightChanged = Main.panel.connect('notify::height', () => this.emit('height-changed'));
 
@@ -57,25 +69,34 @@ export class TopBar extends Signals.EventEmitter {
         return Main.panel.height;
     }
 
+    /**
+     * Whether the bar is as black as the island, so the two read as one
+     * shape; otherwise the island hangs from the top of the screen itself.
+     */
+    get blendsIn() {
+        return this._settings.get_string('top-bar-style') === 'black';
+    }
+
     /** Keeps the top bar's centre clear for the island. */
     reserveWidth(width) {
         this._dateMenu.set_width(Math.ceil(width));
     }
 
     _applyStyle() {
-        this._syncBlack();
-        // The bar's height changes with this; `height-changed` re-lays out the island.
-        if (this._settings.get_boolean('compact-top-bar'))
-            Main.panel.add_style_class_name(COMPACT_BAR_CLASS);
-        else
-            Main.panel.remove_style_class_name(COMPACT_BAR_CLASS);
+        this._syncColor();
+        // The bar's height changes with these; `height-changed` re-lays out the island.
+        toggleStyleClass(Main.panel, COMPACT_BAR_CLASS, this._settings.get_boolean('compact-top-bar'));
+        toggleStyleClass(Main.panel, NOTCH_BAR_CLASS, this._settings.get_boolean('island-in-top-bar'));
+        toggleStyleClass(Main.panel, GLASS_BAR_CLASS, this._settings.get_string('top-bar-style') === 'glass');
     }
 
-    /** Adds or removes Isle's black rule, leaving the rest of the style alone. */
-    _syncBlack(black = this._settings.get_boolean('black-top-bar')) {
+    /** Sets Isle's colour rule, leaving the rest of the style alone. */
+    _syncColor(barStyle = this._settings.get_string('top-bar-style')) {
         const style = Main.panel.get_style() ?? '';
-        const others = style.replace(BLACK_BAR_STYLE, '').trim();
-        const wanted = black ? `${others} ${BLACK_BAR_STYLE}`.trim() : others;
+        const others = Object.values(BAR_STYLES)
+            .reduce((rest, rule) => rest.replace(rule, ''), style).trim();
+        const rule = BAR_STYLES[barStyle];
+        const wanted = rule ? `${others} ${rule}`.trim() : others;
         // Setting it notifies again, and then nothing changes.
         if (wanted !== style)
             Main.panel.set_style(wanted || null);
@@ -90,12 +111,21 @@ export class TopBar extends Signals.EventEmitter {
         this._dateMenu.menu.disconnect(this._menuChanged);
         delete Main.panel.toggleCalendar;
 
-        this._syncBlack(false);
+        this._syncColor('theme');
         Main.panel.remove_style_class_name(COMPACT_BAR_CLASS);
+        Main.panel.remove_style_class_name(NOTCH_BAR_CLASS);
+        Main.panel.remove_style_class_name(GLASS_BAR_CLASS);
         this._dateMenu.set_width(-1);
         this._dateMenu.opacity = 255;
         this._dateMenu.reactive = true;
     }
+}
+
+function toggleStyleClass(actor, name, on) {
+    if (on)
+        actor.add_style_class_name(name);
+    else
+        actor.remove_style_class_name(name);
 }
 
 /**

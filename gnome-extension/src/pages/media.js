@@ -27,12 +27,39 @@ const MANUAL_SCROLL_HOLD_MS = 4000;
 /** Line opacity by distance from the current line; lines fade out with distance. */
 const LINE_OPACITY = [255, 120, 80, 55];
 
+/** The playing app per player, looked up once: `desktop_entry|identity`. */
+const playerApps = new Map();
+
+/**
+ * The app that is playing: from the player's desktop entry, or else found
+ * by its name (Chrome gives only "Chrome"). Null when there is none.
+ */
+function playerApp({desktop_entry: entry, identity}) {
+    const key = `${entry}|${identity}`;
+    if (!playerApps.has(key)) {
+        const ids = [];
+        if (entry)
+            ids.push(`${entry}.desktop`);
+        if (identity)
+            ids.push(...Gio.DesktopAppInfo.search(identity).flat());
+        let app = null;
+        for (const id of ids) {
+            app = Gio.DesktopAppInfo.new(id);
+            if (app)
+                break;
+        }
+        playerApps.set(key, app);
+    }
+    return playerApps.get(key);
+}
+
 const LYRICS_MESSAGES = {
     none: '',
     loading: 'Looking for lyrics…',
     not_found: 'No lyrics found for this song',
     instrumental: '♪  Instrumental',
     error: "Couldn't load lyrics. Check your connection.",
+    unavailable: 'The lyrics service is busy. Trying again soon.',
 };
 
 /**
@@ -216,6 +243,7 @@ class MediaPage extends Page {
         this._tintPath = null;
         // Each layout has its own copy of these; they update together.
         this._arts = [];
+        this._badges = [];
         this._titles = [];
         this._artists = [];
         this._elapsed = [];
@@ -256,6 +284,7 @@ class MediaPage extends Page {
 
     // Building blocks; each layout has its own copy.
 
+    /** Cover art with the playing app's icon on its corner. */
     _art(size, radius) {
         const art = new Art({size, radius});
         art.reactive = true;
@@ -264,7 +293,26 @@ class MediaPage extends Page {
             return Clutter.EVENT_STOP;
         });
         this._arts.push(art);
-        return art;
+
+        const badgeIcon = new St.Icon({icon_size: Math.round(size * 0.3)});
+        const badge = new St.Bin({
+            style_class: 'isle-app-badge',
+            child: badgeIcon,
+            x_expand: true,
+            y_expand: true,
+            x_align: Clutter.ActorAlign.END,
+            y_align: Clutter.ActorAlign.END,
+            // Sits over the corner, half outside it, like on a Mac.
+            translation_x: 5,
+            translation_y: 5,
+            visible: false,
+        });
+        this._badges.push({badge, icon: badgeIcon});
+
+        const box = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
+        box.add_child(art);
+        box.add_child(badge);
+        return box;
     }
 
     _texts(titleClass, artistClass) {
@@ -329,8 +377,6 @@ class MediaPage extends Page {
         const top = new St.BoxLayout({style_class: 'isle-player-top'});
         top.add_child(this._art(72, 14));
         top.add_child(this._texts('isle-track-title', 'isle-track-subtitle'));
-        this._appIcon = new St.Icon({icon_size: 20, style_class: 'isle-app-icon', y_align: Clutter.ActorAlign.CENTER});
-        top.add_child(this._appIcon);
 
         const controls = new St.Widget({layout_manager: new Clutter.BinLayout(), style_class: 'isle-player-controls', x_expand: true});
         const lyrics = this._modeButton('lyrics', 'isle-lyrics', 'Show lyrics', false);
@@ -445,11 +491,12 @@ class MediaPage extends Page {
         for (const button of this._playButtons)
             setButtonIcon(button, playIcon);
 
-        const app = nowPlaying.desktop_entry
-            ? Gio.DesktopAppInfo.new(`${nowPlaying.desktop_entry}.desktop`)
-            : null;
-        this._appIcon.gicon = app?.get_icon() ?? null;
-        this._appIcon.visible = Boolean(app);
+        // Which app plays it, unless the cover already is that app's logo.
+        const appIcon = playerApp(nowPlaying)?.get_icon() ?? null;
+        for (const {badge, icon: badgeIcon} of this._badges) {
+            badgeIcon.gicon = appIcon;
+            badge.visible = Boolean(appIcon) && !this._arts[0].showsIcon;
+        }
 
         for (const scrubber of this._scrubbers)
             scrubber.reactive = nowPlaying.can_seek && nowPlaying.length_us > 0;

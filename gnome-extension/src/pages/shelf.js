@@ -86,10 +86,6 @@ export const ShelfPage = GObject.registerClass({
         this.showTab('clipboard');
     }
 
-    get headerTitle() {
-        return 'Shelf';
-    }
-
     // Building
 
     _buildBar() {

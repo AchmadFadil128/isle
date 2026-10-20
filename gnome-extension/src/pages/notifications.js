@@ -29,7 +29,10 @@ class NotificationsPage extends Page {
         this.add_child(this._buildList());
 
         this._centerHandlers = [
-            center.connect('changed', () => this._update()),
+            center.connect('changed', () => {
+                this._update();
+                this.emit('news-changed');
+            }),
             center.connect('dnd-changed', () => this._updateDnd()),
         ];
         this._update();
@@ -37,11 +40,11 @@ class NotificationsPage extends Page {
         this.connect('destroy', () => this._onDestroy());
     }
 
-    get headerTitle() {
-        return 'Notifications';
+    get relevant() {
+        return this._center.unseenCount > 0;
     }
 
-    get relevant() {
+    get hasNews() {
         return this._center.unseenCount > 0;
     }
 

@@ -16,6 +16,8 @@ export const Page = GObject.registerClass({
         'tint-changed': {},
         // The user did something that should close the island.
         'request-close': {},
+        // `hasNews` changed.
+        'news-changed': {},
     },
 }, class Page extends St.Widget {
     _init(daemon, params) {
@@ -49,9 +51,9 @@ export const Page = GObject.registerClass({
         return false;
     }
 
-    /** Pango markup for the header's left side, e.g. "Pomodoro". */
-    get headerTitle() {
-        return '';
+    /** Whether something new waits here; its tab shows a dot. */
+    get hasNews() {
+        return false;
     }
 
     /** Island width this page needs, or null for the standard width. */

@@ -21,7 +21,7 @@ import * as Alerts from './alerts.js';
 import {ClipboardHistory} from './clipboard.js';
 import {CompactView} from './compact.js';
 import {Daemon} from './daemon.js';
-import {DOTS_HEIGHT, ExpandedView, PAGE_HEIGHT} from './expanded.js';
+import {BOTTOM_PADDING, ExpandedView, PAGE_HEIGHT} from './expanded.js';
 import {Island} from './island.js';
 import {AudioOutputs} from './audio.js';
 import {FocusMode} from './focusMode.js';
@@ -52,15 +52,24 @@ const IDLE_MS = 60 * 1000;
 // comfortable size, a 16 px corner and a 10 px shoulder.
 const COMPACT_RADIUS = 16;
 const COMPACT_SHOULDER = 10;
+// Inside the top bar the closed island is a small notch. Its shoulders only
+// show on a bar that is not black, where it hangs from the screen's top edge
+// like Boring Notch on a Mac.
+const IN_BAR_RADIUS = 10;
+const IN_BAR_SHOULDER = 7;
 const PEEK_RADIUS = 22;
+// Off a black bar an alert has no bar to fill, so it starts this far below
+// the screen's top instead of below the bar.
+const PEEK_TOP_GLASS = 6;
 const PEEK_SHOULDER = 13;
 const EXPANDED_RADIUS = 32;
 const EXPANDED_SHOULDER = 22;
 
 /**
- * Pages that open by default when they have something to show, best first.
- * Notifications only count when some arrived unseen (e.g. during Do Not
- * Disturb), since the others were already shown as alerts.
+ * Pages that open by default when they have something to show, best first,
+ * unless a page was picked by hand lately. Notifications only count when
+ * some arrived unseen (e.g. during Do Not Disturb), since the others were
+ * already shown as alerts.
  */
 const DEFAULT_PAGE_ORDER = ['notifications', 'music', 'focus'];
 
@@ -119,7 +128,9 @@ export class Controller {
         }
         const expanded = new ExpandedView(this._daemon, this._privacy, this._settings, pages);
         expanded.connect('page-changed', () => {
-            this._pagePickedAt = Date.now();
+            // Picked by hand (a tab, a swipe) while open; not when opening.
+            if (this._expandWanted)
+                this._pagePickedAt = Date.now();
             this._shelfHelper?.sync();
         });
         expanded.connect('page-settled', () => this._shelfHelper?.sync());
@@ -144,6 +155,8 @@ export class Controller {
             this._shelf.showTab('files');
             this._shelf.dropping = true;
             this.expand('shelf');
+            // The shelf stays the page to open on, to drag the files out again.
+            this._pagePickedAt = Date.now();
         });
         this._shelfHelper.connect('drag-end', () => {
             this._shelf.dropping = false;
@@ -156,9 +169,11 @@ export class Controller {
                 this._render();
         });
 
-        this._settingsChanged = this._settings.connect('changed::notch-depth', () => this._render());
+        this._settingsChanged = ['notch-depth', 'island-in-top-bar'].map(key =>
+            this._settings.connect(`changed::${key}`, () => this._render()));
 
         this._topBar.connect('height-changed', () => this._updateGeometry());
+        this._topBar.connect('style-changed', () => this._updateGeometry());
         this._topBar.connect('calendar-requested', () => this._toggleFromKeyboard());
         island.connect('key-press-event', (_actor, event) => {
             if (event.get_key_symbol() !== Clutter.KEY_Escape)
@@ -197,7 +212,9 @@ export class Controller {
     // Layout
 
     _updateGeometry() {
-        this._island.topInset = this._topBar.height;
+        // On a black bar the island grows out of it, its shoulders below the
+        // bar; on any other it hangs from the top of the screen like a notch.
+        this._island.topInset = this._topBar.blendsIn ? this._topBar.height : 0;
         this._island.monitor = Main.layoutManager.primaryMonitor;
         this._expanded.topInset = this._topBar.height;
         this._render();
@@ -207,35 +224,41 @@ export class Controller {
         const presentation = this._expandWanted ? 'expanded' : this._alert ? 'peek' : 'compact';
         this._presentation = presentation;
         const top = this._topBar.height;
+        const inBar = this._settings.get_boolean('island-in-top-bar');
+        // Before measuring it: inside the bar it is smaller.
+        this._compact.inBar = inBar;
 
-        // The compact island and alerts hang below the top bar, with their
-        // content in the part that hangs down; the open island's header row
-        // sits in the top bar itself.
+        // Alerts hang below the top bar, with their content in the part that
+        // hangs down; the open island's header row sits in the top bar
+        // itself. The compact island either hangs too or sits inside the
+        // bar like a MacBook's notch, covering no window.
         let size, view;
         switch (presentation) {
         case 'expanded':
             size = {
                 width: this._expanded.preferredWidth,
-                height: top + PAGE_HEIGHT + DOTS_HEIGHT,
+                height: top + PAGE_HEIGHT + BOTTOM_PADDING,
                 radius: EXPANDED_RADIUS,
                 shoulder: EXPANDED_SHOULDER,
             };
             view = this._expanded;
             break;
-        case 'peek':
-            size = {width: PEEK_WIDTH, height: top + PEEK_HEIGHT, radius: PEEK_RADIUS, shoulder: PEEK_SHOULDER};
+        case 'peek': {
+            const inset = this._topBar.blendsIn ? top : PEEK_TOP_GLASS;
+            size = {width: PEEK_WIDTH, height: inset + PEEK_HEIGHT, radius: PEEK_RADIUS, shoulder: PEEK_SHOULDER};
             view = this._peek;
-            view.style = `padding-top: ${top}px;`;
+            view.style = `padding-top: ${inset}px;`;
             break;
+        }
         default:
             size = {
                 width: this._compact.preferredWidth,
-                height: top + this._settings.get_int('notch-depth'),
-                radius: COMPACT_RADIUS,
-                shoulder: COMPACT_SHOULDER,
+                height: inBar ? top : top + this._settings.get_int('notch-depth'),
+                radius: inBar ? IN_BAR_RADIUS : COMPACT_RADIUS,
+                shoulder: inBar ? IN_BAR_SHOULDER : COMPACT_SHOULDER,
             };
             view = this._compact;
-            view.style = `padding-top: ${top}px;`;
+            view.style = inBar ? null : `padding-top: ${top}px;`;
         }
         view.set_size(size.width, size.height);
         this._topBar.reserveWidth(this._compact.preferredWidth);
@@ -328,16 +351,13 @@ export class Controller {
     }
 
     /**
-     * The page to open on: one with something live to show, else the page
-     * last looked at (for a few minutes), else music.
+     * The page to open on: the one picked by hand lately (for a few
+     * minutes), else one with something live to show, else music.
      */
     _defaultPage() {
-        const live = DEFAULT_PAGE_ORDER.find(name => this._expanded.pageNamed(name)?.relevant);
-        if (live)
-            return live;
         if (Date.now() - this._pagePickedAt < PAGE_MEMORY_MS)
             return null; // stay on the current page
-        return 'music';
+        return DEFAULT_PAGE_ORDER.find(name => this._expanded.pageNamed(name)?.relevant) ?? 'music';
     }
 
     // Keyboard
@@ -528,7 +548,7 @@ export class Controller {
         if (this._activeWatch)
             monitor.remove_watch(this._activeWatch);
 
-        this._settings.disconnect(this._settingsChanged);
+        this._settingsChanged.forEach(id => this._settings.disconnect(id));
         Main.layoutManager.disconnect(this._monitorsChanged);
         this._osd.destroy();
         this._keyboard.destroy();

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The open island: a header row inside the top bar (page title, clock,
-// music bars), one page at a time with arrows to its neighbours, and page
-// dots at the bottom. See docs/product-spec.md, section 5.
+// The open island: a header row inside the top bar (tabs to the pages on the
+// left; live activity and the clock on the right) above one page at a time. See docs/product-spec.md, section 5.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -12,18 +11,34 @@ import St from 'gi://St';
 import {timerColor} from './compact.js';
 import * as Format from './format.js';
 import * as Playback from './playback.js';
-import {Bars, PrivacyDots, RecordingDot, Ring, iconButton, label} from './widgets.js';
+import {Bars, PrivacyDots, RecordingDot, Ring, icon, label} from './widgets.js';
 
 export const EXPANDED_WIDTH = 600;
 export const PAGE_HEIGHT = 150;
-export const DOTS_HEIGHT = 20;
+/** Room below the page, so its content clears the rounded corners. */
+export const BOTTOM_PADDING = 14;
+
+/** Each page's tab: its icon, and the label shown while it is open. */
+const TABS = {
+    music: {icon: 'isle-music', label: 'Music'},
+    notifications: {icon: 'isle-bell', label: 'Notifications'},
+    focus: {icon: 'isle-timer', label: 'Focus'},
+    shelf: {icon: 'isle-shelf', label: 'Shelf'},
+    tasks: {icon: 'isle-tasks', label: 'Tasks'},
+};
+/** How bright a tab's icon is: open, under the pointer, otherwise. */
+const TAB_OPACITY = {open: 255, hover: 230, idle: 140};
 
 const SLIDE_DISTANCE = 48;
 const SLIDE_DURATION = 260;
-/** Minimum time between page flips from the scroll wheel. */
-const SCROLL_COOLDOWN_MS = 350;
-/** Accumulated smooth-scroll distance that flips a page. */
-const SMOOTH_SCROLL_STEP = 1.2;
+/** Touchpad travel (in wheel clicks) that flips a page; one flip a swipe. */
+const SWIPE_STEP = 1.5;
+/** Wheel travel that flips a page; a long spin flips several. */
+const WHEEL_STEP = 1;
+/** Minimum time between page flips from a spinning wheel. */
+const WHEEL_REPEAT_MS = 200;
+/** A pause this long between scroll events starts a new gesture. */
+const GESTURE_GAP_MS = 180;
 
 export const ExpandedView = GObject.registerClass({
     Signals: {
@@ -46,20 +61,22 @@ export const ExpandedView = GObject.registerClass({
         this._active = false;
         this._width = EXPANDED_WIDTH;
         this._lastFlip = 0;
-        this._smoothScroll = 0;
+        /** The scroll gesture in progress: travel so far, and whether it flipped. */
+        this._gesture = {dx: 0, dy: 0, flipped: false, at: 0};
+        /** Set once smooth scrolling is seen; its click-style copies are then ignored. */
+        this._smoothScrolling = false;
         this._clockTimeout = 0;
+
+        // Sideways scrolls always flip pages, so they are taken before the
+        // pages' scrollable parts (lists, lyrics), which only scroll up and
+        // down; those get the rest first, and what they leave flips pages
+        // in `vfunc_scroll_event`.
+        this.connect('captured-event', (_actor, event) => this._captureScroll(event));
 
         this._header = this._buildHeader();
         this.add_child(this._header);
         this.add_child(this._buildPager());
-
-        this._dots = new St.BoxLayout({style_class: 'isle-dots', x_align: Clutter.ActorAlign.CENTER, height: DOTS_HEIGHT});
-        pages.forEach((page, index) => {
-            const dot = new St.Button({style_class: 'isle-dot', accessible_name: page.name, y_align: Clutter.ActorAlign.CENTER});
-            dot.connect('clicked', () => this.showPage(index));
-            this._dots.add_child(dot);
-        });
-        this.add_child(this._dots);
+        this.add_child(new St.Widget({height: BOTTOM_PADDING}));
 
         for (const page of pages) {
             page.connect('width-changed', () => {
@@ -70,6 +87,7 @@ export const ExpandedView = GObject.registerClass({
                 if (page === this.page)
                     this.emit('tint-changed');
             });
+            page.connect('news-changed', () => this._syncTabs());
         }
 
         this._daemonChanged = daemon.connect('changed', (_daemon, key) => {
@@ -84,25 +102,10 @@ export const ExpandedView = GObject.registerClass({
 
     _buildHeader() {
         const header = new St.Widget({layout_manager: new Clutter.BinLayout(), style_class: 'isle-header'});
+        header.add_child(this._buildTabs());
 
-        this._title = new St.Label({
-            style_class: 'isle-header-title',
-            x_expand: true,
-            x_align: Clutter.ActorAlign.START,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        header.add_child(this._title);
-
-        const clock = new St.BoxLayout({x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-header-clock'});
-        this._headerRing = new Ring({size: 15, lineWidth: 2.5});
-        this._date = label('', 'isle-header-date');
-        this._time = label('', 'isle-header-time');
-        clock.add_child(this._headerRing);
-        clock.add_child(this._date);
-        clock.add_child(this._time);
-        header.add_child(clock);
-
-        // Right: a running recording (click to stop), privacy dots, music.
+        // Right: a running recording (click to stop), privacy dots, music,
+        // the focus ring and the clock.
         const status = new St.BoxLayout({style_class: 'isle-header-status', x_expand: true, x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.CENTER});
         const recordingBox = new St.BoxLayout({style_class: 'isle-recording-pill-box'});
         recordingBox.add_child(new RecordingDot());
@@ -121,8 +124,69 @@ export const ExpandedView = GObject.registerClass({
         status.add_child(this._recordingButton);
         status.add_child(this._privacyDots);
         status.add_child(this._headerBars);
+
+        const clock = new St.BoxLayout({y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-header-clock'});
+        this._headerRing = new Ring({size: 15, lineWidth: 2.5});
+        this._date = label('', 'isle-header-date');
+        this._time = label('', 'isle-header-time');
+        clock.add_child(this._headerRing);
+        clock.add_child(this._date);
+        clock.add_child(this._time);
+        status.add_child(clock);
         header.add_child(status);
         return header;
+    }
+
+    /** A tab per page; the open one is lit and says its name. */
+    _buildTabs() {
+        const tabs = new St.BoxLayout({style_class: 'isle-tabs', x_expand: true, x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.CENTER});
+        this._tabs = this._pages.map((page, index) => {
+            const {icon: iconName, label: text} = TABS[page.name];
+            const glyph = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
+            const tabIcon = new St.Icon({gicon: icon(iconName), icon_size: 15});
+            glyph.add_child(tabIcon);
+            // Something new waits on this page (unseen notifications).
+            const badge = new St.Widget({
+                style_class: 'isle-tab-badge',
+                x_expand: true,
+                y_expand: true,
+                x_align: Clutter.ActorAlign.END,
+                y_align: Clutter.ActorAlign.START,
+                visible: false,
+            });
+            glyph.add_child(badge);
+            const name = label(text, 'isle-tab-label', {y_align: Clutter.ActorAlign.CENTER});
+            const box = new St.BoxLayout({style_class: 'isle-tab-box'});
+            box.add_child(glyph);
+            box.add_child(name);
+            const tab = new St.Button({
+                style_class: 'isle-tab',
+                child: box,
+                can_focus: true,
+                track_hover: true,
+                accessible_name: text,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            tab.connect('clicked', () => this.showPage(index));
+            tab.connect('notify::hover', () => this._syncTabs());
+            tabs.add_child(tab);
+            return {tab, icon: tabIcon, name, badge};
+        });
+        return tabs;
+    }
+
+    /** Lights the open page's tab and shows which pages have news. */
+    _syncTabs() {
+        this._tabs.forEach(({tab, icon: tabIcon, name, badge}, index) => {
+            const open = index === this._index;
+            if (open)
+                tab.add_style_pseudo_class('checked');
+            else
+                tab.remove_style_pseudo_class('checked');
+            name.visible = open;
+            tabIcon.opacity = TAB_OPACITY[open ? 'open' : tab.hover ? 'hover' : 'idle'];
+            badge.visible = !open && Boolean(this._pages[index].hasNews);
+        });
     }
 
     _buildPager() {
@@ -141,17 +205,6 @@ export const ExpandedView = GObject.registerClass({
         }
         this._pages[0].show();
         area.add_child(this._pager);
-
-        // Arrows to the neighbouring pages.
-        this._previous = iconButton('go-previous-symbolic', 'isle-nav', () => this.showPage(this._index - 1),
-            {size: 12, accessibleName: 'Previous page'});
-        this._next = iconButton('go-next-symbolic', 'isle-nav', () => this.showPage(this._index + 1),
-            {size: 12, accessibleName: 'Next page'});
-        this._previous.x_expand = this._next.x_expand = true;
-        this._previous.x_align = Clutter.ActorAlign.START;
-        this._next.x_align = Clutter.ActorAlign.END;
-        area.add_child(this._previous);
-        area.add_child(this._next);
         return area;
     }
 
@@ -247,15 +300,7 @@ export const ExpandedView = GObject.registerClass({
     }
 
     _syncPage() {
-        this._dots.get_children().forEach((dot, index) => {
-            if (index === this._index)
-                dot.add_style_pseudo_class('checked');
-            else
-                dot.remove_style_pseudo_class('checked');
-        });
-        this._previous.visible = this._index > 0;
-        this._next.visible = this._index < this._pages.length - 1;
-        this._title.clutter_text.set_markup(this.page.headerTitle ?? '');
+        this._syncTabs();
     }
 
     _syncWidth() {
@@ -330,29 +375,92 @@ export const ExpandedView = GObject.registerClass({
         }
     }
 
+    _captureScroll(event) {
+        if (event.type() !== Clutter.EventType.SCROLL)
+            return Clutter.EVENT_PROPAGATE;
+        // Smooth scrolls also come as click-style copies (UP, LEFT, ...),
+        // not always marked as emulated; counting both flipped two pages.
+        const smooth = event.get_scroll_direction() === Clutter.ScrollDirection.SMOOTH;
+        this._smoothScrolling ||= smooth;
+        if (!smooth && (this._smoothScrolling || event.get_flags() & Clutter.EventFlags.POINTER_EMULATED))
+            return Clutter.EVENT_STOP;
+        this._trackGesture(event);
+        return this._isSideways(event) ? this._flipFromScroll(event) : Clutter.EVENT_PROPAGATE;
+    }
+
     vfunc_scroll_event(event) {
-        // Scrollable parts of pages (lyrics, the task list) see the event
-        // first and stop it; anything else flips the page.
-        const direction = event.get_scroll_direction();
-        let step = 0;
-        if (direction === Clutter.ScrollDirection.DOWN || direction === Clutter.ScrollDirection.RIGHT) {
-            step = 1;
-        } else if (direction === Clutter.ScrollDirection.UP || direction === Clutter.ScrollDirection.LEFT) {
-            step = -1;
-        } else if (direction === Clutter.ScrollDirection.SMOOTH) {
+        // An up/down scroll no page part wanted.
+        return this._flipFromScroll(event);
+    }
+
+    /** Adds `event` to the gesture in progress, or starts a new one. */
+    _trackGesture(event) {
+        const now = GLib.get_monotonic_time() / 1000;
+        const gesture = this._gesture;
+        if (now - gesture.at > GESTURE_GAP_MS)
+            Object.assign(gesture, {dx: 0, dy: 0, flipped: false});
+        gesture.at = now;
+        let stopped = event.get_scroll_finish_flags() !== Clutter.ScrollFinishFlags.NONE;
+        if (event.get_scroll_direction() === Clutter.ScrollDirection.SMOOTH) {
             const [dx, dy] = event.get_scroll_delta();
-            // Horizontal swipes on a touchpad are the natural gesture here.
-            this._smoothScroll += Math.abs(dx) > Math.abs(dy) ? dx : dy;
-            if (Math.abs(this._smoothScroll) >= SMOOTH_SCROLL_STEP) {
-                step = Math.sign(this._smoothScroll);
-                this._smoothScroll = 0;
+            gesture.dx += dx;
+            gesture.dy += dy;
+            // A touchpad ends each swipe with an event that does not move.
+            stopped ||= dx === 0 && dy === 0;
+        }
+        // Fingers lifted: the next touch is a new swipe however soon it comes.
+        if (stopped)
+            gesture.at = 0;
+    }
+
+    /** Whether `event` belongs to a sideways scroll. */
+    _isSideways(event) {
+        switch (event.get_scroll_direction()) {
+        case Clutter.ScrollDirection.LEFT:
+        case Clutter.ScrollDirection.RIGHT:
+            return true;
+        case Clutter.ScrollDirection.SMOOTH:
+            // The whole gesture decides, so a wobble does not switch axis.
+            return Math.abs(this._gesture.dx) > Math.abs(this._gesture.dy);
+        default:
+            return false;
+        }
+    }
+
+    /** Flips the page if the scroll so far calls for it. */
+    _flipFromScroll(event) {
+        const gesture = this._gesture;
+        const now = GLib.get_monotonic_time() / 1000;
+        let step = 0;
+        switch (event.get_scroll_direction()) {
+        case Clutter.ScrollDirection.DOWN:
+        case Clutter.ScrollDirection.RIGHT:
+            step = 1;
+            break;
+        case Clutter.ScrollDirection.UP:
+        case Clutter.ScrollDirection.LEFT:
+            step = -1;
+            break;
+        case Clutter.ScrollDirection.SMOOTH: {
+            const travel = this._isSideways(event) ? gesture.dx : gesture.dy;
+            const wheel = event.get_scroll_source() === Clutter.ScrollSource.WHEEL;
+            if (gesture.flipped || Math.abs(travel) < (wheel ? WHEEL_STEP : SWIPE_STEP))
+                return Clutter.EVENT_STOP;
+            step = Math.sign(travel);
+            if (wheel) {
+                // Count afresh, so a long spin flips again.
+                gesture.dx = gesture.dy = 0;
+            } else {
+                // One page a swipe, however far it goes.
+                gesture.flipped = true;
             }
+            break;
+        }
         }
         if (!step)
             return Clutter.EVENT_STOP;
-
-        const now = GLib.get_monotonic_time() / 1000;
-        if (now - this._lastFlip < SCROLL_COOLDOWN_MS)
+        // Clicks and spins are spaced out; a swipe flips once anyway.
+        if (!gesture.flipped && now - this._lastFlip < WHEEL_REPEAT_MS)
             return Clutter.EVENT_STOP;
         this._lastFlip = now;
         const index = Math.min(this._pages.length - 1, Math.max(0, this._index + step));

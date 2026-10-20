@@ -27,7 +27,7 @@ const NOISE: &[&str] = &[
 
 /// Returns `(title, artist)` cleaned for a lyrics search.
 pub fn search_terms(title: &str, artist: &str) -> (String, String) {
-    let mut title = strip_noise(title);
+    let mut title = full_title(title);
     let mut artist = clean_artist(artist);
 
     // "Artist - Song" in the title wins over a channel name in the artist.
@@ -49,6 +49,15 @@ pub fn search_terms(title: &str, artist: &str) -> (String, String) {
     }
 
     (title.trim().to_owned(), artist.trim().to_owned())
+}
+
+/// The title without noise but with any "Artist - " prefix still in it: a
+/// free-text search for when the split from [`search_terms`] finds nothing.
+pub fn full_title(title: &str) -> String {
+    // "Song | Channel" or "Song (Lyrics) | Series": what follows the bar is
+    // the uploader's branding, never part of the song's name.
+    let title = title.split(" | ").next().unwrap_or(title);
+    strip_noise(title)
 }
 
 /// Removes bracketed suffixes like "(Official Video)" or "[4K]".
@@ -122,6 +131,21 @@ mod tests {
         assert_eq!(
             search_terms("Paper Sky ft. Someone", "Lumen Coast - Topic"),
             ("Paper Sky".into(), "Lumen Coast".into())
+        );
+    }
+
+    #[test]
+    fn branding_after_a_bar_is_dropped() {
+        assert_eq!(
+            search_terms(
+                "Lumen Coast - Paper Sky (Lyrics) | Night Drive",
+                "Lyric Hub"
+            ),
+            ("Lumen Coast - Paper Sky".into(), "Lyric Hub".into())
+        );
+        assert_eq!(
+            full_title("Lumen Coast - Paper Sky (Lyrics) | Night Drive"),
+            "Lumen Coast - Paper Sky"
         );
     }
 

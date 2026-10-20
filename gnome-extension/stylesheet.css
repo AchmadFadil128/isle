@@ -113,6 +113,19 @@
  * around the island. Status icons and the tray stay where they are. */
 #panel.isle-compact-bar { height: 26px; font-size: 13px; }
 
+/* With the closed island inside the top bar, like a MacBook's notch in its
+ * menu bar, the bar is as tall as the island. Maximised windows start below
+ * it, so the island never covers them. Comes after the compact bar's height
+ * so it wins. */
+#panel.isle-notch-bar { height: 32px; }
+
+/* The glass bar has no colour, so its text and icons carry a soft shadow to
+ * stay readable on a light wallpaper. */
+#panel.isle-glass-bar .panel-button {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  icon-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
 #panel.isle-compact-bar .panel-button {
   border-width: 2px;
   -natural-hpadding: 10px;
@@ -127,6 +140,11 @@
 .isle-compact-slot { width: 24px; }
 
 .isle-compact-clock { font-size: 17px; font-weight: 700; }
+
+/* Inside the top bar everything is sized like the bar's own text. */
+.isle-compact-in-bar .isle-compact-row { padding: 0 14px; spacing: 10px; }
+.isle-compact-in-bar .isle-compact-slot { width: 22px; }
+.isle-compact-in-bar .isle-compact-clock { font-size: 15px; }
 
 .isle-unseen-dot {
   width: 6px;
@@ -176,9 +194,32 @@
 
 /* ── Expanded: frame ──────────────────────────────────── */
 
-.isle-header { padding: 0 26px; }
-.isle-header-title { font-size: 15px; font-weight: 700; }
+.isle-header { padding: 0 20px; }
 .isle-header-clock { spacing: 8px; }
+
+/* Tabs to the pages: icons, with the open page's name in a lit pill. */
+.isle-tabs { spacing: 2px; }
+
+.isle-tab {
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: #ffffff;
+  transition-duration: 150ms;
+}
+
+.isle-tab:hover { background-color: rgba(255, 255, 255, 0.08); }
+.isle-tab:checked { background-color: rgba(255, 255, 255, 0.16); }
+.isle-tab:focus { box-shadow: inset 0 0 0 2px rgba(90, 171, 255, 0.8); }
+.isle-tab-box { spacing: 6px; }
+.isle-tab-label { font-size: 13px; font-weight: 600; }
+
+/* A dot on a tab whose page has news. */
+.isle-tab-badge {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background-color: #ff5c5c;
+}
 .isle-header-date { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
 .isle-header-time { font-size: 13px; font-weight: 700; }
 .isle-header-status { spacing: 10px; }
@@ -193,30 +234,8 @@
 .isle-recording-pill-box { spacing: 6px; }
 .isle-recording-time { font-size: 12px; font-weight: 700; color: #ff6961; }
 
-/* Pages leave room at the sides for the arrows. */
-.isle-page { padding: 4px 52px 0 52px; }
-
-.isle-nav {
-  margin: 0 12px;
-  padding: 7px;
-  background-color: #2c2c2e;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.isle-nav:hover { background-color: #3a3a3c; color: #ffffff; }
-
-.isle-dots { spacing: 5px; }
-
-.isle-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 3px;
-  background-color: rgba(255, 255, 255, 0.3);
-  transition-duration: 200ms;
-}
-
-.isle-dot:hover { background-color: rgba(255, 255, 255, 0.6); }
-.isle-dot:checked { width: 18px; background-color: #ffffff; }
+/* Pages line up with the header's edges. */
+.isle-page { padding: 6px 28px 0 28px; }
 
 /* ── Music ────────────────────────────────────────────── */
 
@@ -224,7 +243,12 @@
 .isle-player-texts { spacing: 2px; }
 .isle-track-title { font-size: 18px; font-weight: 700; }
 .isle-track-subtitle { font-size: 13px; color: rgba(255, 255, 255, 0.55); }
-.isle-app-icon { opacity: 0.9; }
+/* The playing app's icon on the cover's corner, ringed in black. */
+.isle-app-badge {
+  padding: 2px;
+  border-radius: 999px;
+  background-color: #000000;
+}
 
 .isle-player-progress { spacing: 12px; padding-top: 10px; }
 
@@ -265,7 +289,7 @@
 .isle-output-button.active { background-color: #1c1c1e; }
 .isle-output-row { spacing: 12px; }
 .isle-output-name { font-size: 13px; font-weight: 600; }
-.isle-output-detail { font-size: 11px; color: rgba(255, 255, 255, 0.5); }
+.isle-output-detail { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
 
 /* Lyrics */
 
@@ -302,7 +326,7 @@
 .isle-timer-row { spacing: 12px; }
 .isle-timer-time { font-size: 40px; font-weight: 800; }
 .isle-timer-caption { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
-.isle-timer-stats { font-size: 11px; color: rgba(255, 255, 255, 0.4); padding-top: 1px; }
+.isle-timer-stats { font-size: 12px; color: rgba(255, 255, 255, 0.4); padding-top: 1px; }
 .isle-timer-buttons { spacing: 10px; padding-top: 12px; }
 
 .isle-play-pill {
@@ -387,7 +411,7 @@
 .isle-notification { spacing: 10px; padding: 7px 10px; }
 .isle-notification-title { font-size: 13px; font-weight: 700; }
 .isle-notification-body { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
-.isle-notification-time { font-size: 11px; color: rgba(255, 255, 255, 0.4); }
+.isle-notification-time { font-size: 12px; color: rgba(255, 255, 255, 0.4); }
 
 .isle-dnd-moon { color: rgba(255, 255, 255, 0.85); }
 
@@ -444,14 +468,14 @@
 .isle-clip:selected { border-color: #ffffff; }
 
 .isle-clip-header { padding: 7px 9px; spacing: 5px; }
-.isle-clip-age { font-size: 11px; color: rgba(255, 255, 255, 0.5); }
+.isle-clip-age { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
 .isle-clip-body { padding: 28px 10px 8px 10px; spacing: 2px; }
 .isle-clip-text { font-size: 12px; }
-.isle-clip-code { font-family: monospace; font-size: 11px; }
+.isle-clip-code { font-family: monospace; font-size: 12px; }
 .isle-clip-host { font-size: 13px; font-weight: 700; }
-.isle-clip-url { font-size: 11px; color: rgba(255, 255, 255, 0.55); }
+.isle-clip-url { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
 .isle-clip-file-name { font-size: 12px; font-weight: 600; padding-top: 4px; }
-.isle-clip-subtle { font-size: 11px; color: rgba(255, 255, 255, 0.5); }
+.isle-clip-subtle { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
 
 /* Images fill the card; header and size sit on dark pills over them. */
 .isle-clip-thumb { border-radius: 12px; background-size: cover; background-color: #2c2c2e; }
@@ -463,7 +487,7 @@
 }
 
 .isle-clip-badge { margin: 5px; padding: 2px 6px; border-radius: 999px; background-color: rgba(0, 0, 0, 0.6); }
-.isle-clip-badge-label { font-size: 10px; font-weight: 600; }
+.isle-clip-badge-label { font-size: 11px; font-weight: 600; }
 
 .isle-clip-actions { padding: 5px; spacing: 4px; }
 .isle-clip-action { padding: 4px; background-color: #3a3a3c; }
@@ -485,7 +509,7 @@
 .isle-shelf-open { padding: 8px 4px; }
 
 .isle-shelf-tile:hover { background-color: #1c1c1e; }
-.isle-shelf-name { font-size: 11px; padding-top: 6px; }
+.isle-shelf-name { font-size: 12px; padding-top: 6px; }
 .isle-shelf-remove {
   padding: 3px;
   margin: 4px;
