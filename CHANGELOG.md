@@ -6,6 +6,8 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-20
+
 ### Added
 
 - A one-line install that needs no compiler or cloning:
@@ -146,5 +148,6 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/zickrian/isle/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/zickrian/isle/releases/tag/v0.1.0
