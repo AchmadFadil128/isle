@@ -11,7 +11,10 @@ clipboard shelf, living in a notch at the top of your screen.
 ![GNOME Shell 46](https://img.shields.io/badge/GNOME%20Shell-46-4a86cf.svg)
 ![Rust 1.85+](https://img.shields.io/badge/Rust-1.85%2B-orange.svg)
 
-<img src="docs/images/demo.gif" alt="Isle opening from the notch: music, lyrics, focus timer, clipboard and tasks" width="840">
+<img src="docs/images/demo.gif" alt="Isle on a GNOME desktop: music with lyrics, notifications, focus timer, clipboard, tasks and alerts" width="800">
+
+▶ Watch the full demo in [1080p, 60 fps](https://github.com/zickrian/isle/releases/download/v0.1.1/isle-demo-1080p.mp4)
+or [close up](https://github.com/zickrian/isle/releases/download/v0.1.1/isle-demo-closeup.mp4).
 
 </div>
 
