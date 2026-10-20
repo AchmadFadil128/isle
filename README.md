@@ -1,65 +1,188 @@
+<div align="center">
+
 # Isle
 
-A dynamic island for the GNOME desktop. Isle turns the centre of the top bar
-into a black island that grows and shrinks with spring physics to show what is
-going on, and opens on hover:
+**A dynamic island for the GNOME desktop.**
 
-- **Music** from Spotify or YouTube in your browser (any MPRIS player works) with cover
-  art, a scrubber and controls, plus **synced lyrics** from
-  [LRCLIB](https://lrclib.net). Click a line to jump to it.
-- **Notifications** from GNOME, shown in the island instead of banners, with a
-  list to catch up on and **Do Not Disturb** right there.
-- **Focus timer** (Pomodoro) with a ring that stays visible while closed,
-  daily totals, and Do Not Disturb while you focus.
-- **Tasks**: a plain list to write things down and tick them off, with a
-  daily reset of finished ones.
-- **Shelf** with two tabs:
-  - **Clipboard history**: text, links, images and files you copy, as cards.
-    Search, filter, click to copy, or press Super+V and Enter to paste. Pin
-    what you paste often. Password managers are ignored, and nothing leaves
-    your computer.
-  - **Files**: drop up to 5 files on the island, then drag them into any app (a
-    chat, an email, another folder).
-- **Privacy dots** when the camera, microphone or screen sharing is in use,
-  and a timer with a stop button while the screen records.
-- **Volume and output** switching right from the music page.
-- **Alerts**: charging, low battery, losing the connection, Bluetooth earbuds
-  with their battery, volume and brightness, Caps Lock.
+Music with synced lyrics, notifications, a focus timer, tasks and a
+clipboard shelf, living in a notch at the top of your screen.
 
-Hover to open; pick a page from the tabs at the top, or swipe sideways. Middle-click
-plays or pauses, right-click brings the music player forward, and Super+V
-opens the clipboard history.
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
+![GNOME Shell 46](https://img.shields.io/badge/GNOME%20Shell-46-4a86cf.svg)
+![Rust 1.85+](https://img.shields.io/badge/Rust-1.85%2B-orange.svg)
+
+<img src="docs/images/demo.gif" alt="Isle opening from the notch: music, lyrics, focus timer, clipboard and tasks" width="840">
+
+</div>
+
+Isle turns the centre of the top bar into a black notch, like a MacBook's.
+At rest it shows the time and what is going on (a song, a timer, a
+recording). Hover it and it opens with spring physics into a small panel with
+tabs for each page. Alerts for volume, charging, Caps Lock and notifications
+appear in the same place instead of in the middle of the screen.
+
+## Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Settings](#settings)
+- [Resource usage](#resource-usage)
+- [Privacy](#privacy)
+- [Troubleshooting](#troubleshooting)
+- [Uninstalling](#uninstalling)
+- [How it works](#how-it-works)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Features
+
+| | |
+|---|---|
+| <img src="docs/images/music.png" alt="Music page" width="420"> | **Music.** Spotify, YouTube in your browser, or any MPRIS player: cover art with the playing app's icon, a scrubber and controls. Volume and output switching are one click away. |
+| <img src="docs/images/lyrics.png" alt="Synced lyrics" width="420"> | **Synced lyrics** from [LRCLIB](https://lrclib.net). The island widens and takes the cover's colour; click a line to jump to it. |
+| <img src="docs/images/focus.png" alt="Focus timer" width="420"> | **Focus timer** (Pomodoro) with breaks, daily totals and Do Not Disturb while you focus. Its ring stays visible in the closed island. |
+| <img src="docs/images/clipboard.png" alt="Clipboard history" width="420"> | **Shelf.** A clipboard history of text, links, images and files (search, filter, pin; Super+V to paste), and a files tray: drop files on the island, then drag them into any app. |
+| <img src="docs/images/tasks.png" alt="Tasks" width="420"> | **Tasks.** A plain list for today: add, tick off, rename in place. Finished tasks fold away and clear at midnight. |
+| <img src="docs/images/alerts.png" alt="Closed island and alerts" width="420"> | **Alerts** for volume, brightness, Caps Lock, charging, low battery, Bluetooth devices with their battery, going offline, and GNOME notifications, which also collect on a **Notifications** page with Do Not Disturb. |
+
+Also: privacy dots while the camera, microphone or screen sharing is in use,
+a recording timer with a stop button, and a slim glass top bar that leaves
+your windows uncovered.
 
 ## Requirements
 
-- GNOME Shell 46 (e.g. Ubuntu 24.04)
-- Rust 1.85 or newer (`rustup` or your distribution's packages)
-- GTK 4 development files for the shelf's drag and drop:
-  `sudo apt install libgtk-4-dev` (optional; without them the shelf is
-  read-only)
+- **GNOME Shell 46** on Wayland or X11 (Ubuntu 24.04, Fedora 40, …)
+- **Rust 1.85 or newer.** Ubuntu 24.04's `cargo` package is too old; use
+  [rustup](https://rustup.rs).
+- **GTK 4 development files** for the shelf's drag and drop (optional;
+  without them the files tray is read-only).
 
-## Install
+## Installation
+
+**1. Install the build tools.** On Ubuntu or Debian:
 
 ```sh
-git clone <repository-url> isle
+sudo apt install git build-essential pkg-config libgtk-4-dev
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+On Fedora: `sudo dnf install git gcc pkgconf gtk4-devel`, then rustup as above.
+
+**2. Build and install Isle.**
+
+```sh
+git clone https://github.com/<you>/isle.git
 cd isle
 ./install.sh
 ```
 
-Everything is installed for your user only; no root is needed. On Wayland,
-log out and back in once so GNOME Shell loads the extension. Settings are in
-the Extensions app → Isle.
+Everything is installed for your user only; no root is needed. The installer
+builds the Rust parts, installs the extension, starts the `isled` service and
+sets up the top bar.
 
-The installer gives every desktop the same look: a slim top bar with no
-colour of its own and the island hanging from the top of the screen as a
-black notch, like on a MacBook. The closed island sits inside the bar, so it
-never covers your windows; only alerts and the open island reach below it
-while they are shown. It also turns off what would get in the way: Blur my
-Shell's top bar blur, which darkens the bar (the rest of its blur stays), and
-other extensions that take the same place in the top bar.
+**3. Log out and back in.** GNOME Shell on Wayland only loads a new
+extension at login. On X11, press Alt+F2, type `r` and press Enter instead.
 
-`./uninstall.sh` removes it again. Your tasks, shelf, clipboard history and
-timer settings stay in `~/.local/share/isle` until you delete that folder.
+To update later, `git pull` and run `./install.sh` again.
+
+> [!NOTE]
+> The installer turns off settings and extensions that would fight with the
+> island: Blur my Shell's top bar blur (the rest of its blur stays), and
+> extensions that take the same place in the top bar. Isle's look is the
+> same on every desktop: a slim top bar with no colour of its own, and the
+> island as a black notch.
+
+## Usage
+
+| Do this | To |
+|---|---|
+| Hover the notch | Open the island |
+| Click a tab, or swipe sideways with two fingers | Switch pages |
+| Move the pointer away, or press Esc | Close it |
+| Click the notch | Open it now; on an alert, open what it is about |
+| Middle-click the notch | Play or pause |
+| Right-click the notch | Bring the music player to the front |
+| Super+V | Open the clipboard history with search ready; Enter pastes |
+| Drag a file towards the notch | Open the files tray to drop it |
+
+The island reopens on the page you picked last (for five minutes), or on
+what is live: unseen notifications, music, a running timer.
+
+## Settings
+
+Open the **Extensions** app and click the gear next to Isle:
+
+- **Top bar:** glass (default), black, or your theme's colour; the closed
+  island inside the bar or hanging below it.
+- **Alerts:** volume and brightness, battery and network, privacy dots, new
+  songs, timer sounds.
+- **Clipboard:** turn the history on or off, clear it, and choose apps whose
+  copies are never kept (password managers are on the list from the start).
+- **Focus timer:** session and break lengths, Do Not Disturb while focusing.
+
+## Resource usage
+
+Isle is built to run all day unnoticed. Measured on Ubuntu 24.04 with
+GNOME 46:
+
+| Part | Memory | CPU when idle |
+|---|---|---|
+| `isled` (background service) | 7.4 MB resident, of which about 0.7 MB its own | 0% (no polling) |
+| Extension, inside GNOME Shell | about 10 MB more for the shell | 0% when nothing moves |
+| `isle-shelf` (drag and drop) | about 40 MB, GTK 4; only after the files tray is first opened | 0% |
+
+| On disk | Size |
+|---|---|
+| Programs (`isled` 8.5 MB, `isle-shelf` 1.9 MB) | 10.4 MB |
+| Extension | 0.5 MB |
+| Inter typeface | 0.9 MB |
+| Cache (`~/.cache/isle`) | about 100 KB per song's cover and 6 KB per lyrics |
+
+Animations run on the display's frame clock only while a spring moves and
+stop when it settles. The clock wakes once a minute, lyrics exactly when the
+next line starts, and pages only tick while they are open.
+
+## Privacy
+
+Isle runs locally. The clipboard history, tasks and timer stay in
+`~/.local/share/isle` and never leave your computer; copies from password
+managers are never kept. The only network requests are a lyrics lookup on
+[LRCLIB](https://lrclib.net) and the cover art the player points to, once
+per song, both then cached.
+
+## Troubleshooting
+
+**The island does not appear after installing.** Log out and back in (on
+Wayland this is required once). Then check that it is enabled:
+`gnome-extensions info isle@isle.github.io`.
+
+**Music or lyrics do not show.** Check that the background service runs:
+`systemctl --user status isled`, and read its log with
+`journalctl --user -u isled -f`. Songs LRCLIB does not know show "No lyrics
+found"; a busy service retries on its own.
+
+**Files cannot be dragged in or out.** Install `libgtk-4-dev` (Fedora:
+`gtk4-devel`) and run `./install.sh` again.
+
+**Another extension covers the island.** Extensions that restyle or move the
+top bar (Dash to Panel, Hide Top Bar, other islands) can get in the way;
+turn them off in the Extensions app.
+
+**Something else.** GNOME Shell's log shows extension errors:
+`journalctl -f -o cat /usr/bin/gnome-shell`. Please
+[open an issue](../../issues) with what you see.
+
+## Uninstalling
+
+```sh
+./uninstall.sh
+```
+
+This removes the extension, the programs, the service and the font. Your
+tasks, clipboard history, shelf and timer settings stay in
+`~/.local/share/isle` until you delete that folder.
 
 ## How it works
 
@@ -72,49 +195,36 @@ timer settings stay in `~/.local/share/isle` until you delete that folder.
            ┌─────────────┴──────────────┐
   GNOME Shell extension (JS)      isle-shelf (Rust, GTK 4)
   draws the island and its        drag-and-drop window laid
-  animations                      over the shelf page
+  animations                      over the files tray
 ```
 
-GNOME Shell extensions must be written in JavaScript, and on Wayland only the
+GNOME Shell extensions are written in JavaScript, and on Wayland only the
 shell can draw into the top bar. So the extension only draws, and everything
 else lives in Rust behind a D-Bus API.
-
-Isle is built to run all day without being noticed:
-
-- Nothing polls. Animations run on the display's frame clock only while a
-  spring moves, and stop when it settles.
-- The clock wakes once a minute, lyrics exactly when the next line starts,
-  and pages only tick while they are open.
-- `isled` sleeps until something changes (about 7 MB of memory). Lyrics and
-  cover art are fetched once and cached in `~/.cache/isle`.
-
-## Repository layout
 
 | Path | Contents |
 |---|---|
 | `crates/isle-core` | Platform-independent logic: LRC parsing, track-title clean-up, Pomodoro, tasks, shelf, clipboard history. Unit tested. |
 | `crates/isle-daemon` | `isled`, the D-Bus service. |
-| `crates/isle-shelf` | `isle-shelf`, the shelf's drag-and-drop window. |
+| `crates/isle-shelf` | `isle-shelf`, the files tray's drag-and-drop window. |
 | `gnome-extension` | The GNOME Shell extension. |
-| `data` | systemd and D-Bus activation files. |
-| `docs/product-spec.md` | How the island looks and behaves: sizes, motion, flows, pages, alerts. |
+| `data` | systemd and D-Bus activation files, and the Inter typeface. |
+| `docs/product-spec.md` | How the island looks and behaves: sizes, motion, pages, alerts. |
 | `docs/dbus-api.md` | The D-Bus interfaces of `isled` and `isle-shelf`. |
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and ideas are welcome as
-issues.
-
-## Notes
-
-- The top bar is glass by default; in the settings it can be black, so the
-  island blends into it, or keep the theme's colour. Isle's colour stays when
-  other extensions restyle the bar.
-- Lyrics come from LRCLIB, a free community database; songs it does not know
-  show "No lyrics found".
+Bug reports, ideas and pull requests are welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to build, test and send changes,
+and [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 ## License
 
-Isle is free software under the [GNU General Public License v3.0 or later](LICENSE).
+Isle is free software under the
+[GNU General Public License v3.0 or later](LICENSE).
+
 The bundled [Inter](https://rsms.me/inter/) typeface (`data/fonts`) is under
-the [SIL Open Font License 1.1](data/fonts/Inter-LICENSE.txt).
+the [SIL Open Font License 1.1](data/fonts/Inter-LICENSE.txt). Lyrics come
+from [LRCLIB](https://lrclib.net). Isle is inspired by the iPhone's Dynamic
+Island and by [NotchNook](https://lo.cafe/notchnook) and
+[Boring Notch](https://github.com/TheBoredTeam/boring.notch) on the Mac.

@@ -8,6 +8,8 @@ All notable changes to Isle are listed here. The format follows
 
 ### Added
 
+- A README with a demo, screenshots, installation steps for Ubuntu and
+  Fedora, usage, measured resource use, privacy notes and troubleshooting.
 - One look across every page, as on macOS: Isle's own solid icons for
   play, pause, skip, close, check, add and the folding arrows instead of
   the theme's; controls are pills and cards share a 12 px corner; the
