@@ -42,6 +42,14 @@
       <default>90</default>
       <summary>Seconds without input before the eyes appear</summary>
     </key>
+    <key name="privacy-indicators" type="b">
+      <default>true</default>
+      <summary>Show when the camera, microphone or screen sharing is in use</summary>
+    </key>
+    <key name="focus-dnd" type="b">
+      <default>true</default>
+      <summary>Turn on Do Not Disturb during focus sessions</summary>
+    </key>
     <key name="chimes" type="b">
       <default>true</default>
       <summary>Play a sound for timers and reminders</summary>

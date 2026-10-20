@@ -4,6 +4,8 @@
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use chrono::{Local, NaiveDate, TimeZone};
+
 use tokio::sync::Notify;
 
 /// Longest single sleep. Tokio sleeps on the monotonic clock, which stops
@@ -35,4 +37,27 @@ pub async fn wait_until(deadline: Option<i64>, wake: &Notify) -> bool {
         () = tokio::time::sleep(nap) => now_ms() >= deadline,
         () = notified => false,
     }
+}
+
+/// Today's date in local time, e.g. "2026-10-20".
+pub fn today() -> String {
+    Local::now().date_naive().to_string()
+}
+
+/// Start of today in local time, in milliseconds since the Unix epoch.
+pub fn start_of_today() -> i64 {
+    local_midnight(Local::now().date_naive()).unwrap_or(0)
+}
+
+/// The coming midnight in local time, for refreshing "today" figures.
+pub fn next_midnight() -> Option<i64> {
+    local_midnight(Local::now().date_naive().succ_opt()?)
+}
+
+fn local_midnight(date: NaiveDate) -> Option<i64> {
+    // `earliest` resolves times made ambiguous by daylight saving changes.
+    let midnight = Local
+        .from_local_datetime(&date.and_hms_opt(0, 0, 0)?)
+        .earliest()?;
+    Some(midnight.timestamp_millis())
 }

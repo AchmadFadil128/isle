@@ -70,6 +70,15 @@ export function ago(dateTime) {
     return dateTime.format('%a');
 }
 
+/** A span of time as "1h 15m", "25m" or "0m". */
+export function hoursMinutes(ms) {
+    const minutes = Math.round(ms / 60000);
+    const hours = Math.floor(minutes / 60);
+    if (!hours)
+        return `${minutes}m`;
+    return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+}
+
 /** Human name for a pomodoro phase. */
 export function phaseName(phase) {
     return {

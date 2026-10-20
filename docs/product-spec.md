@@ -14,6 +14,8 @@ disagrees with this document is a bug in one or the other; fix both together.
 | move files between apps | park files on the island and drag them out later |
 | know when something changes | show short, consistent alerts: charging, battery, Wi-Fi, earbuds, volume, brightness, keyboard, new song |
 | still get my notifications now that the clock is gone | show GNOME's notifications in the island, keep them in a list, and offer Do Not Disturb right there |
+| know when I am being watched or recorded | show privacy dots for the camera, microphone and screen sharing, and a timer while the screen records |
+| control sound without opening Quick Settings | change the volume and the output device from the music page |
 | keep my laptop fast and cool | never poll; animate only while something moves |
 
 Out of scope for v1: water reminders (removed), notification banners in the
@@ -93,9 +95,15 @@ the neighbouring page (hidden at the ends); dots show where you are.
 
 ## 4. Closed island
 
-- Left slot, first that applies: focus timer ring → cover art (music
-  playing) → white dot (unseen notifications) → moon (Do Not Disturb on).
-- Right slot: music bars while playing (static, to save power).
+- Left slot, first that applies: breathing red dot (screen recording) →
+  focus timer ring → cover art (music playing) → white dot (unseen
+  notifications) → moon (Do Not Disturb on).
+- While the screen records, the centre shows how long it has been recording
+  instead of the clock.
+- Right slot: music bars while playing. They dance only while the closed
+  island is on screen.
+- Far right: privacy dots, as on iPhone: green camera, orange microphone,
+  blue screen sharing (the island widens by 22 px while any is shown).
 - Centre: the clock (follows GNOME's 12/24-hour setting); or the current
   lyric line if *Live lyrics* is on and synced lyrics exist; or the eyes.
 - Idle: after *Idle after* seconds (90) without input and nothing playing,
@@ -105,12 +113,20 @@ the neighbouring page (hidden at the ends); dots show where you are.
 ## 5. Pages
 
 Every page shares the header row inside the top bar: page title on the left,
-`[timer ring] Tue 20 Oct 2026 12:26` in the centre, music bars on the right.
+`[timer ring] Tue 20 Oct 2026 12:26` in the centre, and on the right a red
+"● 0:42" pill while the screen records (click to stop), the privacy dots and
+the music bars.
 
 **Music** (no title). Cover (click: bring the player forward), title, artist
 — album, scrubber with elapsed / remaining time, lyrics toggle, previous ·
 play/pause · next, the player's app icon. With nothing playing: "Nothing
 playing" and a hint.
+
+**Volume and output** (Music page, the output button at the bottom right).
+The volume with a mute button and percentage, then the outputs (speakers,
+headphones, earbuds, HDMI) with a check on the current one; click one to
+switch. The output button lights up and fills in while this is shown; it
+returns to the player when the island closes.
 
 **Lyrics** (Music page, toggled). The island widens to 720. Left: cover,
 title, artist, scrubber, controls with the lyrics toggle lit. A hairline
@@ -130,7 +146,13 @@ phase runs (green during breaks), with a clock icon inside; the remaining
 time large with a reset button; the phase underneath ("Focus time", "Short
 break", "Long break"). Buttons: **Short Break** · white play/pause ·
 **Focus Time**; the chips start that phase at once and the current one is
-highlighted. No glows or accent fills.
+highlighted. No glows or accent fills. Once a focus session has finished
+today, a line underneath reads "Today · 3 sessions · 1h 15m".
+
+While a focus phase runs (paused included), Do Not Disturb is on, like a
+Focus mode; it goes off when the phase ends. Isle only undoes what it did:
+if Do Not Disturb was already on, or the user turns it off mid-session, it
+is left alone. ("Do Not Disturb" in Focus Timer settings.)
 
 **Shelf** (title "Shelf"). With `isle-shelf` installed: a drop zone, file
 tiles with previews; drag out to any app, double-click to open, × to remove,
@@ -157,11 +179,12 @@ One at a time. *Instant* alerts replace whatever is showing; the rest queue
 | Fully charged | green ring | Fully Charged | 100% | 2.6 s |
 | Earbuds connected | ring + device icon | AirBuds Pro / Connected | 70% | 2.6 s |
 | Wi-Fi | icon | Wi-Fi connected / network name; Offline | – | 2.6 s |
-| Volume, brightness (instant) | icon | Volume / device | level bar + % | 1.5 s |
+| Volume, brightness (instant) | icon | Volume / device | level bar + %, gliding to each new level; pressing on at 0% or 100% stretches the island like a rubber band | 1.5 s |
 | Caps Lock, layout (instant) | ⇪ / keyboard | Caps Lock on; layout name | code | 1.5 s |
 | New song | cover | title / artist | – | 2.6 s |
 | Timer phase ends (+ chime) | timer | Focus session done… | Start break | 8 s |
 | Task due (+ chime) | tasks | task title / Due now | Done | 8 s |
+| Screen recording started | red record icon | Recording screen | Stop | 2.6 s |
 | Notification (GNOME's sound) | app icon, large | title / first line | – | 5 s; urgent 8 s and instant |
 
 When a window is fullscreen the island hides and GNOME's own volume pop-up
@@ -190,4 +213,7 @@ hovering opens the Notifications page.
 - Idle, nothing playing: one wake-up per minute (the clock). No polling.
 - Animations run on the display's frame clock only while a spring moves.
 - The open island ticks only the visible page (scrubber 4×/s, timer 1×/s).
-- `isled` sleeps until a D-Bus signal arrives.
+- `isled` sleeps until a D-Bus signal arrives. The camera is watched with
+  inotify, so the kernel reports opens and closes; nothing is polled.
+- Moving parts that loop (music bars, the recording dot) run only while on
+  screen.

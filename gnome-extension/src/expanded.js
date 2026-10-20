@@ -12,7 +12,7 @@ import St from 'gi://St';
 import {timerColor} from './compact.js';
 import * as Format from './format.js';
 import * as Playback from './playback.js';
-import {Bars, Ring, iconButton, label} from './widgets.js';
+import {Bars, PrivacyDots, RecordingDot, Ring, iconButton, label} from './widgets.js';
 
 export const EXPANDED_WIDTH = 600;
 export const PAGE_HEIGHT = 150;
@@ -34,9 +34,11 @@ export const ExpandedView = GObject.registerClass({
         'tint-changed': {},
     },
 }, class ExpandedView extends St.BoxLayout {
-    _init(daemon, pages) {
+    _init(daemon, privacy, settings, pages) {
         super._init({vertical: true, style_class: 'isle-expanded', width: EXPANDED_WIDTH});
         this._daemon = daemon;
+        this._privacy = privacy;
+        this._settings = settings;
         this._pages = pages;
         this._index = 0;
         this._active = false;
@@ -72,6 +74,7 @@ export const ExpandedView = GObject.registerClass({
             if (key === 'nowPlaying' || key === 'pomodoro')
                 this._updateHeader();
         });
+        this._privacyChanged = privacy.connect('changed', () => this._updateHeader());
         this._syncPage();
         this._syncWidth();
     }
@@ -96,10 +99,26 @@ export const ExpandedView = GObject.registerClass({
         clock.add_child(this._time);
         header.add_child(clock);
 
+        // Right: a running recording (click to stop), privacy dots, music.
+        const status = new St.BoxLayout({style_class: 'isle-header-status', x_expand: true, x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.CENTER});
+        const recordingBox = new St.BoxLayout({style_class: 'isle-recording-pill-box'});
+        recordingBox.add_child(new RecordingDot());
+        this._recordingTime = label('', 'isle-recording-time');
+        recordingBox.add_child(this._recordingTime);
+        this._recordingButton = new St.Button({
+            style_class: 'isle-recording-pill',
+            child: recordingBox,
+            accessible_name: 'Stop recording',
+            visible: false,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._recordingButton.connect('clicked', () => this._privacy.stopRecording());
+        this._privacyDots = new PrivacyDots();
         this._headerBars = new Bars({height: 14});
-        this._headerBars.x_expand = true;
-        this._headerBars.x_align = Clutter.ActorAlign.END;
-        header.add_child(this._headerBars);
+        status.add_child(this._recordingButton);
+        status.add_child(this._privacyDots);
+        status.add_child(this._headerBars);
+        header.add_child(status);
         return header;
     }
 
@@ -210,10 +229,12 @@ export const ExpandedView = GObject.registerClass({
         this._active = active;
         this.page.setActive(active);
         this._updateHeader();
-        if (active)
+        if (active) {
             this._tickClock();
-        else
+        } else {
             this._stopClock();
+            this._stopRecordingTick();
+        }
     }
 
     _syncPage() {
@@ -251,6 +272,32 @@ export const ExpandedView = GObject.registerClass({
         const playing = Playback.isPlaying(nowPlaying);
         this._headerBars.visible = playing;
         this._headerBars.playing = this._active && playing;
+
+        const showPrivacy = this._settings.get_boolean('privacy-indicators');
+        this._privacyDots.update(showPrivacy ? this._privacy : {});
+        this._recordingButton.visible = this._privacy.recording;
+        if (this._privacy.recording && this._active)
+            this._tickRecording();
+        else
+            this._stopRecordingTick();
+    }
+
+    _tickRecording() {
+        const elapsedMs = (GLib.get_monotonic_time() - this._privacy.recordingSince) / 1000;
+        this._recordingTime.text = Format.duration(elapsedMs);
+        this._stopRecordingTick();
+        this._recordingTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000 - (elapsedMs % 1000) + 10, () => {
+            this._recordingTimeout = 0;
+            this._tickRecording();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _stopRecordingTick() {
+        if (this._recordingTimeout) {
+            GLib.source_remove(this._recordingTimeout);
+            this._recordingTimeout = 0;
+        }
     }
 
     _tickClock() {
@@ -306,7 +353,9 @@ export const ExpandedView = GObject.registerClass({
 
     vfunc_destroy() {
         this._stopClock();
+        this._stopRecordingTick();
         this._daemon.disconnect(this._daemonChanged);
+        this._privacy.disconnect(this._privacyChanged);
         super.vfunc_destroy();
     }
 });

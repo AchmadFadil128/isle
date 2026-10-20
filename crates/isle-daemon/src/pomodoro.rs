@@ -2,27 +2,42 @@
 
 use std::sync::Arc;
 
-use isle_core::pomodoro::{Phase, Pomodoro, PomodoroConfig};
+use isle_core::pomodoro::{FocusStats, Phase, Pomodoro, PomodoroConfig, PomodoroView};
 use log::warn;
+use serde::Serialize;
 use tokio::sync::Notify;
 use zbus::object_server::{InterfaceRef, SignalEmitter};
 use zbus::{fdo, interface};
 
-use crate::clock::{now_ms, wait_until};
+use crate::clock::{next_midnight, now_ms, today, wait_until};
 use crate::store::Store;
+
+/// What the `State` property holds: the timer plus today's focus figures.
+#[derive(Serialize)]
+struct State {
+    #[serde(flatten)]
+    timer: PomodoroView,
+    today_sessions: u32,
+    today_focus_ms: i64,
+}
 
 pub struct PomodoroService {
     timer: Pomodoro,
     store: Store<PomodoroConfig>,
+    stats: FocusStats,
+    stats_store: Store<FocusStats>,
     wake: Arc<Notify>,
 }
 
 impl PomodoroService {
     pub fn load() -> Self {
         let store = Store::new("pomodoro");
+        let stats_store = Store::new("focus-stats");
         Self {
             timer: Pomodoro::new(store.load()),
             store,
+            stats: stats_store.load(),
+            stats_store,
             wake: Arc::default(),
         }
     }
@@ -98,10 +113,16 @@ impl PomodoroService {
         Ok(self.changed(&emitter).await?)
     }
 
-    /// JSON `PomodoroView`.
+    /// JSON `PomodoroView`, plus `today_sessions` and `today_focus_ms`.
     #[zbus(property)]
     fn state(&self) -> String {
-        serde_json::to_string(&self.timer.view(now_ms())).unwrap_or_default()
+        let (today_sessions, today_focus_ms) = self.stats.on(&today());
+        let state = State {
+            timer: self.timer.view(now_ms()),
+            today_sessions,
+            today_focus_ms,
+        };
+        serde_json::to_string(&state).unwrap_or_default()
     }
 
     /// JSON `PomodoroConfig`.
@@ -119,36 +140,49 @@ impl PomodoroService {
     ) -> zbus::Result<()>;
 }
 
-/// Advances the timer whenever a phase runs out.
+/// Advances the timer whenever a phase runs out, records finished focus
+/// sessions, and refreshes the state at midnight when "today" resets.
 pub async fn run(iface: InterfaceRef<PomodoroService>) {
     let wake = iface.get().await.wake.clone();
     loop {
-        let deadline = iface.get().await.timer.deadline();
+        let phase_end = iface.get().await.timer.deadline();
+        let deadline = [phase_end, next_midnight()].into_iter().flatten().min();
         if !wait_until(deadline, &wake).await {
             continue;
         }
 
         let mut service = iface.get_mut().await;
-        let Some(transition) = service.timer.tick(now_ms()) else {
-            continue;
-        };
+        let now = now_ms();
+        let focus_ms = service.timer.view(now).duration_ms;
+        let transition = service.timer.tick(now);
+        if transition.is_some_and(|t| t.finished == Phase::Focus) {
+            service.stats.record(&today(), focus_ms);
+            service.stats_store.save(&service.stats);
+        }
+
         let emitter = iface.signal_emitter();
-        let phase = |phase| {
-            serde_json::to_value(phase)
-                .ok()
-                .and_then(|v| v.as_str().map(str::to_owned))
-        };
         let result = async {
             service.state_changed(emitter).await?;
-            PomodoroService::phase_finished(
-                emitter,
-                &phase(transition.finished).unwrap_or_default(),
-                &phase(transition.next).unwrap_or_default(),
-            )
-            .await
+            if let Some(transition) = transition {
+                PomodoroService::phase_finished(
+                    emitter,
+                    &phase_name(transition.finished),
+                    &phase_name(transition.next),
+                )
+                .await?;
+            }
+            zbus::Result::Ok(())
         };
         if let Err(err) = result.await {
             warn!("could not announce the pomodoro phase change: {err}");
         }
     }
+}
+
+/// The phase's name as used on D-Bus, e.g. "short_break".
+fn phase_name(phase: Phase) -> String {
+    serde_json::to_value(phase)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .unwrap_or_default()
 }

@@ -295,9 +295,10 @@ class LevelBar extends St.Widget {
         this.connect('notify::allocation', () => this._layout());
     }
 
+    /** Sets the level; on screen, the fill glides to it. */
     set level(value) {
         this._level = Math.min(1, Math.max(0, value));
-        this._layout();
+        this._layout(this.mapped);
     }
 
     get level() {
@@ -309,9 +310,198 @@ class LevelBar extends St.Widget {
         this._fill.style = `background-color: ${color};`;
     }
 
+    _layout(animate = false) {
+        // Before the first allocation there is nothing to lay out (and asking
+        // for a size would make St style an actor that is not on stage yet).
+        if (!this.has_allocation())
+            return;
+        const box = this.get_allocation_box();
+        const [width, height] = [box.get_width(), box.get_height()];
+        const fill = Math.round(width * this._level);
+        this._fill.height = height;
+        this._fill.remove_transition('width');
+        if (animate)
+            this._fill.ease({width: fill, duration: 160, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        else
+            this._fill.width = fill;
+    }
+});
+
+/**
+ * A horizontal slider that can be clicked, dragged or scrolled. Emits
+ * `value-changed` while it moves and `released` with the final value.
+ */
+export const Slider = GObject.registerClass({
+    Signals: {
+        'value-changed': {param_types: [GObject.TYPE_DOUBLE]},
+        'released': {param_types: [GObject.TYPE_DOUBLE]},
+    },
+}, class Slider extends St.Widget {
+    _init({scrollStep = 0} = {}) {
+        super._init({
+            style_class: 'isle-slider',
+            reactive: true,
+            track_hover: true,
+            x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
+            layout_manager: new Clutter.FixedLayout(),
+        });
+        this._scrollStep = scrollStep;
+        this._track = new St.Widget({style_class: 'isle-slider-track'});
+        this._fill = new St.Widget({style_class: 'isle-slider-fill'});
+        this._knob = new St.Widget({style_class: 'isle-slider-knob', opacity: 0});
+        this.add_child(this._track);
+        this.add_child(this._fill);
+        this.add_child(this._knob);
+        this._value = 0;
+        this._grab = null;
+        this.connect('notify::allocation', () => this._layout());
+        this.connect('notify::hover', () => this._syncKnob());
+    }
+
+    get value() {
+        return this._value;
+    }
+
+    /** Sets the value from outside; ignored while the user is dragging. */
+    set value(value) {
+        if (this._grab)
+            return;
+        this._value = Math.min(1, Math.max(0, value || 0));
+        this._layout();
+    }
+
+    _syncKnob() {
+        this._knob.ease({opacity: this.hover || this._grab ? 255 : 0, duration: 120});
+    }
+
     _layout() {
-        const [width, height] = this.get_size();
-        this._fill.set_size(Math.round(width * this._level), height);
+        if (!this.has_allocation())
+            return;
+        const box = this.get_allocation_box();
+        const [width, height] = [box.get_width(), box.get_height()];
+        const trackHeight = 4;
+        const y = Math.round((height - trackHeight) / 2);
+        this._track.set_position(0, y);
+        this._track.set_size(width, trackHeight);
+        this._fill.set_position(0, y);
+        this._fill.set_size(Math.round(width * this._value), trackHeight);
+        const knob = 12;
+        this._knob.set_size(knob, knob);
+        this._knob.set_position(Math.round(width * this._value - knob / 2), Math.round((height - knob) / 2));
+    }
+
+    _moveTo(event) {
+        const [x] = event.get_coords();
+        const [ok, localX] = this.transform_stage_point(x, 0);
+        if (ok)
+            this._value = Math.min(1, Math.max(0, localX / this.width));
+        this._layout();
+        this.emit('value-changed', this._value);
+    }
+
+    vfunc_button_press_event(event) {
+        this._grab = global.stage.grab(this);
+        this._moveTo(event);
+        return Clutter.EVENT_STOP;
+    }
+
+    vfunc_motion_event(event) {
+        if (!this._grab)
+            return Clutter.EVENT_PROPAGATE;
+        this._moveTo(event);
+        return Clutter.EVENT_STOP;
+    }
+
+    vfunc_button_release_event(event) {
+        if (!this._grab)
+            return Clutter.EVENT_PROPAGATE;
+        this._grab.dismiss();
+        this._grab = null;
+        this._moveTo(event);
+        this._syncKnob();
+        this.emit('released', this._value);
+        return Clutter.EVENT_STOP;
+    }
+
+    vfunc_scroll_event(event) {
+        if (!this._scrollStep)
+            return Clutter.EVENT_PROPAGATE;
+        const direction = event.get_scroll_direction();
+        let delta = 0;
+        if (direction === Clutter.ScrollDirection.UP || direction === Clutter.ScrollDirection.RIGHT)
+            delta = this._scrollStep;
+        else if (direction === Clutter.ScrollDirection.DOWN || direction === Clutter.ScrollDirection.LEFT)
+            delta = -this._scrollStep;
+        else if (direction === Clutter.ScrollDirection.SMOOTH)
+            delta = -event.get_scroll_delta()[1] * this._scrollStep;
+        if (!delta)
+            return Clutter.EVENT_STOP;
+        this._value = Math.min(1, Math.max(0, this._value + delta));
+        this._layout();
+        this.emit('value-changed', this._value);
+        this.emit('released', this._value);
+        return Clutter.EVENT_STOP;
+    }
+});
+
+/**
+ * Coloured dots for what is in use, as on iPhone: green for the camera,
+ * orange for the microphone, blue for screen sharing. Dots fade and scale in.
+ */
+export const PrivacyDots = GObject.registerClass(
+class PrivacyDots extends St.BoxLayout {
+    _init() {
+        super._init({style_class: 'isle-privacy-dots', y_align: Clutter.ActorAlign.CENTER, visible: false});
+        this._dots = {};
+        for (const kind of ['camera', 'microphone', 'screenShare']) {
+            const dot = new St.Widget({style_class: `isle-privacy-dot ${kind}`, visible: false, y_align: Clutter.ActorAlign.CENTER});
+            dot.set_pivot_point(0.5, 0.5);
+            this._dots[kind] = dot;
+            this.add_child(dot);
+        }
+    }
+
+    /** Shows a dot for each of `privacy`'s camera, microphone and screenShare. */
+    update(privacy) {
+        for (const [kind, dot] of Object.entries(this._dots)) {
+            const on = Boolean(privacy[kind]);
+            if (on === dot.visible)
+                continue;
+            if (on) {
+                dot.set_scale(0.4, 0.4);
+                dot.opacity = 0;
+                dot.show();
+                dot.ease({scale_x: 1, scale_y: 1, opacity: 255, duration: 250, mode: Clutter.AnimationMode.EASE_OUT_BACK});
+            } else {
+                dot.hide();
+            }
+        }
+        this.visible = Object.values(this._dots).some(dot => dot.visible);
+    }
+});
+
+/** A red dot that breathes slowly while a screen recording runs. */
+export const RecordingDot = GObject.registerClass(
+class RecordingDot extends St.Widget {
+    _init() {
+        super._init({style_class: 'isle-recording-dot', y_align: Clutter.ActorAlign.CENTER});
+        this.connect('notify::mapped', () => this._breathe());
+    }
+
+    _breathe() {
+        this.remove_transition('opacity');
+        this.opacity = 255;
+        if (!this.mapped)
+            return;
+        // Only animates while on screen; stops by itself when hidden.
+        this.ease({
+            opacity: 110,
+            duration: 900,
+            mode: Clutter.AnimationMode.EASE_IN_OUT_SINE,
+            autoReverse: true,
+            repeatCount: -1,
+        });
     }
 });
 

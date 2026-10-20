@@ -47,6 +47,10 @@ class TimerPage extends Page {
         this._caption = label('', 'isle-timer-caption', {x_align: Clutter.ActorAlign.CENTER});
         center.add_child(this._caption);
 
+        // Today's focus, shown once there is some.
+        this._stats = label('', 'isle-timer-stats', {x_align: Clutter.ActorAlign.CENTER, visible: false});
+        center.add_child(this._stats);
+
         const buttons = new St.BoxLayout({x_align: Clutter.ActorAlign.CENTER, style_class: 'isle-timer-buttons'});
         this._shortBreak = chipButton('isle-coffee', 'Short Break',
             () => daemon.call('pomodoro', 'StartPhase', 'short_break'), 'isle-chip-break');
@@ -89,6 +93,10 @@ class TimerPage extends Page {
         this._ring.progress = idle ? 0 : 1 - remaining / state.duration_ms;
         this._time.text = Format.duration(remaining);
         this._caption.text = state.running || idle ? CAPTIONS[state.phase] : `${CAPTIONS[state.phase]} · paused`;
+
+        const sessions = state.today_sessions ?? 0;
+        this._stats.visible = sessions > 0;
+        this._stats.text = `Today · ${sessions} ${sessions === 1 ? 'session' : 'sessions'} · ${Format.hoursMinutes(state.today_focus_ms ?? 0)}`;
 
         setButtonIcon(this._play, state.running ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic');
         // The stopwatch fills in while running; reset only acts once started.

@@ -18,5 +18,10 @@ All notable changes to Isle are listed here. The format follows
 - Alerts for charging, battery, Wi-Fi, Bluetooth, volume, brightness and
   keyboard changes.
 - Sleepy eyes when idle.
+- Privacy dots for the camera, microphone and screen sharing; a screen
+  recording timer with a stop button.
+- Volume and output device switching on the music page.
+- Daily focus totals and Do Not Disturb during focus sessions.
+- Rubber-band stretch when the volume is pressed past its limit.
 - `isled` D-Bus service, install and uninstall scripts, product spec and
   D-Bus API docs.

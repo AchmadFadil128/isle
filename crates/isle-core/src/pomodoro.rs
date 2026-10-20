@@ -221,6 +221,38 @@ impl Pomodoro {
     }
 }
 
+/// Focus completed on one day: how many sessions and for how long.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FocusStats {
+    /// Local date the figures belong to, e.g. "2026-10-20".
+    pub date: String,
+    pub sessions: u32,
+    pub focus_ms: i64,
+}
+
+impl FocusStats {
+    /// Adds a completed focus session on `today`, starting afresh on a new day.
+    pub fn record(&mut self, today: &str, focus_ms: i64) {
+        if self.date != today {
+            *self = Self {
+                date: today.to_owned(),
+                ..Self::default()
+            };
+        }
+        self.sessions += 1;
+        self.focus_ms += focus_ms.max(0);
+    }
+
+    /// The figures for `today`: zero if nothing was recorded yet today.
+    pub fn on(&self, today: &str) -> (u32, i64) {
+        if self.date == today {
+            (self.sessions, self.focus_ms)
+        } else {
+            (0, 0)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,5 +331,16 @@ mod tests {
         assert_eq!(view.phase, Phase::ShortBreak);
         assert!(!view.running);
         assert_eq!(view.remaining_ms, 5 * MINUTE_MS);
+    }
+
+    #[test]
+    fn focus_stats_reset_each_day() {
+        let mut stats = FocusStats::default();
+        stats.record("2026-10-20", 25 * MINUTE_MS);
+        stats.record("2026-10-20", 25 * MINUTE_MS);
+        assert_eq!(stats.on("2026-10-20"), (2, 50 * MINUTE_MS));
+        assert_eq!(stats.on("2026-10-21"), (0, 0));
+        stats.record("2026-10-21", 10 * MINUTE_MS);
+        assert_eq!(stats.on("2026-10-21"), (1, 10 * MINUTE_MS));
     }
 }

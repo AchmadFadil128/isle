@@ -16,6 +16,12 @@ import St from 'gi://St';
 import {GENTLE, ISLAND, Spring, SpringDriver} from './spring.js';
 
 
+/**
+ * Sideways speed (px/s) given to the island by `nudge`: a stretch of about
+ * 15 px that springs back, like iOS when the volume is already at its limit.
+ */
+const NUDGE_VELOCITY = 220;
+
 /** Cross-fade timings in milliseconds. */
 const FADE_OUT = 160;
 const FADE_IN = 320;
@@ -152,6 +158,14 @@ export const Island = GObject.registerClass({
         view.reactive = false;
         view.hide();
         this._stage.add_child(view);
+    }
+
+    /** A quick rubber-band stretch, e.g. pressing volume up at 100%. */
+    nudge() {
+        if (!St.Settings.get().enable_animations)
+            return;
+        this._width.velocity += NUDGE_VELOCITY;
+        this._driver.start();
     }
 
     _showView(view) {

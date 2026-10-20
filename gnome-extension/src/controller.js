@@ -22,7 +22,10 @@ import {CompactView} from './compact.js';
 import {Daemon} from './daemon.js';
 import {DOTS_HEIGHT, ExpandedView, PAGE_HEIGHT} from './expanded.js';
 import {Island} from './island.js';
+import {AudioOutputs} from './audio.js';
+import {FocusMode} from './focusMode.js';
 import {NotificationCenter} from './notifications.js';
+import {PrivacyMonitor} from './privacy.js';
 import {PEEK_HEIGHT, PEEK_WIDTH, PeekView} from './peek.js';
 import * as Playback from './playback.js';
 import {KeyboardWatcher, OsdHook, TopBar} from './shell.js';
@@ -74,8 +77,11 @@ export class Controller {
 
         this._topBar = new TopBar(this._settings);
         this._notifications = new NotificationCenter();
+        this._privacy = new PrivacyMonitor(this._daemon);
+        this._audio = new AudioOutputs();
+        this._focusMode = new FocusMode(this._daemon, this._notifications, this._settings);
         this._island = new Island();
-        this._compact = new CompactView(this._daemon, this._settings);
+        this._compact = new CompactView(this._daemon, this._settings, this._privacy);
         this._peek = new PeekView();
         this._expanded = this._buildExpanded();
         this._shelfHelper = new ShelfHelper(this._island, this._expanded.pageNamed('shelf'));
@@ -97,7 +103,7 @@ export class Controller {
     _buildExpanded() {
         const size = {height: PAGE_HEIGHT};
         const pages = [
-            new MediaPage(this._daemon, size),
+            new MediaPage(this._daemon, this._audio, size),
             new NotificationsPage(this._daemon, this._notifications, size),
             new TimerPage(this._daemon, size),
             new ShelfPage(this._daemon, size),
@@ -107,7 +113,7 @@ export class Controller {
             page.connect('request-keyboard', (_page, wanted) => this._setKeyboard(wanted));
             page.connect('request-close', () => this.collapse());
         }
-        const expanded = new ExpandedView(this._daemon, pages);
+        const expanded = new ExpandedView(this._daemon, this._privacy, this._settings, pages);
         expanded.connect('page-changed', () => {
             this._pagePickedAt = Date.now();
             this._shelfHelper?.sync();
@@ -171,6 +177,9 @@ export class Controller {
             this._post(Alerts.taskDue(id, title, daemon));
         });
         daemon.connect('system-event', (_daemon, event) => this._postSystemAlert(Alerts.system(event)));
+
+        this._privacy.connect('recording-started', () =>
+            this._post(Alerts.recordingStarted(() => this._privacy.stopRecording())));
 
         // GNOME's notifications appear in the island instead of as banners.
         const notifications = this._notifications;
@@ -414,7 +423,14 @@ export class Controller {
         // While the island is open the OSD would cover it; let GNOME show it.
         if (this._expandWanted)
             return false;
-        this._post(Alerts.osd(icon, label, level, maxLevel));
+        const alert = Alerts.osd(icon, label, level, maxLevel);
+        // Pressing on at 0% or 100% stretches the island like a rubber band.
+        const atLimit = alert.level !== null && (alert.level >= 1 || alert.level <= 0);
+        const repeated = this._alert?.key === 'osd' && this._alert.title === alert.title &&
+            this._alert.level === alert.level;
+        this._post(alert);
+        if (atLimit && repeated)
+            this._island.nudge();
         return true;
     }
 
@@ -488,6 +504,9 @@ export class Controller {
         this._shelfHelper.destroy();
 
         this._island.destroy();
+        this._focusMode.destroy();
+        this._privacy.destroy();
+        this._audio.destroy();
         this._notifications.destroy();
         this._topBar.destroy();
         this._daemon.destroy();

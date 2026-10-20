@@ -4,6 +4,7 @@
 //! when they change (charger plugged in, Wi-Fi lost, earbuds connected...).
 
 mod bluetooth;
+mod camera;
 mod network;
 mod power;
 
@@ -24,6 +25,8 @@ pub struct SystemState {
     pub battery: Option<Battery>,
     pub network: Network,
     pub bluetooth: Vec<BluetoothDevice>,
+    /// A camera is open in some app (privacy indicator).
+    pub camera_in_use: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -96,7 +99,8 @@ impl SystemService {
 pub fn spawn_watchers(system: Connection, iface: InterfaceRef<SystemService>) {
     supervise("battery", power::watch(system.clone(), iface.clone()));
     supervise("network", network::watch(system.clone(), iface.clone()));
-    supervise("bluetooth", bluetooth::watch(system, iface));
+    supervise("bluetooth", bluetooth::watch(system, iface.clone()));
+    supervise("camera", camera::watch(iface));
 }
 
 fn supervise(

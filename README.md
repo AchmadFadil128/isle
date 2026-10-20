@@ -9,10 +9,14 @@ going on, and opens on hover:
   [LRCLIB](https://lrclib.net). Click a line to jump to it.
 - **Notifications** from GNOME, shown in the island instead of banners, with a
   list to catch up on and **Do Not Disturb** right there.
-- **Focus timer** (Pomodoro) with a ring that stays visible while closed.
+- **Focus timer** (Pomodoro) with a ring that stays visible while closed,
+  daily totals, and Do Not Disturb while you focus.
 - **Tasks** with quick-add (`Call mum @18:30`, `Stretch in 20m`, `Report
   @3pm`), reminders when they are due, and a daily reset of finished ones.
 - **File shelf**: drop files on the island, drag them out later.
+- **Privacy dots** when the camera, microphone or screen sharing is in use,
+  and a timer with a stop button while the screen records.
+- **Volume and output** switching right from the music page.
 - **Alerts**: charging, low battery, Wi-Fi, Bluetooth earbuds with their
   battery, volume and brightness, Caps Lock, keyboard layout, a new song.
 - **Sleepy eyes** when you step away.

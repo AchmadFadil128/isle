@@ -154,6 +154,27 @@
   margin-left: -4px;
 }
 
+/* Live activities: privacy dots and screen recording */
+
+.isle-privacy-dots { spacing: 4px; padding-left: 4px; }
+
+.isle-privacy-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+}
+
+.isle-privacy-dot.camera { background-color: #34c759; }
+.isle-privacy-dot.microphone { background-color: #ff9f0a; }
+.isle-privacy-dot.screenShare { background-color: #0a84ff; }
+
+.isle-recording-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background-color: #ff453a;
+}
+
 /* ── Alerts (peek) ────────────────────────────────────── */
 
 .isle-peek { padding: 0 20px 0 16px; spacing: 12px; }
@@ -179,6 +200,17 @@
 .isle-header-clock { spacing: 8px; }
 .isle-header-date { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
 .isle-header-time { font-size: 13px; font-weight: 700; }
+.isle-header-status { spacing: 10px; }
+
+.isle-recording-pill {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background-color: rgba(255, 69, 58, 0.18);
+}
+
+.isle-recording-pill:hover { background-color: rgba(255, 69, 58, 0.32); }
+.isle-recording-pill-box { spacing: 6px; }
+.isle-recording-time { font-size: 12px; font-weight: 700; color: #ff6961; }
 
 /* Pages leave room at the sides for the arrows. */
 .isle-page { padding: 4px 52px 0 52px; }
@@ -224,15 +256,35 @@
 
 .isle-time-end { text-align: right; }
 
-.isle-scrubber { height: 16px; }
-.isle-scrubber-track { border-radius: 2px; background-color: rgba(255, 255, 255, 0.2); }
-.isle-scrubber-fill { border-radius: 2px; background-color: #ffffff; }
-.isle-scrubber-knob { border-radius: 6px; background-color: #ffffff; }
+.isle-slider { height: 16px; }
+.isle-slider-track { border-radius: 2px; background-color: rgba(255, 255, 255, 0.2); }
+.isle-slider-fill { border-radius: 2px; background-color: #ffffff; }
+.isle-slider-knob { border-radius: 6px; background-color: #ffffff; }
 
 .isle-player-controls { padding-top: 2px; }
 .isle-transport { spacing: 16px; }
 .isle-play { padding: 6px; }
-.isle-lyrics-toggle.on { background-color: rgba(255, 255, 255, 0.16); }
+.isle-mode-toggle.on { background-color: rgba(255, 255, 255, 0.16); }
+
+/* Volume and outputs */
+
+.isle-audio-layout { spacing: 8px; padding-top: 2px; }
+.isle-volume-row { spacing: 10px; }
+.isle-volume-text { font-size: 12px; font-weight: 600; min-width: 46px; text-align: right; color: rgba(255, 255, 255, 0.85); }
+.isle-output-list { spacing: 4px; }
+
+.isle-output-button {
+  border-radius: 12px;
+  padding: 6px 12px;
+  color: #ffffff;
+  transition-duration: 120ms;
+}
+
+.isle-output-button:hover { background-color: #1c1c1e; }
+.isle-output-button.active { background-color: #1c1c1e; }
+.isle-output-row { spacing: 12px; }
+.isle-output-name { font-size: 13px; font-weight: 600; }
+.isle-output-detail { font-size: 11px; color: rgba(255, 255, 255, 0.5); }
 
 /* Lyrics */
 
@@ -269,6 +321,7 @@
 .isle-timer-row { spacing: 12px; }
 .isle-timer-time { font-size: 40px; font-weight: 800; }
 .isle-timer-caption { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
+.isle-timer-stats { font-size: 11px; color: rgba(255, 255, 255, 0.4); padding-top: 1px; }
 .isle-timer-buttons { spacing: 10px; padding-top: 12px; }
 
 .isle-play-pill {

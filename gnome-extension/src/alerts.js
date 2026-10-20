@@ -215,3 +215,16 @@ export function notification(item, urgent) {
         onActivate: () => item.activate(),
     };
 }
+
+/** GNOME's screen recorder started. */
+export function recordingStarted(stop) {
+    return {
+        key: 'recording',
+        icon: 'media-record-symbolic',
+        title: 'Recording screen',
+        subtitle: 'Stop it from the red dot in the island',
+        tone: 'bad',
+        action: {label: 'Stop', callback: stop},
+        duration: STATUS_DURATION,
+    };
+}

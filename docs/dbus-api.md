@@ -26,9 +26,10 @@ current position is `position_us + (now - sampled_at_ms) * 1000 * rate`.
 | Member | Signature | |
 |---|---|---|
 | `Start()` | | Start a focus session, or resume a paused phase. |
+| `StartPhase(s phase)` | | Start `focus`, `short_break` or `long_break` right away (`idle` stops). |
 | `Pause()`, `Stop()`, `Skip()` | | `Skip` ends the phase early without counting it. |
 | `SetConfig(s json)` | | Replace the configuration (below). |
-| `State` | `s` | `{phase, running, ends_at_ms, remaining_ms, duration_ms, completed_sessions, sessions_before_long_break}`; `phase` is `idle`, `focus`, `short_break` or `long_break`. |
+| `State` | `s` | `{phase, running, ends_at_ms, remaining_ms, duration_ms, completed_sessions, sessions_before_long_break, today_sessions, today_focus_ms}`; `phase` is `idle`, `focus`, `short_break` or `long_break`. |
 | `Config` | `s` | `{focus_minutes, short_break_minutes, long_break_minutes, sessions_before_long_break, auto_start_breaks, auto_start_focus}` |
 | `PhaseFinished(s finished, s next)` | signal | A phase ran out (not emitted for `Skip` or `Stop`). |
 
@@ -37,7 +38,7 @@ current position is `position_us + (now - sampled_at_ms) * 1000 * rate`.
 | Member | Signature | |
 |---|---|---|
 | `Add(s text) → t id` | | Quick-add: a trailing `@18:30`, `@7`, `@3pm` or `in 20m` / `in 2h` sets the due time. |
-| `SetDone(t id, b done)`, `Remove(t id)`, `ClearDone()` | | |
+| `SetDone(t id, b done)`, `Rename(t id, s title)`, `Remove(t id)`, `ClearDone()` | | Finished tasks are cleared at midnight. |
 | `Items` | `s` | `[{id, title, due_at_ms, done, alerted}]` |
 | `Due(t id, s title)` | signal | A task's due time arrived. |
 
@@ -54,7 +55,7 @@ current position is `position_us + (now - sampled_at_ms) * 1000 * rate`.
 
 | Member | Signature | |
 |---|---|---|
-| `State` | `s` | `{battery: {percent, plugged, charging, time_to_empty_s, time_to_full_s} or null, network: {connected, connection, name}, bluetooth: [{path, name, icon, battery}]}` |
+| `State` | `s` | `{battery: {percent, plugged, charging, time_to_empty_s, time_to_full_s} or null, network: {connected, connection, name}, bluetooth: [{path, name, icon, battery}], camera_in_use}` |
 | `Event(s json)` | signal | One of `{kind: "power", plugged, percent}`, `{kind: "battery_low", percent}`, `{kind: "battery_full"}`, `{kind: "network", connected, connection, name}`, `{kind: "bluetooth", connected, device}`. |
 
 ## io.github.isle.ShelfWindow1

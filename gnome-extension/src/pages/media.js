@@ -13,7 +13,7 @@ import St from 'gi://St';
 
 import * as Format from '../format.js';
 import * as Playback from '../playback.js';
-import {Art, icon, iconButton, label, setButtonIcon} from '../widgets.js';
+import {Art, Slider, icon, iconButton, label, setButtonIcon} from '../widgets.js';
 import {Page} from './page.js';
 
 /** The island widens to this while lyrics are shown. */
@@ -72,84 +72,6 @@ function coverColor(path) {
     const peak = Math.max(...color, 1);
     return color.map(channel => (channel / peak) * 0.8);
 }
-
-/** A seek bar that can be clicked or dragged. */
-const Scrubber = GObject.registerClass({
-    Signals: {'seek': {param_types: [GObject.TYPE_DOUBLE]}},
-}, class Scrubber extends St.Widget {
-    _init() {
-        super._init({
-            style_class: 'isle-scrubber',
-            reactive: true,
-            track_hover: true,
-            x_expand: true,
-            y_align: Clutter.ActorAlign.CENTER,
-            layout_manager: new Clutter.FixedLayout(),
-        });
-        this._track = new St.Widget({style_class: 'isle-scrubber-track'});
-        this._fill = new St.Widget({style_class: 'isle-scrubber-fill'});
-        this._knob = new St.Widget({style_class: 'isle-scrubber-knob', opacity: 0});
-        this.add_child(this._track);
-        this.add_child(this._fill);
-        this.add_child(this._knob);
-        this._fraction = 0;
-        this._grab = null;
-        this.connect('notify::allocation', () => this._layout());
-        this.connect('notify::hover', () => this._knob.ease({opacity: this.hover || this._grab ? 255 : 0, duration: 120}));
-    }
-
-    set fraction(value) {
-        if (this._grab)
-            return; // the user is dragging
-        this._fraction = Math.min(1, Math.max(0, value || 0));
-        this._layout();
-    }
-
-    _layout() {
-        const [width, height] = this.get_size();
-        const trackHeight = 4;
-        const y = Math.round((height - trackHeight) / 2);
-        this._track.set_position(0, y);
-        this._track.set_size(width, trackHeight);
-        this._fill.set_position(0, y);
-        this._fill.set_size(Math.round(width * this._fraction), trackHeight);
-        const knob = 12;
-        this._knob.set_size(knob, knob);
-        this._knob.set_position(Math.round(width * this._fraction - knob / 2), Math.round((height - knob) / 2));
-    }
-
-    _fractionAt(event) {
-        const [x] = event.get_coords();
-        const [ok, localX] = this.transform_stage_point(x, 0);
-        return ok ? Math.min(1, Math.max(0, localX / this.width)) : this._fraction;
-    }
-
-    vfunc_button_press_event(event) {
-        this._grab = global.stage.grab(this);
-        this._fraction = this._fractionAt(event);
-        this._layout();
-        return Clutter.EVENT_STOP;
-    }
-
-    vfunc_motion_event(event) {
-        if (!this._grab)
-            return Clutter.EVENT_PROPAGATE;
-        this._fraction = this._fractionAt(event);
-        this._layout();
-        return Clutter.EVENT_STOP;
-    }
-
-    vfunc_button_release_event(event) {
-        if (!this._grab)
-            return Clutter.EVENT_PROPAGATE;
-        this._grab.dismiss();
-        this._grab = null;
-        this._fraction = this._fractionAt(event);
-        this._layout();
-        this.emit('seek', this._fraction);
-        return Clutter.EVENT_STOP;
-    }
-});
 
 /** Synced lyrics that follow the song; click a line to jump to it. */
 const LyricsPane = GObject.registerClass(
@@ -280,17 +202,19 @@ class LyricsPane extends St.Widget {
 
 export const MediaPage = GObject.registerClass(
 class MediaPage extends Page {
-    _init(daemon, {height}) {
+    _init(daemon, audio, {height}) {
         super._init(daemon, {
             style_class: 'isle-page isle-media',
             layout_manager: new Clutter.BinLayout(),
             height,
         });
         this.name = 'music';
-        this._showLyrics = false;
+        this._audio = audio;
+        /** 'player', 'lyrics' or 'audio' (volume and outputs). */
+        this._mode = 'player';
         this._tint = null;
         this._tintPath = null;
-        // Both layouts have their own copy of these; they update together.
+        // Each layout has its own copy of these; they update together.
         this._arts = [];
         this._titles = [];
         this._artists = [];
@@ -301,12 +225,15 @@ class MediaPage extends Page {
 
         this._player = this._buildPlayer();
         this._lyricsLayout = this._buildLyricsLayout();
+        this._audioLayout = this._buildAudioLayout();
         this._empty = this._buildEmpty();
-        for (const child of [this._player, this._lyricsLayout, this._empty])
+        for (const child of [this._player, this._lyricsLayout, this._audioLayout, this._empty])
             this.add_child(child);
 
         this.watch(['nowPlaying', 'lyrics'], () => this._update());
+        this._audioChanged = audio.connect('changed', () => this._updateAudio());
         this._update();
+        this._updateAudio();
     }
 
     get relevant() {
@@ -314,15 +241,16 @@ class MediaPage extends Page {
     }
 
     get preferredWidth() {
-        return this._lyricsShown() ? LYRICS_WIDTH : null;
+        return this._shown('lyrics') ? LYRICS_WIDTH : null;
     }
 
     get tint() {
-        return this._lyricsShown() ? this._tint : null;
+        return this._shown('lyrics') ? this._tint : null;
     }
 
-    _lyricsShown() {
-        return this._showLyrics && Playback.hasTrack(this.daemon.state.nowPlaying);
+    /** Whether `mode` is on screen (the special modes need a track). */
+    _shown(mode) {
+        return this._mode === mode && Playback.hasTrack(this.daemon.state.nowPlaying);
     }
 
     // Building blocks; each layout has its own copy.
@@ -355,8 +283,8 @@ class MediaPage extends Page {
         const row = new St.BoxLayout({style_class: 'isle-player-progress'});
         const elapsed = label('0:00', 'isle-time');
         const remaining = label('-0:00', 'isle-time isle-time-end');
-        const scrubber = new Scrubber();
-        scrubber.connect('seek', (_scrubber, fraction) => {
+        const scrubber = new Slider();
+        scrubber.connect('released', (_slider, fraction) => {
             const length = this.daemon.state.nowPlaying?.length_us ?? 0;
             if (length > 0)
                 this.daemon.call('media', 'SetPosition', Math.round(fraction * length));
@@ -383,9 +311,13 @@ class MediaPage extends Page {
         return row;
     }
 
-    _lyricsToggle(on) {
-        return iconButton(on ? 'isle-lyrics-fill' : 'isle-lyrics', `isle-button-flat isle-lyrics-toggle${on ? ' on' : ''}`,
-            () => this._toggleLyrics(), {size: 18, accessibleName: on ? 'Hide lyrics' : 'Show lyrics'});
+    /**
+     * A button switching to `mode` and back. While its mode is shown it is
+     * lit and its icon fills in.
+     */
+    _modeButton(mode, iconName, accessibleName, on) {
+        return iconButton(on ? `${iconName}-fill` : iconName, `isle-button-flat isle-mode-toggle${on ? ' on' : ''}`,
+            () => this._toggleMode(mode), {size: 18, accessibleName});
     }
 
     // Layouts.
@@ -400,13 +332,17 @@ class MediaPage extends Page {
         top.add_child(this._appIcon);
 
         const controls = new St.Widget({layout_manager: new Clutter.BinLayout(), style_class: 'isle-player-controls', x_expand: true});
-        const toggle = this._lyricsToggle(false);
-        toggle.x_expand = true;
-        toggle.x_align = Clutter.ActorAlign.START;
+        const lyrics = this._modeButton('lyrics', 'isle-lyrics', 'Show lyrics', false);
+        lyrics.x_expand = true;
+        lyrics.x_align = Clutter.ActorAlign.START;
         const transport = this._transport();
         transport.x_align = Clutter.ActorAlign.CENTER;
-        controls.add_child(toggle);
+        const output = this._modeButton('audio', 'isle-output', 'Volume and output', false);
+        output.x_expand = true;
+        output.x_align = Clutter.ActorAlign.END;
+        controls.add_child(lyrics);
         controls.add_child(transport);
+        controls.add_child(output);
 
         player.add_child(top);
         player.add_child(this._progress());
@@ -425,7 +361,7 @@ class MediaPage extends Page {
         side.add_child(this._progress());
 
         const controls = new St.BoxLayout({style_class: 'isle-lyrics-controls', x_align: Clutter.ActorAlign.CENTER});
-        controls.add_child(this._lyricsToggle(true));
+        controls.add_child(this._modeButton('lyrics', 'isle-lyrics', 'Hide lyrics', true));
         controls.add_child(this._transport());
         side.add_child(controls);
 
@@ -433,6 +369,35 @@ class MediaPage extends Page {
         layout.add_child(side);
         layout.add_child(new St.Widget({style_class: 'isle-divider', y_expand: true}));
         layout.add_child(this._lyricsPane);
+        return layout;
+    }
+
+    /** Volume, then the outputs to choose from, like macOS's Sound menu. */
+    _buildAudioLayout() {
+        const layout = new St.BoxLayout({vertical: true, style_class: 'isle-audio-layout', x_expand: true, y_expand: true, visible: false});
+
+        const volume = new St.BoxLayout({style_class: 'isle-volume-row'});
+        this._muteButton = iconButton('audio-volume-high-symbolic', 'isle-button-flat',
+            () => this._audio.toggleMuted(), {size: 18, accessibleName: 'Mute'});
+        this._volumeSlider = new Slider({scrollStep: 0.05});
+        this._volumeSlider.connect('value-changed', (_slider, value) => (this._audio.volume = value));
+        this._volumeText = label('', 'isle-volume-text');
+        volume.add_child(this._muteButton);
+        volume.add_child(this._volumeSlider);
+        volume.add_child(this._volumeText);
+        volume.add_child(this._modeButton('audio', 'isle-output', 'Back to the player', true));
+        layout.add_child(volume);
+
+        this._outputList = new St.BoxLayout({vertical: true, style_class: 'isle-output-list'});
+        const scroll = new St.ScrollView({
+            hscrollbar_policy: St.PolicyType.NEVER,
+            // Scrolls with the wheel or touchpad; no scrollbar over the rows.
+            vscrollbar_policy: St.PolicyType.EXTERNAL,
+            x_expand: true,
+            y_expand: true,
+        });
+        scroll.set_child(this._outputList);
+        layout.add_child(scroll);
         return layout;
     }
 
@@ -449,8 +414,8 @@ class MediaPage extends Page {
         return box;
     }
 
-    _toggleLyrics() {
-        this._showLyrics = !this._showLyrics;
+    _toggleMode(mode) {
+        this._mode = this._mode === mode ? 'player' : mode;
         this._update();
         this.emit('width-changed');
         this.emit('tint-changed');
@@ -459,10 +424,10 @@ class MediaPage extends Page {
     _update() {
         const {nowPlaying} = this.daemon.state;
         const hasTrack = Playback.hasTrack(nowPlaying);
-        const lyricsMode = this._lyricsShown();
         this._empty.visible = !hasTrack;
-        this._player.visible = hasTrack && !lyricsMode;
-        this._lyricsLayout.visible = lyricsMode;
+        this._player.visible = hasTrack && this._mode === 'player';
+        this._lyricsLayout.visible = this._shown('lyrics');
+        this._audioLayout.visible = this._shown('audio');
         if (!hasTrack)
             return;
 
@@ -491,12 +456,43 @@ class MediaPage extends Page {
         this._tickProgress();
     }
 
+    _updateAudio() {
+        const audio = this._audio;
+        setButtonIcon(this._muteButton, audio.iconName);
+        this._volumeSlider.value = audio.muted ? 0 : audio.volume;
+        this._volumeText.text = audio.muted ? 'Muted' : `${Math.round(audio.volume * 100)}%`;
+
+        this._outputList.destroy_all_children();
+        for (const output of audio.outputs) {
+            const row = new St.BoxLayout({style_class: 'isle-output-row', x_expand: true, x_align: Clutter.ActorAlign.FILL});
+            row.add_child(new St.Icon({gicon: output.gicon, fallback_icon_name: 'audio-speakers-symbolic', icon_size: 18, y_align: Clutter.ActorAlign.CENTER}));
+            const texts = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+            texts.add_child(label(output.name, 'isle-output-name'));
+            if (output.detail)
+                texts.add_child(label(output.detail, 'isle-output-detail'));
+            row.add_child(texts);
+            // The current output is marked with a check, like macOS.
+            const check = new St.Icon({icon_name: 'object-select-symbolic', icon_size: 14, opacity: output.active ? 255 : 0, y_align: Clutter.ActorAlign.CENTER});
+            row.add_child(check);
+
+            const button = new St.Button({
+                style_class: `isle-output-button${output.active ? ' active' : ''}`,
+                child: row,
+                x_expand: true,
+                x_align: Clutter.ActorAlign.FILL,
+                can_focus: true,
+            });
+            button.connect('clicked', () => audio.activate(output.id));
+            this._outputList.add_child(button);
+        }
+    }
+
     _updateTint(path) {
         if (path === this._tintPath)
             return;
         this._tintPath = path;
         this._tint = coverColor(path);
-        if (this._lyricsShown())
+        if (this._shown('lyrics'))
             this.emit('tint-changed');
     }
 
@@ -511,7 +507,7 @@ class MediaPage extends Page {
         this._elapsed.forEach(text => (text.text = elapsed));
         this._remaining.forEach(text => (text.text = remaining));
         for (const scrubber of this._scrubbers)
-            scrubber.fraction = length > 0 ? position / length : 0;
+            scrubber.value = length > 0 ? position / length : 0;
 
         if (this.active && Playback.isPlaying(nowPlaying))
             this.later('progress', PROGRESS_REFRESH_MS, () => this._tickProgress());
@@ -520,5 +516,16 @@ class MediaPage extends Page {
     onActivate() {
         this._tickProgress();
         this._lyricsPane.follow();
+    }
+
+    onDeactivate() {
+        // Reopening the island starts on the player, not a sub-view.
+        if (this._mode === 'audio')
+            this._toggleMode('audio');
+    }
+
+    vfunc_destroy() {
+        this._audio.disconnect(this._audioChanged);
+        super.vfunc_destroy();
     }
 });

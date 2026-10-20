@@ -2,14 +2,14 @@
 
 use std::sync::Arc;
 
-use chrono::{Local, NaiveDate, TimeZone};
+use chrono::Local;
 use isle_core::todo::{TodoList, parse_quick_add};
 use log::warn;
 use tokio::sync::Notify;
 use zbus::object_server::{InterfaceRef, SignalEmitter};
 use zbus::{fdo, interface};
 
-use crate::clock::{now_ms, wait_until};
+use crate::clock::{next_midnight, now_ms, start_of_today, wait_until};
 use crate::store::Store;
 
 pub struct TodoService {
@@ -145,19 +145,4 @@ pub async fn run(iface: InterfaceRef<TodoService>) {
             warn!("could not announce due tasks: {err}");
         }
     }
-}
-
-fn start_of_today() -> i64 {
-    local_midnight(Local::now().date_naive()).unwrap_or(0)
-}
-
-fn next_midnight() -> Option<i64> {
-    local_midnight(Local::now().date_naive().succ_opt()?)
-}
-
-fn local_midnight(date: NaiveDate) -> Option<i64> {
-    let midnight = Local
-        .from_local_datetime(&date.and_hms_opt(0, 0, 0)?)
-        .earliest()?;
-    Some(midnight.timestamp_millis())
 }

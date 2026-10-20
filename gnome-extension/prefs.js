@@ -20,7 +20,7 @@ export default class IslePreferences extends ExtensionPreferences {
         const settings = this.getSettings();
         window.set_default_size(560, 680);
         window.add(this._islandPage(settings));
-        window.add(this._timerPage());
+        window.add(this._timerPage(settings));
     }
 
     _islandPage(settings) {
@@ -40,6 +40,7 @@ export default class IslePreferences extends ExtensionPreferences {
         const alerts = new Adw.PreferencesGroup({title: 'Alerts'});
         alerts.add(switchRow(settings, 'replace-osd', 'Volume and brightness', 'Show them in the island instead of the centre of the screen'));
         alerts.add(switchRow(settings, 'system-alerts', 'Charging, network and Bluetooth', 'Also Caps Lock and keyboard layout changes'));
+        alerts.add(switchRow(settings, 'privacy-indicators', 'Privacy indicators', 'Dots when the camera, microphone or screen sharing is in use'));
         alerts.add(switchRow(settings, 'track-peek', 'New song', 'Briefly show the song when the track changes'));
         alerts.add(switchRow(settings, 'compact-lyrics', 'Live lyrics', 'Show the current lyric line in the closed island'));
         alerts.add(switchRow(settings, 'chimes', 'Sounds', 'Chime when a timer ends or a task is due'));
@@ -47,8 +48,12 @@ export default class IslePreferences extends ExtensionPreferences {
         return page;
     }
 
-    _timerPage() {
+    _timerPage(settings) {
         const page = new Adw.PreferencesPage({title: 'Focus Timer', icon_name: 'alarm-symbolic'});
+        const focus = new Adw.PreferencesGroup({title: 'While Focusing'});
+        focus.add(switchRow(settings, 'focus-dnd', 'Do Not Disturb', 'Silence notifications during focus sessions, and restore them afterwards'));
+        page.add(focus);
+
         const group = new Adw.PreferencesGroup({
             title: 'Pomodoro',
             description: 'Focus sessions with short breaks, and a long break after a few sessions.',
