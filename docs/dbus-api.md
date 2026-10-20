@@ -41,11 +41,9 @@ if the player then rejects the command, isled only logs it.
 
 | Member | Signature | |
 |---|---|---|
-| `Add(s text) → t id` | | Quick-add: a trailing `@18:30`, `@7`, `@3pm` or `in 20m` / `in 2h` sets the due time. |
+| `Add(s text) → t id` | | Adds a task; a blank title is refused. |
 | `SetDone(t id, b done)`, `Rename(t id, s title)`, `Remove(t id)`, `ClearDone()` | | Finished tasks are cleared at midnight. |
-| `SetDue(t id, x due_at_ms)` | | Move the reminder (ms since the epoch); `0` clears it. The task alerts again at the new time. |
-| `Items` | `s` | `[{id, title, due_at_ms, done, alerted, done_at_ms}]`; `done_at_ms` is when the task was ticked off, or null. |
-| `Due(t id, s title)` | signal | A task's due time arrived. |
+| `Items` | `s` | `[{id, title, done, done_at_ms}]`; `done_at_ms` is when the task was ticked off, or null. |
 
 ## io.github.isle.Shelf1
 
@@ -55,6 +53,32 @@ if the player then rejects the command, isled only logs it.
 | `Remove(s uri)`, `Clear()` | | |
 | `Refresh()` | | Drop items whose files no longer exist. |
 | `Items` | `s` | `[{uri, name, added_at_ms}]`, newest first. |
+
+## io.github.isle.Clipboard1
+
+Clipboard history. The extension watches the clipboard and reports each
+copy; isled keeps the list in `~/.local/share/isle/clipboard.json` and
+images in `~/.local/share/isle/clips` (`<hash>.png` as copied, plus a
+`<hash>.thumb.png` that fits in 320×200). `app_id` is the desktop app id
+of the app copied from, or `""`.
+
+| Member | Signature | |
+|---|---|---|
+| `AddText(s text, s app_id) → t id` | | Copied text, at most 512 KiB and not blank. A lone `http://` or `https://` address is a `link`. |
+| `AddImage(ay png, s app_id) → t id` | | A copied PNG image, at most 16 MiB. |
+| `AddFiles(as uris, s app_id) → t id` | | Copied files; only `file://` URIs. |
+| `AddNote(s text) → t id` | | A note the user wrote: like `AddText`, but pinned. |
+| `GetText(t id) → s` | | The full content to copy back: the text, the URIs one per line, or the path of an image's PNG. |
+| `Touch(t id)` | | Move to the top, as copied again (e.g. from the history). |
+| `SetPinned(t id, b pinned)`, `Remove(t id)` | | |
+| `Clear()` | | Remove every item that is not pinned. |
+| `Items` | `s` | `[{id, kind, preview, uris, image, thumb, width, height, app_id, at_ms, pinned}]`, newest first. `kind` is `text`, `link`, `image` or `files`; `preview` is the first 400 characters of a text, or the file names one per line; `uris` is empty except for files; `image` and `thumb` (paths), `width` and `height` are null except for images; `at_ms` is when it was last copied. |
+
+Adding something already in the history (the same text, image or list of
+files) moves that item to the top and returns its id; it stays pinned if
+it was, and `AddNote` pins it. Beyond 200 unpinned items the oldest are
+dropped; pinned items are only removed by hand. Unknown ids and invalid
+content are rejected with `InvalidArgs`.
 
 ## io.github.isle.System1
 

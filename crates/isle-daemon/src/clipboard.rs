@@ -1,0 +1,385 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! Clipboard history over D-Bus.
+//!
+//! The shell extension owns the clipboard and reports each copy here; isled
+//! keeps the list (see `isle_core::clipboard`) and the image files. Images
+//! are stored once per content hash in `~/.local/share/isle/clips`, with a
+//! small thumbnail beside each so the list never loads full-size pictures.
+
+use std::collections::HashSet;
+use std::fs;
+use std::io::{self, Cursor};
+use std::path::{Path, PathBuf};
+
+use image::ImageFormat;
+use isle_core::clipboard::{Added, Clip, ClipError, ClipboardHistory, content_hash};
+use log::debug;
+use serde::Serialize;
+use zbus::object_server::SignalEmitter;
+use zbus::{fdo, interface};
+
+use crate::clock::now_ms;
+use crate::store::{Store, data_dir};
+
+/// Largest image accepted, in bytes of PNG.
+const MAX_IMAGE_BYTES: usize = 16 * 1024 * 1024;
+
+/// Thumbnails fit within this box, which is about the size the island
+/// shows them at on a high-density display.
+const THUMB_WIDTH: u32 = 320;
+const THUMB_HEIGHT: u32 = 200;
+
+pub struct ClipboardService {
+    history: ClipboardHistory,
+    store: Store<ClipboardHistory>,
+    clips: ClipFiles,
+}
+
+impl ClipboardService {
+    pub fn load() -> Self {
+        let mut store = Store::new("clipboard");
+        let mut history: ClipboardHistory = store.load();
+        let clips = ClipFiles {
+            dir: data_dir().join("clips"),
+        };
+
+        // An image item is useless without its files, which the user may
+        // have deleted while isled was not running.
+        let before = history.items().len();
+        history.retain(|item| item.clip.image_hash().is_none_or(|hash| clips.has(hash)));
+        if history.items().len() != before {
+            store.save(&history);
+        }
+        // Without the real list, every image would look like an orphan.
+        if !store.is_read_only() {
+            clips.remove_orphans(&history.image_hashes().collect());
+        }
+        Self {
+            history,
+            store,
+            clips,
+        }
+    }
+
+    async fn changed(&self, emitter: &SignalEmitter<'_>) -> zbus::Result<()> {
+        self.store.save(&self.history);
+        self.items_changed(emitter).await
+    }
+
+    /// Saves and announces an addition, then deletes the image files the
+    /// addition pushed out of the history.
+    async fn added(&self, added: Added, emitter: &SignalEmitter<'_>) -> fdo::Result<u64> {
+        self.changed(emitter).await?;
+        self.clips.remove(&added.unreferenced);
+        Ok(added.id)
+    }
+
+    fn view(&self) -> Vec<ItemView<'_>> {
+        self.history
+            .items()
+            .iter()
+            .map(|item| {
+                let image = match &item.clip {
+                    Clip::Image {
+                        hash,
+                        width,
+                        height,
+                    } => Some((hash, *width, *height)),
+                    _ => None,
+                };
+                ItemView {
+                    id: item.id,
+                    kind: item.clip.kind(),
+                    preview: item.clip.preview(),
+                    uris: item.clip.uris(),
+                    image: image.map(|(hash, ..)| path_string(&self.clips.image(hash))),
+                    thumb: image.map(|(hash, ..)| path_string(&self.clips.thumb(hash))),
+                    width: image.map(|(_, width, _)| width),
+                    height: image.map(|(.., height)| height),
+                    app_id: &item.app_id,
+                    at_ms: item.at_ms,
+                    pinned: item.pinned,
+                }
+            })
+            .collect()
+    }
+}
+
+/// An item as listed in the `Items` property: text is cut to a preview,
+/// and images are given as paths, so the list stays small however much was
+/// copied. `GetText` returns the full content.
+#[derive(Serialize)]
+struct ItemView<'a> {
+    id: u64,
+    kind: &'static str,
+    preview: String,
+    uris: &'a [String],
+    image: Option<String>,
+    thumb: Option<String>,
+    width: Option<u32>,
+    height: Option<u32>,
+    app_id: &'a str,
+    at_ms: i64,
+    pinned: bool,
+}
+
+fn not_found(id: u64) -> fdo::Error {
+    fdo::Error::InvalidArgs(format!("no clipboard item with id {id}"))
+}
+
+fn invalid(err: ClipError) -> fdo::Error {
+    fdo::Error::InvalidArgs(err.to_string())
+}
+
+#[interface(name = "io.github.isle.Clipboard1")]
+impl ClipboardService {
+    /// Records copied text and returns its id; copying the same text again
+    /// moves the existing item to the top.
+    async fn add_text(
+        &mut self,
+        text: &str,
+        app_id: &str,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> fdo::Result<u64> {
+        let clip = Clip::from_text(text).map_err(invalid)?;
+        let added = self.history.add(clip, app_id, now_ms());
+        self.added(added, &emitter).await
+    }
+
+    /// Records a copied PNG image and returns its id. Decoding and scaling
+    /// a large screenshot takes a moment, so it runs off the event loop.
+    async fn add_image(
+        &mut self,
+        png: Vec<u8>,
+        app_id: &str,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> fdo::Result<u64> {
+        if png.len() > MAX_IMAGE_BYTES {
+            return Err(invalid(ClipError::TooLarge));
+        }
+        let (png, hash) = blocking(move || {
+            let hash = content_hash(&png);
+            (png, hash)
+        })
+        .await?;
+
+        // A known image only needs its files written again if they are gone.
+        let known = self
+            .history
+            .image_size(&hash)
+            .filter(|_| self.clips.has(&hash));
+        let (width, height) = match known {
+            Some(size) => size,
+            None => {
+                let clips = self.clips.clone();
+                let hash = hash.clone();
+                blocking(move || clips.store(&hash, &png)).await??
+            }
+        };
+        let clip = Clip::Image {
+            hash,
+            width,
+            height,
+        };
+        let added = self.history.add(clip, app_id, now_ms());
+        self.added(added, &emitter).await
+    }
+
+    /// Records copied files (`file://` URIs) and returns the item's id.
+    async fn add_files(
+        &mut self,
+        uris: Vec<String>,
+        app_id: &str,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> fdo::Result<u64> {
+        let clip = Clip::from_uris(uris).map_err(invalid)?;
+        let added = self.history.add(clip, app_id, now_ms());
+        self.added(added, &emitter).await
+    }
+
+    /// Adds a note the user wrote, pinned, and returns its id.
+    async fn add_note(
+        &mut self,
+        text: &str,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> fdo::Result<u64> {
+        let clip = Clip::from_text(text).map_err(invalid)?;
+        let added = self.history.add_note(clip, now_ms());
+        self.added(added, &emitter).await
+    }
+
+    /// The full content to put back on the clipboard: the text, the file
+    /// URIs one per line, or the path of an image's PNG file.
+    async fn get_text(&self, id: u64) -> fdo::Result<String> {
+        let item = self.history.get(id).ok_or_else(|| not_found(id))?;
+        Ok(match &item.clip {
+            Clip::Text { text } | Clip::Link { text } => text.clone(),
+            Clip::Files { uris } => uris.join("\n"),
+            Clip::Image { hash, .. } => path_string(&self.clips.image(hash)),
+        })
+    }
+
+    /// Moves an item to the top, as the user just copied it again.
+    async fn touch(
+        &mut self,
+        id: u64,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> fdo::Result<()> {
+        if !self.history.touch(id, now_ms()) {
+            return Err(not_found(id));
+        }
+        Ok(self.changed(&emitter).await?)
+    }
+
+    async fn set_pinned(
+        &mut self,
+        id: u64,
+        pinned: bool,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> fdo::Result<()> {
+        if !self.history.set_pinned(id, pinned) {
+            return Err(not_found(id));
+        }
+        Ok(self.changed(&emitter).await?)
+    }
+
+    async fn remove(
+        &mut self,
+        id: u64,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> fdo::Result<()> {
+        let unreferenced = self.history.remove(id).ok_or_else(|| not_found(id))?;
+        self.changed(&emitter).await?;
+        self.clips.remove(&unreferenced);
+        Ok(())
+    }
+
+    /// Removes every item that is not pinned.
+    async fn clear(
+        &mut self,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> fdo::Result<()> {
+        let unreferenced = self.history.clear();
+        self.changed(&emitter).await?;
+        self.clips.remove(&unreferenced);
+        Ok(())
+    }
+
+    /// JSON array of items, newest first (see `ItemView`).
+    #[zbus(property)]
+    fn items(&self) -> String {
+        serde_json::to_string(&self.view()).unwrap_or_default()
+    }
+}
+
+/// Runs blocking work on tokio's blocking pool, so the D-Bus connection,
+/// which shares isled's only thread with everything else, keeps flowing.
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> fdo::Result<T> {
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|err| fdo::Error::Failed(format!("image work failed: {err}")))
+}
+
+/// The directory of stored images: `<hash>.png`, the image as copied, and
+/// `<hash>.thumb.png`, its thumbnail.
+#[derive(Clone)]
+struct ClipFiles {
+    dir: PathBuf,
+}
+
+impl ClipFiles {
+    fn image(&self, hash: &str) -> PathBuf {
+        self.dir.join(format!("{hash}.png"))
+    }
+
+    fn thumb(&self, hash: &str) -> PathBuf {
+        self.dir.join(format!("{hash}.thumb.png"))
+    }
+
+    fn has(&self, hash: &str) -> bool {
+        self.image(hash).is_file() && self.thumb(hash).is_file()
+    }
+
+    /// Stores a PNG and its thumbnail, returning the image's size. Blocks;
+    /// the decoder's default limits cap how much memory a hostile image can
+    /// claim.
+    fn store(&self, hash: &str, png: &[u8]) -> fdo::Result<(u32, u32)> {
+        let image = image::load_from_memory_with_format(png, ImageFormat::Png)
+            .map_err(|err| fdo::Error::InvalidArgs(format!("not a readable PNG image: {err}")))?;
+        let (width, height) = (image.width(), image.height());
+
+        let io_error =
+            |err: io::Error| fdo::Error::IOError(format!("could not store image: {err}"));
+        fs::create_dir_all(&self.dir).map_err(io_error)?;
+        write_replacing(&self.image(hash), png).map_err(io_error)?;
+        if width <= THUMB_WIDTH && height <= THUMB_HEIGHT {
+            // Already small enough; scaling it up would only blur it.
+            write_replacing(&self.thumb(hash), png).map_err(io_error)?;
+        } else {
+            let mut thumb = Cursor::new(Vec::new());
+            image
+                .thumbnail(THUMB_WIDTH, THUMB_HEIGHT)
+                .write_to(&mut thumb, ImageFormat::Png)
+                .map_err(|err| fdo::Error::Failed(format!("could not make a thumbnail: {err}")))?;
+            write_replacing(&self.thumb(hash), thumb.get_ref()).map_err(io_error)?;
+        }
+        Ok((width, height))
+    }
+
+    /// Deletes the files of images no item refers to any more.
+    fn remove(&self, hashes: &[String]) {
+        for hash in hashes {
+            for path in [self.image(hash), self.thumb(hash)] {
+                remove_file(&path);
+            }
+        }
+    }
+
+    /// Deletes every file in the directory that does not belong to one of
+    /// `referenced`: images whose items went while isled was not running,
+    /// and leftovers of writes cut short.
+    fn remove_orphans(&self, referenced: &HashSet<&str>) {
+        let entries = match fs::read_dir(&self.dir) {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return,
+            Err(err) => {
+                debug!("could not list {}: {err}", self.dir.display());
+                return;
+            }
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let hash = name.to_str().and_then(|name| {
+                name.strip_suffix(".thumb.png")
+                    .or_else(|| name.strip_suffix(".png"))
+            });
+            if !hash.is_some_and(|hash| referenced.contains(hash)) {
+                remove_file(&entry.path());
+            }
+        }
+    }
+}
+
+/// Writes through a temporary file and renames it into place, so an
+/// interrupted write never leaves a half-written image under a real name.
+fn write_replacing(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let mut temp = path.as_os_str().to_owned();
+    temp.push(".tmp");
+    fs::write(&temp, bytes)?;
+    fs::rename(&temp, path)
+}
+
+/// Best effort: a file that cannot be deleted only costs disk space, and is
+/// tried again as an orphan when isled next starts.
+fn remove_file(path: &Path) {
+    match fs::remove_file(path) {
+        Ok(()) => debug!("removed {}", path.display()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => debug!("could not remove {}: {err}", path.display()),
+    }
+}
+
+fn path_string(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}

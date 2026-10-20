@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Tasks: today's progress on the left; on the right, a field to add a task
-// and the list. Quick-add understands "Call mum @18:30" and "Stretch in 20m".
-// Click a title to rename it, a due time to snooze it, × to remove it.
-// Finished tasks fold away under "Completed". See docs/product-spec.md,
-// section 5.
+// Tasks: a plain list to write things down and tick them off. Today's
+// progress on the left; on the right, a field to add a task and the list.
+// Click a title to rename it, × to remove it. Finished tasks fold away under
+// "Completed". See docs/product-spec.md, section 5.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -12,14 +11,9 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {timerColor} from '../compact.js';
-import * as Format from '../format.js';
 import {Ring, icon, iconButton, label} from '../widgets.js';
 import {Page} from './page.js';
 
-/** Due times refresh each minute so "in 5 min" stays honest. */
-const DUE_REFRESH_MS = 60000;
-/** How far clicking a due time pushes it back. */
-const SNOOZE_MS = 10 * 60 * 1000;
 const RING_SIZE = 64;
 
 export const TasksPage = GObject.registerClass(
@@ -47,12 +41,6 @@ class TasksPage extends Page {
         return 'Todo<span foreground="#34d67a">List</span>';
     }
 
-    get relevant() {
-        // Worth opening on when something is due within the hour.
-        const soon = Format.nowMs() + 60 * 60 * 1000;
-        return this._tasks().some(task => !task.done && task.due_at_ms && task.due_at_ms < soon);
-    }
-
     _tasks() {
         return this.daemon.state.tasks ?? [];
     }
@@ -68,8 +56,7 @@ class TasksPage extends Page {
         const info = new St.BoxLayout({vertical: true, y_align: Clutter.ActorAlign.CENTER, x_expand: true});
         this._headline = label('', 'isle-tasks-headline');
         this._caption = label('', 'isle-tasks-caption');
-        this._next = label('', 'isle-tasks-next');
-        for (const line of [this._headline, this._caption, this._next]) {
+        for (const line of [this._headline, this._caption]) {
             line.clutter_text.ellipsize = Pango.EllipsizeMode.END;
             info.add_child(line);
         }
@@ -82,7 +69,7 @@ class TasksPage extends Page {
 
         this._entry = new St.Entry({
             style_class: 'isle-entry isle-task-add',
-            hint_text: 'Add a task · “Call mum @18:30”',
+            hint_text: 'Add a task',
             can_focus: true,
             x_expand: true,
         });
@@ -139,9 +126,9 @@ class TasksPage extends Page {
     _update() {
         if (this._renaming)
             return;
-        // Open tasks first, soonest due first; finished ones last, newest first.
+        // Open tasks in the order they were added; finished ones last, newest first.
         const open = this._tasks().filter(task => !task.done)
-            .sort((a, b) => ((a.due_at_ms ?? Infinity) - (b.due_at_ms ?? Infinity)) || (a.id - b.id));
+            .sort((a, b) => a.id - b.id);
         const done = this._tasks().filter(task => task.done)
             .sort((a, b) => (b.done_at_ms ?? 0) - (a.done_at_ms ?? 0));
 
@@ -159,9 +146,6 @@ class TasksPage extends Page {
         }
         if (open.length === 0 && done.length === 0)
             this._list.add_child(label('Nothing yet. Type above to add a task.', 'isle-tasks-empty'));
-
-        if (this.active && open.some(task => task.due_at_ms))
-            this.later('due', DUE_REFRESH_MS, () => this._update());
     }
 
     _updateSummary(open, done) {
@@ -186,10 +170,6 @@ class TasksPage extends Page {
             this._headline.text = `${open.length} to go`;
             this._caption.text = `${done.length} of ${total} done today`;
         }
-        const next = open.find(task => task.due_at_ms);
-        this._next.visible = Boolean(next);
-        if (next)
-            this._next.text = `Next · ${next.title}`;
     }
 
     _row(task) {
@@ -218,9 +198,6 @@ class TasksPage extends Page {
         });
         row.add_child(title);
 
-        if (task.due_at_ms && !task.done)
-            row.add_child(this._dueChip(task));
-
         // × appears while the pointer is on the row.
         const remove = iconButton('window-close-symbolic', 'isle-button-flat isle-task-remove',
             () => this.daemon.call('todo', 'Remove', task.id), {size: 11, accessibleName: 'Remove task'});
@@ -228,24 +205,6 @@ class TasksPage extends Page {
         row.connect('notify::hover', () => remove.ease({opacity: row.hover ? 255 : 0, duration: 120}));
         row.add_child(remove);
         return row;
-    }
-
-    /** The due time; clicking it snoozes the task by ten minutes. */
-    _dueChip(task) {
-        const overdue = task.due_at_ms < Format.nowMs();
-        const text = Format.due(task.due_at_ms);
-        const chip = new St.Button({
-            style_class: `isle-task-due${overdue ? ' overdue' : ''}`,
-            label: text,
-            accessible_name: `Due ${text}; snooze 10 minutes`,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        chip.connect('notify::hover', () => (chip.label = chip.hover ? '+10 min' : text));
-        chip.connect('clicked', () => {
-            const from = Math.max(Format.nowMs(), task.due_at_ms);
-            this.daemon.call('todo', 'SetDue', task.id, from + SNOOZE_MS);
-        });
-        return chip;
     }
 
     /** "Completed · 3", folding the finished tasks in and out. */

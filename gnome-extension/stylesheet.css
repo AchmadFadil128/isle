@@ -321,7 +321,6 @@
 .isle-tasks-ring-count { font-size: 15px; font-weight: 800; }
 .isle-tasks-headline { font-size: 17px; font-weight: 800; }
 .isle-tasks-caption { font-size: 12px; color: rgba(255, 255, 255, 0.55); padding-top: 2px; }
-.isle-tasks-next { font-size: 12px; color: rgba(255, 255, 255, 0.8); padding-top: 6px; }
 .isle-tasks-empty { font-size: 12px; color: rgba(255, 255, 255, 0.45); padding: 8px 4px; }
 
 .isle-tasks-column { spacing: 6px; }
@@ -358,19 +357,6 @@
 .isle-task-entry { font-size: 14px; padding: 2px 10px; }
 .isle-task.done .isle-task-title { color: rgba(255, 255, 255, 0.45); text-decoration: line-through; }
 
-.isle-task-due {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background-color: #2c2c2e;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.isle-task-due:hover { background-color: #3a3a3c; color: #ffffff; }
-/* Overdue stands out by contrast, not by colour. */
-.isle-task-due.overdue { background-color: #ffffff; color: #000000; }
-.isle-task-due.overdue:hover { background-color: #e5e5e5; }
 .isle-task-remove { padding: 3px; color: rgba(255, 255, 255, 0.7); }
 
 .isle-task-section {
@@ -406,6 +392,84 @@
 .isle-dnd-moon { color: rgba(255, 255, 255, 0.85); }
 
 /* ── Shelf ────────────────────────────────────────────── */
+
+/* Shelf: tabs, filters and search in one bar, cards below */
+
+.isle-shelf-bar { spacing: 8px; }
+.isle-shelf-controls { spacing: 8px; }
+
+/* A macOS-style segmented control: the chosen segment is a raised pill. */
+.isle-segmented {
+  padding: 3px;
+  spacing: 2px;
+  border-radius: 999px;
+  background-color: #1c1c1e;
+}
+
+.isle-segment {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.6);
+  transition-duration: 120ms;
+}
+
+.isle-segment:hover { color: #ffffff; }
+.isle-segment:checked { background-color: #3a3a3c; color: #ffffff; }
+.isle-segmented-icons .isle-segment { padding: 4px 6px; }
+
+.isle-shelf-field { padding: 5px 12px; font-size: 12px; }
+.isle-shelf-field-icon { padding-right: 6px; }
+.isle-shelf-clear { padding: 6px; }
+.isle-shelf-confirm { padding: 5px 12px; }
+
+.isle-clips-scroll { -st-hfade-offset: 18px; }
+.isle-clips { spacing: 8px; }
+
+.isle-clip {
+  width: 136px;
+  height: 96px;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  background-color: #1c1c1e;
+  color: #ffffff;
+}
+
+.isle-clip:hover { background-color: #242426; }
+/* The keyboard's choice, for Enter to paste. */
+.isle-clip:selected { border-color: #ffffff; }
+
+.isle-clip-header { padding: 7px 9px; spacing: 5px; }
+.isle-clip-age { font-size: 11px; color: rgba(255, 255, 255, 0.5); }
+.isle-clip-body { padding: 28px 10px 8px 10px; spacing: 2px; }
+.isle-clip-text { font-size: 12px; }
+.isle-clip-code { font-family: monospace; font-size: 11px; }
+.isle-clip-host { font-size: 13px; font-weight: 700; }
+.isle-clip-url { font-size: 11px; color: rgba(255, 255, 255, 0.55); }
+.isle-clip-file-name { font-size: 12px; font-weight: 600; padding-top: 4px; }
+.isle-clip-subtle { font-size: 11px; color: rgba(255, 255, 255, 0.5); }
+
+/* Images fill the card; header and size sit on dark pills over them. */
+.isle-clip-thumb { border-radius: 12px; background-size: cover; background-color: #2c2c2e; }
+.isle-clip-image .isle-clip-header {
+  margin: 5px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.isle-clip-badge { margin: 5px; padding: 2px 6px; border-radius: 999px; background-color: rgba(0, 0, 0, 0.6); }
+.isle-clip-badge-label { font-size: 10px; font-weight: 600; }
+
+.isle-clip-actions { padding: 5px; spacing: 4px; }
+.isle-clip-action { padding: 4px; background-color: #3a3a3c; }
+.isle-clip-action:hover { background-color: #4a4a4c; }
+
+.isle-clip-feedback { border-radius: 12px; background-color: rgba(28, 28, 30, 0.95); }
+.isle-clip-feedback-label { font-size: 12px; font-weight: 700; padding-top: 4px; }
+
+/* Files tab */
 
 .isle-shelf-tiles { spacing: 10px; padding: 4px 0; }
 

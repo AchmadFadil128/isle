@@ -47,10 +47,8 @@ const INTERFACES = {
             <method name="Add"><arg name="text" type="s" direction="in"/><arg type="t" direction="out"/></method>
             <method name="SetDone"><arg name="id" type="t" direction="in"/><arg name="done" type="b" direction="in"/></method>
             <method name="Rename"><arg name="id" type="t" direction="in"/><arg name="title" type="s" direction="in"/></method>
-            <method name="SetDue"><arg name="id" type="t" direction="in"/><arg name="due_at_ms" type="x" direction="in"/></method>
             <method name="Remove"><arg name="id" type="t" direction="in"/></method>
             <method name="ClearDone"/>
-            <signal name="Due"><arg name="id" type="t"/><arg name="title" type="s"/></signal>
             <property name="Items" type="s" access="read"/>`),
         properties: {Items: 'tasks'},
     },
@@ -62,6 +60,20 @@ const INTERFACES = {
             <method name="Refresh"/>
             <property name="Items" type="s" access="read"/>`),
         properties: {Items: 'shelf'},
+    },
+    clipboard: {
+        xml: node('Clipboard1', `
+            <method name="AddText"><arg name="text" type="s" direction="in"/><arg name="app_id" type="s" direction="in"/><arg type="t" direction="out"/></method>
+            <method name="AddImage"><arg name="png" type="ay" direction="in"/><arg name="app_id" type="s" direction="in"/><arg type="t" direction="out"/></method>
+            <method name="AddFiles"><arg name="uris" type="as" direction="in"/><arg name="app_id" type="s" direction="in"/><arg type="t" direction="out"/></method>
+            <method name="AddNote"><arg name="text" type="s" direction="in"/><arg type="t" direction="out"/></method>
+            <method name="GetText"><arg name="id" type="t" direction="in"/><arg type="s" direction="out"/></method>
+            <method name="Touch"><arg name="id" type="t" direction="in"/></method>
+            <method name="SetPinned"><arg name="id" type="t" direction="in"/><arg name="pinned" type="b" direction="in"/></method>
+            <method name="Remove"><arg name="id" type="t" direction="in"/></method>
+            <method name="Clear"/>
+            <property name="Items" type="s" access="read"/>`),
+        properties: {Items: 'clipboard'},
     },
     system: {
         xml: node('System1', `
@@ -75,7 +87,6 @@ const INTERFACES = {
  * Signals:
  * - `changed` (key): `state[key]` has a new value
  * - `pomodoro-finished` (finished, next): phase names, e.g. 'focus', 'short_break'
- * - `task-due` (id, title)
  * - `system-event` (event): see `SystemEvent` in the daemon
  */
 export class Daemon extends Signals.EventEmitter {
@@ -150,9 +161,6 @@ export class Daemon extends Signals.EventEmitter {
         switch (signal) {
         case 'PhaseFinished':
             this.emit('pomodoro-finished', ...args);
-            break;
-        case 'Due':
-            this.emit('task-due', Number(args[0]), args[1]);
             break;
         case 'Event':
             try {

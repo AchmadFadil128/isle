@@ -11,9 +11,14 @@ going on, and opens on hover:
   list to catch up on and **Do Not Disturb** right there.
 - **Focus timer** (Pomodoro) with a ring that stays visible while closed,
   daily totals, and Do Not Disturb while you focus.
-- **Tasks** with quick-add (`Call mum @18:30`, `Stretch in 20m`, `Report
-  @3pm`), reminders when they are due, and a daily reset of finished ones.
-- **File shelf**: drop files on the island, drag them out later.
+- **Tasks**: a plain list to write things down and tick them off, with a
+  daily reset of finished ones.
+- **Shelf** with three tabs:
+  - **Clipboard history**: text, links, images and files you copy, as cards.
+    Search, filter, click to copy, or press Super+V and Enter to paste.
+    Password managers are ignored, and nothing leaves your computer.
+  - **Notes**: pin what you paste often, or write it down.
+  - **Files**: drop files on the island, drag them out later.
 - **Privacy dots** when the camera, microphone or screen sharing is in use,
   and a timer with a stop button while the screen records.
 - **Volume and output** switching right from the music page.
@@ -21,7 +26,8 @@ going on, and opens on hover:
   with their battery, volume and brightness, Caps Lock.
 
 Hover to open; scroll, swipe or use the arrows to change page. Middle-click
-plays or pauses; Super+V opens the notifications.
+plays or pauses, right-click brings the music player forward, and Super+V
+opens the clipboard history.
 
 ## Requirements
 
@@ -43,8 +49,8 @@ Everything is installed for your user only; no root is needed. On Wayland,
 log out and back in once so GNOME Shell loads the extension. Settings are in
 the Extensions app → Isle.
 
-`./uninstall.sh` removes it again. Your tasks, shelf and timer settings stay
-in `~/.local/share/isle` until you delete that folder.
+`./uninstall.sh` removes it again. Your tasks, shelf, clipboard history and
+timer settings stay in `~/.local/share/isle` until you delete that folder.
 
 ## How it works
 
@@ -77,7 +83,7 @@ Isle is built to run all day without being noticed:
 
 | Path | Contents |
 |---|---|
-| `crates/isle-core` | Platform-independent logic: LRC parsing, track-title clean-up, Pomodoro, tasks, shelf. Unit tested. |
+| `crates/isle-core` | Platform-independent logic: LRC parsing, track-title clean-up, Pomodoro, tasks, shelf, clipboard history. Unit tested. |
 | `crates/isle-daemon` | `isled`, the D-Bus service. |
 | `crates/isle-shelf` | `isle-shelf`, the shelf's drag-and-drop window. |
 | `gnome-extension` | The GNOME Shell extension. |

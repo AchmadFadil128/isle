@@ -156,19 +156,6 @@ export function pomodoroFinished(finished, next, state, daemon) {
     };
 }
 
-export function taskDue(id, title, daemon) {
-    return {
-        key: `task:${id}`,
-        icon: 'isle-tasks',
-        title,
-        subtitle: 'Due now',
-        tone: 'warn',
-        action: {label: 'Done', callback: () => daemon.call('todo', 'SetDone', id, true)},
-        duration: REMINDER_DURATION,
-        page: 'tasks',
-    };
-}
-
 export function track(nowPlaying) {
     return {
         key: 'track',

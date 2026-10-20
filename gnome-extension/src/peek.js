@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Short-lived alerts the island grows to show: charging, earbuds, volume
-// and brightness, keyboard, reminders, a new song...
+// and brightness, keyboard, the focus timer, a new song...
 //
 // An alert is a plain object:
 //   {
@@ -87,8 +87,11 @@ class PeekView extends St.BoxLayout {
         this.connect('destroy', () => this._onDestroy());
     }
 
-    /** Fills the view from an alert (see the top of this file). */
-    setAlert(alert) {
+    /**
+     * Fills the view from an alert (see the top of this file). `onDone` runs
+     * after the alert's button did its job.
+     */
+    setAlert(alert, onDone = null) {
         const rgb = TONE_COLORS[alert.tone] ?? TONE_COLORS.neutral;
         const color = css(rgb);
         const gicon = alert.gicon ?? icon(alert.icon ?? 'dialog-information-symbolic');
@@ -132,7 +135,10 @@ class PeekView extends St.BoxLayout {
         this._actionButton?.destroy();
         this._actionButton = null;
         if (alert.action) {
-            this._actionButton = pillButton(alert.action.label, 'isle-pill-small', alert.action.callback);
+            this._actionButton = pillButton(alert.action.label, 'isle-pill-small', () => {
+                alert.action.callback();
+                onDone?.();
+            });
             this._setChild(this._accessory, this._actionButton);
         } else if (alert.level !== undefined && alert.level !== null) {
             this._level.level = alert.level;

@@ -4,8 +4,8 @@
 // shelf's drag and drop (which GNOME Shell's own actors cannot do).
 //
 // The helper is an override-redirect X11 window, so it stacks above the
-// island; we place it exactly over the shelf page whenever that page is
-// open and the island has finished moving.
+// island; we place it exactly over the Shelf page's Files tab whenever that
+// tab is open and the island has finished moving.
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -93,14 +93,15 @@ export class ShelfHelper extends Signals.EventEmitter {
         });
     }
 
-    /** The shelf page's area on screen, once it is settled and visible. */
+    /** The Files tab's area on screen, once it is settled and visible. */
     _wantedRect() {
         const page = this._page;
-        if (!page.active || !page.visible || !this._island.isSettled ||
+        const area = page.helperArea;
+        if (!area || !page.active || !page.visible || !area.mapped || !this._island.isSettled ||
             page.translation_x !== 0 || page.opacity !== 255)
             return null;
-        const [x, y] = page.get_transformed_position();
-        const [width, height] = page.get_transformed_size();
+        const [x, y] = area.get_transformed_position();
+        const [width, height] = area.get_transformed_size();
         if (!width || !height)
             return null;
         return {x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height)};

@@ -10,7 +10,7 @@ disagrees with this document is a bug in one or the other; fix both together.
 | see the time and what is running at a glance | show the clock in the closed island, with live activities beside it (timer ring, music) |
 | control music without switching windows | open on hover with cover, scrubber, controls; sing along with synced lyrics |
 | focus in blocks | run a Pomodoro timer that stays visible while closed and chimes at the end |
-| not forget small tasks | add tasks in one line (`Call mum @18:30`), get reminded, tick them off; tasks survive reboots and power cuts |
+| not forget small tasks | write them down in one line, tick them off; tasks survive reboots and power cuts |
 | move files between apps | park files on the island and drag them out later |
 | know when something changes | show short, consistent alerts: charging, battery, losing the connection, earbuds, volume, brightness, Caps Lock |
 | still get my notifications now that the clock is gone | show GNOME's notifications in the island, keep them in a list, and offer Do Not Disturb right there |
@@ -80,14 +80,16 @@ place, dimmed, so the layout never jumps.
 | Pointer leaves | – | Close after 300 ms (not while typing or dragging a file) |
 | Click | Open now (an alert opens on its page) | Normal button clicks |
 | Middle-click | Play / pause | Play / pause |
-| Super+V (GNOME's calendar shortcut) | Open on Notifications, held open | Close |
-| Scroll / two-finger swipe | – | Previous / next page |
-| Esc | – | Stop typing or renaming a task; close when opened with Super+V |
+| Right-click | Bring the music player to the front | Bring the music player to the front |
+| Super+V (GNOME's calendar shortcut) | Open the clipboard history, search ready, held open | Close |
+| Scroll / two-finger swipe | – | Previous / next page (cards and lists scroll first) |
+| ← → Enter (search field) | – | Choose a clipboard card; Enter pastes it into the window in front |
+| Esc | – | Clear the search, stop typing or renaming; then close when opened with Super+V |
 
 **Default page on open**, first match wins: the page of the alert being
 shown → Notifications if some arrived unseen (during Do Not Disturb) → Music
-if something plays → Focus if the timer runs → Tasks if one is due within an
-hour → the page last viewed (remembered for 5 minutes) → Music.
+if something plays → Focus if the timer runs → the page last viewed
+(remembered for 5 minutes) → Music.
 
 Pages, in order: **Music · Notifications · Focus · Shelf · Tasks**. Lists
 scroll with the wheel or touchpad and never show a scrollbar. Arrows at the sides go to
@@ -153,21 +155,41 @@ is left alone. It stays on across the lock screen, and is turned off on the
 next start if the shell stopped mid-session. ("Do Not Disturb" in Focus
 Timer settings.)
 
-**Shelf** (title "Shelf"). With `isle-shelf` installed: a drop zone, file
-tiles with previews; drag out to any app, double-click to open, × to remove,
-trash to clear. Dragging a file near the island opens this page by itself.
-Without the helper: tiles that open on click, × on hover to remove, and an
-install hint when empty.
+**Shelf** (title "Shelf"): things to keep close, in three tabs on a
+segmented control.
 
-**Tasks** (title "Todo**List**"). Left: a progress ring with done / total
-inside (green when everything is done), "2 to go", "3 of 5 done today" and
-the next task with a due time. Right: an "Add a task" field (Enter adds and
-stays ready, Esc stops), then open tasks by due time. On a task: the circle
-ticks it off; clicking the title renames it in place (Enter or clicking away
-saves, Esc cancels); the due chip shows "+10 min" on hover and snoozes it by
-ten minutes (overdue chips are white, standing out by contrast); × appears
-on hover. Finished tasks fold under "Completed · N" and show as plain
-struck-through rows when unfolded. Finished tasks are cleared at midnight.
+- **Clipboard**: what was copied, newest first, as cards (136 × 96): text
+  (three lines; code in a monospace font), links (site and address), images
+  (thumbnail with its size) and files (icon, name, "+2 more"). Each card shows
+  the app it came from and how long ago. Click a card to copy it ("Copied"
+  flashes on it). On hover: pin (to Notes), a hand-off (text to Tasks; images
+  and files to the Files tab) and ×. The bar holds type filters (text, links,
+  images, files; the chosen one lit, the others dimmed), a search field and
+  Clear all (asks once more; notes are kept). Opened with Super+V, the search
+  field has the keyboard: ← → choose a card (white outline), Enter pastes it
+  into the window in front (Ctrl+Shift+V in terminals).
+- **Notes**: pinned cards and notes written in the bar's field (Enter
+  saves). Click to copy, like any card; unpin or × on hover.
+- **Files**: with `isle-shelf` installed, a drop zone and file tiles drawn
+  by the helper over this tab; drag out to any app, double-click to open,
+  × to remove, trash to clear. Dragging a file near the island opens this
+  tab by itself. Without the helper: tiles that open on click, × on hover to
+  remove, and an install hint when empty.
+
+Clipboard history is event driven (GNOME tells the shell when the
+clipboard changes; nothing polls) and kept by `isled`: at most 200 items
+besides notes, images with a 320 × 200 thumbnail. Copies are never kept
+when a password manager marks them secret, from ignored apps (password
+managers by default; Settings → Clipboard), or while history is off.
+
+**Tasks** (title "Todo**List**"): a plain list, with no times or reminders.
+Left: a progress ring with done / total inside (green when everything is
+done), "2 to go" and "3 of 5 done today". Right: an "Add a task" field (Enter
+adds and stays ready, Esc stops), then open tasks in the order they were
+added. On a task: the circle ticks it off; clicking the title renames it in
+place (Enter or clicking away saves, Esc cancels); × appears on hover.
+Finished tasks fold under "Completed · N" and show as plain struck-through
+rows when unfolded. Finished tasks are cleared at midnight.
 
 ## 6. Alerts
 
@@ -188,7 +210,6 @@ stale by the time the island closes.
 | Caps Lock (instant) | ⇪ | Caps Lock on / off | – | 1.5 s |
 | New song (off by default) | cover | title / artist | – | 2.6 s |
 | Timer phase ends (+ chime) | timer | Focus session done… | Start break | 8 s |
-| Task due (+ chime) | tasks | task title / Due now | Done | 8 s |
 | Screen recording started | red record icon | Recording screen | Stop | 2.6 s |
 | Notification (GNOME's sound) | app icon, large | title / first line | – | 5 s; urgent 8 s and instant |
 
@@ -198,8 +219,8 @@ is used.
 ### Notifications and Do Not Disturb
 
 The island replaces GNOME's banners and its calendar drop-down while the
-extension runs, so nothing shows twice; Super+V opens the Notifications
-page instead of the drop-down. Rules
+extension runs, so nothing shows twice (hovering opens Notifications; Super+V
+opens the clipboard history instead of the drop-down). Rules
 match GNOME's: low-urgency and already-seen notifications never pop up, and
 apps whose banners are turned off in Settings stay quiet. Do Not Disturb is
 GNOME's own setting, so it stays in sync with Quick Settings; while it is on,
@@ -208,7 +229,8 @@ hovering opens the Notifications page.
 
 ## 7. Data and reliability
 
-- Tasks, shelf and timer settings live in `~/.local/share/isle/*.json`,
+- Tasks, shelf, clipboard history (images in `clips/`) and timer settings
+  live in `~/.local/share/isle/*.json`,
   written atomically and flushed to disk (file and folder), so they survive
   reboots and power cuts. A corrupt file is set aside, never lost silently.
 - Lyrics and cover art are cached in `~/.cache/isle`.

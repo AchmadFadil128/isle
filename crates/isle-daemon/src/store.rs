@@ -72,6 +72,12 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
         })
     }
 
+    /// Whether saving is off because the stored file could not be read, so
+    /// the loaded value is a stand-in rather than what the user has.
+    pub fn is_read_only(&self) -> bool {
+        self.read_only
+    }
+
     /// Saves atomically, so a crash mid-write never leaves a truncated file.
     pub fn save(&self, value: &T) {
         if self.read_only {

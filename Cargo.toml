@@ -25,6 +25,7 @@ env_logger = "0.11"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 gdk4-x11 = "0.11"
 gtk4 = { version = "0.11", features = ["v4_12"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
 inotify = { version = "0.11", default-features = false, features = ["stream"] }
 log = "0.4"
 serde = { version = "1", features = ["derive"] }

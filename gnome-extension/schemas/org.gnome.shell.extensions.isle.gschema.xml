@@ -42,9 +42,19 @@
       <summary>Internal: Do Not Disturb was turned on by a focus session</summary>
       <description>Kept across restarts and the lock screen so Isle can turn it off again afterwards.</description>
     </key>
+    <key name="clipboard-history" type="b">
+      <default>true</default>
+      <summary>Keep a history of what you copy</summary>
+      <description>Text, links, images and files, stored only on this computer.</description>
+    </key>
+    <key name="clipboard-ignored-apps" type="as">
+      <default>['org.keepassxc.KeePassXC.desktop', 'com.bitwarden.desktop.desktop', 'bitwarden.desktop', '1password.desktop', 'org.gnome.World.Secrets.desktop', 'org.gnome.seahorse.Application.desktop', 'proton-pass.desktop']</default>
+      <summary>Apps whose copies are never kept</summary>
+      <description>Desktop app ids, e.g. password managers.</description>
+    </key>
     <key name="chimes" type="b">
       <default>true</default>
-      <summary>Play a sound for timers and reminders</summary>
+      <summary>Play a sound when a focus session or break ends</summary>
     </key>
   </schema>
 </schemalist>

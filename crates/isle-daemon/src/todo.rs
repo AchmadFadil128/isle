@@ -2,8 +2,7 @@
 
 use std::sync::Arc;
 
-use chrono::Local;
-use isle_core::todo::{TodoList, parse_quick_add};
+use isle_core::todo::TodoList;
 use log::warn;
 use tokio::sync::Notify;
 use zbus::object_server::{InterfaceRef, SignalEmitter};
@@ -45,18 +44,16 @@ fn not_found(id: u64) -> fdo::Error {
 
 #[interface(name = "io.github.isle.Todo1")]
 impl TodoService {
-    /// Adds a task from quick-add text such as "Call mum @18:30" or
-    /// "Stretch in 20m", and returns its id.
+    /// Adds a task and returns its id.
     async fn add(
         &mut self,
         text: &str,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> fdo::Result<u64> {
-        let (title, due) = parse_quick_add(text, &Local::now());
-        if title.is_empty() {
-            return Err(fdo::Error::InvalidArgs("a task needs a title".into()));
-        }
-        let id = self.list.add(&title, due);
+        let id = self
+            .list
+            .add(text)
+            .ok_or_else(|| fdo::Error::InvalidArgs("a task needs a title".into()))?;
         self.changed(&emitter).await?;
         Ok(id)
     }
@@ -87,19 +84,6 @@ impl TodoService {
         Ok(self.changed(&emitter).await?)
     }
 
-    /// Moves a task's due time, in ms since the epoch; 0 or less clears it.
-    async fn set_due(
-        &mut self,
-        id: u64,
-        due_at_ms: i64,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> fdo::Result<()> {
-        if !self.list.set_due(id, (due_at_ms > 0).then_some(due_at_ms)) {
-            return Err(not_found(id));
-        }
-        Ok(self.changed(&emitter).await?)
-    }
-
     async fn remove(
         &mut self,
         id: u64,
@@ -124,38 +108,21 @@ impl TodoService {
     fn items(&self) -> String {
         serde_json::to_string(self.list.items()).unwrap_or_default()
     }
-
-    /// A task's due time has arrived.
-    #[zbus(signal)]
-    async fn due(emitter: &SignalEmitter<'_>, id: u64, title: &str) -> zbus::Result<()>;
 }
 
-/// Announces tasks as they come due, and clears yesterday's finished
-/// tasks at midnight.
+/// Clears yesterday's finished tasks at midnight.
 pub async fn run(iface: InterfaceRef<TodoService>) {
     let wake = iface.get().await.wake.clone();
     loop {
-        let due = iface.get().await.list.deadline();
-        let deadline = [due, next_midnight()].into_iter().flatten().min();
-        if !wait_until(deadline, &wake).await {
+        if !wait_until(next_midnight(), &wake).await {
             continue;
         }
-
         let mut service = iface.get_mut().await;
-        let due = service.list.take_due(now_ms());
-        let pruned = service.list.drop_done_before(start_of_today());
-        if due.is_empty() && !pruned {
+        if !service.list.drop_done_before(start_of_today()) {
             continue;
         }
-        let emitter = iface.signal_emitter();
-        let result = async {
-            for item in &due {
-                TodoService::due(emitter, item.id, &item.title).await?;
-            }
-            service.changed(emitter).await
-        };
-        if let Err(err) = result.await {
-            warn!("could not announce due tasks: {err}");
+        if let Err(err) = service.changed(iface.signal_emitter()).await {
+            warn!("could not clear yesterday's tasks: {err}");
         }
     }
 }

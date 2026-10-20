@@ -6,6 +6,7 @@
 //! here, exposed on the session bus as `io.github.isle.Daemon`. See
 //! `docs/dbus-api.md` for the interfaces.
 
+mod clipboard;
 mod clock;
 mod media;
 mod pomodoro;
@@ -18,6 +19,7 @@ use anyhow::Context;
 use log::{info, warn};
 use zbus::connection;
 
+use crate::clipboard::ClipboardService;
 use crate::media::MediaService;
 use crate::pomodoro::PomodoroService;
 use crate::shelf::ShelfService;
@@ -36,6 +38,7 @@ async fn main() -> anyhow::Result<()> {
         .serve_at(OBJECT_PATH, PomodoroService::load())?
         .serve_at(OBJECT_PATH, TodoService::load())?
         .serve_at(OBJECT_PATH, ShelfService::load())?
+        .serve_at(OBJECT_PATH, ClipboardService::load())?
         .serve_at(OBJECT_PATH, SystemService::default())?
         .build()
         .await

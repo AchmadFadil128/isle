@@ -4,7 +4,7 @@
 //
 // The island is in one of three presentations:
 //   compact  - the resting pill with the clock and live activities
-//   peek     - a short alert (volume, charger, reminder, new song...)
+//   peek     - a short alert (volume, charger, focus timer, new song...)
 //   expanded - the full island with pages, while the pointer is on it
 //
 // Alerts queue up and are shown one at a time; "instant" ones (volume,
@@ -18,6 +18,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 
 import * as Alerts from './alerts.js';
+import {ClipboardHistory} from './clipboard.js';
 import {CompactView} from './compact.js';
 import {Daemon} from './daemon.js';
 import {DOTS_HEIGHT, ExpandedView, PAGE_HEIGHT} from './expanded.js';
@@ -61,7 +62,7 @@ const EXPANDED_SHOULDER = 22;
  * Notifications only count when some arrived unseen (e.g. during Do Not
  * Disturb), since the others were already shown as alerts.
  */
-const DEFAULT_PAGE_ORDER = ['notifications', 'music', 'focus', 'tasks'];
+const DEFAULT_PAGE_ORDER = ['notifications', 'music', 'focus'];
 
 export class Controller {
     constructor(extension) {
@@ -82,11 +83,13 @@ export class Controller {
         this._privacy = new PrivacyMonitor(this._daemon);
         this._audio = new AudioOutputs();
         this._focusMode = new FocusMode(this._daemon, this._notifications, this._settings);
+        this._clipboard = new ClipboardHistory(this._daemon, this._settings);
         this._island = new Island();
         this._compact = new CompactView(this._daemon, this._settings, this._privacy);
         this._peek = new PeekView();
         this._expanded = this._buildExpanded();
-        this._shelfHelper = new ShelfHelper(this._island, this._expanded.pageNamed('shelf'));
+        this._shelf = this._expanded.pageNamed('shelf');
+        this._shelfHelper = new ShelfHelper(this._island, this._shelf);
 
         for (const view of [this._compact, this._peek, this._expanded])
             this._island.addView(view);
@@ -107,7 +110,7 @@ export class Controller {
             new MediaPage(this._daemon, this._audio, size),
             new NotificationsPage(this._daemon, this._notifications, size),
             new TimerPage(this._daemon, size),
-            new ShelfPage(this._daemon, size),
+            new ShelfPage(this._daemon, this._clipboard, this._settings, size),
             new TasksPage(this._daemon, size),
         ];
         for (const page of pages) {
@@ -120,6 +123,7 @@ export class Controller {
             this._shelfHelper?.sync();
         });
         expanded.connect('page-settled', () => this._shelfHelper?.sync());
+        expanded.pageNamed('shelf').connect('helper-area-changed', () => this._shelfHelper?.sync());
         // Lyrics widen the island and wash it with the cover's colour.
         expanded.connect('width-changed', () => {
             if (this._presentation === 'expanded')
@@ -136,7 +140,10 @@ export class Controller {
         island.connect('geometry-changed', () => this._shelfHelper.sync());
 
         // A file dragged towards the island opens the shelf to drop it on.
-        this._shelfHelper.connect('drag-near', () => this.expand('shelf'));
+        this._shelfHelper.connect('drag-near', () => {
+            this._shelf.showTab('files');
+            this.expand('shelf');
+        });
         this._shelfHelper.connect('drag-end', () => {
             if (!this._island.hover)
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
@@ -167,10 +174,6 @@ export class Controller {
         daemon.connect('pomodoro-finished', (_daemon, finished, next) => {
             this._chime('complete');
             this._post(Alerts.pomodoroFinished(finished, next, daemon.state.pomodoro, daemon));
-        });
-        daemon.connect('task-due', (_daemon, id, title) => {
-            this._chime('message-new-instant');
-            this._post(Alerts.taskDue(id, title, daemon));
         });
         daemon.connect('system-event', (_daemon, event) => this._postSystemAlert(Alerts.system(event)));
 
@@ -288,6 +291,13 @@ export class Controller {
         case Clutter.BUTTON_MIDDLE:
             this._daemon.call('media', 'PlayPause');
             return Clutter.EVENT_STOP;
+        case Clutter.BUTTON_SECONDARY:
+            // Brings the music player to the front.
+            if (!Playback.hasTrack(this._daemon.state.nowPlaying))
+                return Clutter.EVENT_PROPAGATE;
+            this.collapse();
+            this._daemon.call('media', 'Raise');
+            return Clutter.EVENT_STOP;
         default:
             return Clutter.EVENT_PROPAGATE;
         }
@@ -330,19 +340,21 @@ export class Controller {
     // Keyboard
 
     /**
-     * GNOME's calendar shortcut (Super+V) opens the island on Notifications
-     * and holds it open without the pointer; pressing it again, Esc or a
-     * click elsewhere closes it.
+     * Super+V (GNOME's calendar shortcut, which the island takes over) opens
+     * the clipboard history with the search field ready, and holds the
+     * island open without the pointer; pressing it again, Esc or a click
+     * elsewhere closes it.
      */
     _toggleFromKeyboard() {
-        if (this._expandWanted) {
+        if (this._expandWanted && this._keyboardGrab) {
             this.collapse();
             return;
         }
-        this.expand('notifications');
+        this._shelf.showTab('clipboard');
+        this.expand('shelf');
         this._setKeyboard(true);
         if (this._keyboardGrab)
-            global.stage.set_key_focus(this._island);
+            this._shelf.showTab('clipboard', {focusSearch: true});
     }
 
     /** Grabs the keyboard for typing into the island (e.g. a new task). */
@@ -412,7 +424,8 @@ export class Controller {
 
     _showAlert(alert) {
         this._alert = alert;
-        this._peek.setAlert(alert);
+        // Its button does what it says, and that is the end of the alert.
+        this._peek.setAlert(alert, () => this._dismissAlert(true));
         this._later('alert', alert.duration ?? 3000, () => this._dismissAlert(true));
         this._render();
     }
@@ -522,6 +535,7 @@ export class Controller {
 
         // The views listen to the services below, so they go first.
         this._island.destroy();
+        this._clipboard.destroy();
         this._privacy.destroy();
         this._audio.destroy();
         this._notifications.destroy();

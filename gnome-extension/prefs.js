@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Preferences: how the island looks and behaves (GSettings), and the focus
-// timer's durations (stored by isled, edited over D-Bus).
+// Preferences: how the island looks and behaves (GSettings), the clipboard
+// history, and the focus timer's durations (stored by isled, edited over
+// D-Bus).
 
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 const DAEMON = 'io.github.isle.Daemon';
 const DAEMON_PATH = '/io/github/isle/Daemon';
 const POMODORO_INTERFACE = 'io.github.isle.Pomodoro1';
+const CLIPBOARD_INTERFACE = 'io.github.isle.Clipboard1';
 /** Edits to the timer are sent once typing pauses for this long. */
 const SAVE_DELAY_MS = 400;
 
@@ -20,7 +23,33 @@ export default class IslePreferences extends ExtensionPreferences {
         const settings = this.getSettings();
         window.set_default_size(560, 680);
         window.add(this._islandPage(settings));
+        window.add(this._clipboardPage(settings, window));
         window.add(this._timerPage(settings, window));
+    }
+
+    _clipboardPage(settings, window) {
+        const page = new Adw.PreferencesPage({title: 'Clipboard', icon_name: 'edit-paste-symbolic'});
+
+        const history = new Adw.PreferencesGroup({
+            title: 'Clipboard History',
+            description: 'Super+V opens it. Everything stays on this computer.',
+        });
+        history.add(switchRow(settings, 'clipboard-history', 'Keep clipboard history',
+            'Text, links, images and files you copy. Passwords from password managers are never kept.'));
+        const clear = new Adw.ActionRow({title: 'Clear history', subtitle: 'Notes are kept'});
+        const clearButton = new Gtk.Button({label: 'Clear…', valign: Gtk.Align.CENTER});
+        clearButton.connect('clicked', () => confirmClear(window));
+        clear.add_suffix(clearButton);
+        history.add(clear);
+        page.add(history);
+
+        const ignored = new Adw.PreferencesGroup({
+            title: 'Never Keep Copies From',
+            description: 'Known password managers are on the list from the start.',
+        });
+        page.add(ignored);
+        fillIgnoredApps(ignored, settings);
+        return page;
     }
 
     _islandPage(settings) {
@@ -37,7 +66,7 @@ export default class IslePreferences extends ExtensionPreferences {
         alerts.add(switchRow(settings, 'system-alerts', 'Charging, network and Bluetooth', 'Also Caps Lock'));
         alerts.add(switchRow(settings, 'privacy-indicators', 'Privacy indicators', 'Dots when the camera, microphone or screen sharing is in use'));
         alerts.add(switchRow(settings, 'track-peek', 'New song', 'Briefly show the song when the track changes'));
-        alerts.add(switchRow(settings, 'chimes', 'Sounds', 'Chime when a timer ends or a task is due'));
+        alerts.add(switchRow(settings, 'chimes', 'Sounds', 'Chime when a focus session or break ends'));
         page.add(alerts);
         return page;
     }
@@ -137,4 +166,72 @@ function spinRow(settings, key, title, subtitle, min, max) {
     row.subtitle = subtitle;
     settings.bind(key, row, 'value', Gio.SettingsBindFlags.DEFAULT);
     return row;
+}
+
+/** Asks, then clears everything but notes from the clipboard history. */
+function confirmClear(window) {
+    const dialog = new Adw.MessageDialog({
+        transient_for: window,
+        heading: 'Clear clipboard history?',
+        body: 'Everything you copied is removed. Notes stay.',
+    });
+    dialog.add_response('cancel', 'Cancel');
+    dialog.add_response('clear', 'Clear');
+    dialog.set_response_appearance('clear', Adw.ResponseAppearance.DESTRUCTIVE);
+    dialog.connect('response', (_dialog, response) => {
+        if (response !== 'clear')
+            return;
+        Gio.DBus.session.call(DAEMON, DAEMON_PATH, CLIPBOARD_INTERFACE, 'Clear', null, null,
+            Gio.DBusCallFlags.NONE, -1, null, null);
+    });
+    dialog.present();
+}
+
+/**
+ * Lists the apps whose copies are ignored, each with a remove button, and a
+ * searchable list of installed apps to add one.
+ */
+function fillIgnoredApps(group, settings) {
+    const key = 'clipboard-ignored-apps';
+    const apps = Gio.AppInfo.get_all()
+        .filter(app => app.should_show() && app.get_id())
+        .sort((a, b) => a.get_display_name().localeCompare(b.get_display_name()));
+    let rows = [];
+
+    const add = new Adw.ComboRow({
+        title: 'Add an app',
+        model: Gtk.StringList.new(['Choose…', ...apps.map(app => app.get_display_name())]),
+        enable_search: true,
+    });
+    add.connect('notify::selected', () => {
+        const app = apps[add.selected - 1];
+        if (!app)
+            return;
+        const ids = settings.get_strv(key);
+        if (!ids.includes(app.get_id()))
+            settings.set_strv(key, [...ids, app.get_id()]);
+        add.selected = 0;
+    });
+
+    const refresh = () => {
+        rows.forEach(row => group.remove(row));
+        // Only apps on this computer; the built-in list names others too.
+        rows = settings.get_strv(key).map(id => [id, Gio.DesktopAppInfo.new(id)]).filter(([, app]) => app).map(([id, app]) => {
+            const row = new Adw.ActionRow({title: app.get_display_name()});
+            if (app.get_icon())
+                row.add_prefix(new Gtk.Image({gicon: app.get_icon(), pixel_size: 24}));
+            const remove = new Gtk.Button({icon_name: 'list-remove-symbolic', valign: Gtk.Align.CENTER, css_classes: ['flat']});
+            remove.set_tooltip_text('Keep copies from this app again');
+            remove.connect('clicked', () => settings.set_strv(key, settings.get_strv(key).filter(other => other !== id)));
+            row.add_suffix(remove);
+            return row;
+        });
+        // Keep "Add an app" last.
+        group.remove(add);
+        rows.forEach(row => group.add(row));
+        group.add(add);
+    };
+    group.add(add);
+    settings.connect(`changed::${key}`, refresh);
+    refresh();
 }

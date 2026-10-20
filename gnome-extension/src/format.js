@@ -41,22 +41,6 @@ export function volume(ml) {
     return `${ml.toLocaleString('en-US')} ml`;
 }
 
-/** A due time relative to now: "in 20 min", "18:30", "Tomorrow 09:00", "Overdue". */
-export function due(atMs) {
-    const now = Date.now();
-    const minutes = Math.round((atMs - now) / 60000);
-    if (minutes < 0)
-        return 'Overdue';
-    if (minutes < 60)
-        return minutes <= 1 ? 'Now' : `in ${minutes} min`;
-    const at = GLib.DateTime.new_from_unix_local(Math.floor(atMs / 1000));
-    const today = GLib.DateTime.new_now_local();
-    const time = clockTime(at);
-    if (at.get_day_of_year() === today.get_day_of_year() && at.get_year() === today.get_year())
-        return time;
-    return `${at.format('%a')} ${time}`;
-}
-
 /** How long ago a GLib.DateTime was: "now", "5m", "2h", or "Mon". */
 export function ago(dateTime) {
     const now = GLib.DateTime.new_now_local();
