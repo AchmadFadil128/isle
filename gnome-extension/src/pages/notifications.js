@@ -11,7 +11,7 @@ import St from 'gi://St';
 
 import * as Format from '../format.js';
 import {notificationIcon, plainBody} from '../notifications.js';
-import {chipButton, iconButton, isSymbolic, label, setChip} from '../widgets.js';
+import {icon, iconButton, isSymbolic, label, setButtonIcon, setEnabled} from '../widgets.js';
 import {Page} from './page.js';
 
 /**
@@ -34,13 +34,13 @@ class NotificationsPage extends Page {
     _init(daemon, center, {height}) {
         super._init(daemon, {
             style_class: 'isle-page isle-notifications',
-            layout_manager: new Clutter.BoxLayout(),
+            layout_manager: new Clutter.BoxLayout({orientation: Clutter.Orientation.VERTICAL}),
             height,
         });
         this.name = 'notifications';
         this._center = center;
 
-        this.add_child(this._buildSummary());
+        this.add_child(this._buildBar());
         this.add_child(this._buildList());
 
         this._centerHandlers = [
@@ -63,24 +63,19 @@ class NotificationsPage extends Page {
         return this._center.unseenCount > 0;
     }
 
-    _buildSummary() {
-        const side = new St.BoxLayout({vertical: true, style_class: 'isle-notifications-side', y_align: Clutter.ActorAlign.CENTER});
-        this._count = label('0', 'isle-tasks-count');
-        this._caption = label('', 'isle-tasks-caption');
-        side.add_child(this._count);
-        side.add_child(this._caption);
-
-        const buttons = new St.BoxLayout({vertical: true, style_class: 'isle-notifications-buttons', x_align: Clutter.ActorAlign.START});
-        this._dndButton = chipButton('isle-bell', 'Do Not Disturb', () => {
+    /** How many there are, then Do Not Disturb and Clear All as small round buttons. */
+    _buildBar() {
+        const bar = new St.BoxLayout({style_class: 'isle-notifications-bar'});
+        this._count = label('', 'isle-notifications-count', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        bar.add_child(this._count);
+        this._dndButton = iconButton('isle-bell', 'isle-button-round isle-button-small isle-dnd-toggle', () => {
             this._center.dnd = !this._center.dnd;
-        }, 'isle-chip-dnd');
-        this._clearButton = chipButton('isle-trash', 'Clear All', () => this._center.clearAll());
-        for (const button of [this._dndButton, this._clearButton]) {
-            button.x_align = Clutter.ActorAlign.START;
-            buttons.add_child(button);
-        }
-        side.add_child(buttons);
-        return side;
+        }, {size: 14, accessibleName: 'Do Not Disturb'});
+        this._clearButton = iconButton('isle-trash', 'isle-button-round isle-button-small',
+            () => this._center.clearAll(), {size: 14, accessibleName: 'Clear all'});
+        bar.add_child(this._dndButton);
+        bar.add_child(this._clearButton);
+        return bar;
     }
 
     _buildList() {
@@ -95,7 +90,8 @@ class NotificationsPage extends Page {
         });
         this._scroll.set_child(this._list);
 
-        this._empty = new St.BoxLayout({vertical: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, x_expand: true});
+        this._empty = new St.BoxLayout({vertical: true, style_class: 'isle-empty', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, x_expand: true});
+        this._empty.add_child(new St.Icon({gicon: icon('isle-bell'), icon_size: 24, style_class: 'isle-empty-icon', x_align: Clutter.ActorAlign.CENTER}));
         this._empty.add_child(label('No notifications', 'isle-empty-title', {x_align: Clutter.ActorAlign.CENTER}));
         this._empty.add_child(label('You’re all caught up', 'isle-empty-hint', {x_align: Clutter.ActorAlign.CENTER}));
 
@@ -107,9 +103,9 @@ class NotificationsPage extends Page {
 
     _update() {
         const notifications = this._center.notifications;
-        this._count.text = String(notifications.length);
-        this._caption.text = notifications.length === 1 ? 'Notification' : 'Notifications';
-        setChip(this._clearButton, {enabled: notifications.some(n => !n.resident)});
+        const count = notifications.length;
+        this._count.text = count ? `${count} ${count === 1 ? 'notification' : 'notifications'}` : '';
+        setEnabled(this._clearButton, notifications.some(n => !n.resident));
 
         this._list.destroy_all_children();
         for (const notification of notifications)
@@ -124,7 +120,11 @@ class NotificationsPage extends Page {
 
     _updateDnd() {
         const on = this._center.dnd;
-        setChip(this._dndButton, {active: on, icon: on ? 'isle-moon' : 'isle-bell'});
+        if (on)
+            this._dndButton.add_style_pseudo_class('checked');
+        else
+            this._dndButton.remove_style_pseudo_class('checked');
+        setButtonIcon(this._dndButton, on ? 'isle-moon' : 'isle-bell');
     }
 
     /**

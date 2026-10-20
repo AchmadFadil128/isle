@@ -140,11 +140,13 @@ name, and a red dot on Notifications while some are unseen. On the right a
 red "● 0:42" pill while the screen records (click to stop), the privacy
 dots, the music bars and `[timer ring] Tue 20 Oct 12:26`.
 
-**Music**. Cover (click: bring the player forward) with the playing app's
-icon on its corner (Spotify, Chrome, …; found by name when the player gives
-no desktop entry), title, artist — album (or the app's name), scrubber with
-elapsed / remaining time, lyrics toggle, previous · play/pause · next. An
-app's logo sent in place of a cover is shown whole, without the badge. Built for Spotify and YouTube in
+**Music**, laid out like macOS's Now Playing. On the left a 104 px cover
+(click: bring the player forward) with the playing app's icon on its corner
+(Spotify, Chrome, …; found by name when the player gives no desktop entry).
+Beside it: title and artist — album (or the app's name) with the lyrics and
+output buttons small at the right, the scrubber with elapsed / remaining
+time, and previous · play/pause · next centred under them. An app's logo
+sent in place of a cover is shown whole, without the badge. Built for Spotify and YouTube in
 the browser; any MPRIS player works. With nothing playing: "Nothing
 playing" and "Play something in Spotify or on YouTube".
 
@@ -161,19 +163,22 @@ the top and bottom; click a line to jump there; scrolling by hand pauses
 following for 4 s. The island takes a soft wash of the cover's colour.
 States: looking for lyrics, no lyrics found, instrumental, offline.
 
-**Notifications** (title "Notifications"). Left: how many there are,
-**Do Not Disturb** and **Clear All** (see state details above). Right: newest first,
-each with its app icon, title, one line of text and how long ago; click to
-open it (the island closes), × to dismiss. Opening the page marks them seen.
-Empty: "No notifications · You're all caught up".
+**Notifications**. A slim row on top: how many there are ("4
+notifications"), then **Do Not Disturb** (bell, or a moon on purple while
+on) and **Clear All** (trash) as small round buttons. Below, the full
+width: newest first, each card with its app icon (a symbolic one on a grey
+tile), the title with how long ago on the right, and one line of text;
+click to open it (the island closes), × (in the time's place under the
+pointer) to dismiss. Opening the page marks them seen. Empty: a bell, "No
+notifications · You're all caught up".
 
-**Focus** (title "Pomodoro"). A thin white ring that fills clockwise as the
-phase runs (green during breaks), with a clock icon inside; the remaining
-time large with a reset button; the phase underneath ("Focus time", "Short
-break", "Long break"). Buttons: **Short Break** · white play/pause ·
-**Focus Time**; the chips start that phase at once and the current one is
-highlighted. No glows or accent fills. Once a focus session has finished
-today, a line underneath reads "Today · 3 sessions · 1h 15m".
+**Focus**. A white ring that fills clockwise as the phase runs (green
+during breaks) with the remaining time inside. Beside it the phase ("Focus
+time", "Short break", "Long break", "· paused"), then today's total ("Today
+· 3 sessions · 1h 15m") or, before the first session, what comes ("25m of
+focus, then a break"), and one row of controls: white play/pause, reset,
+**Short Break** and **Focus Time**; the chips start that phase at once and
+the current one is lit. No glows.
 
 While a focus phase runs (paused included), Do Not Disturb is on, like a
 Focus mode; it goes off when the phase ends. Isle only undoes what it did:
@@ -193,7 +198,8 @@ segmented control (switching crossfades).
   flashes on it). On hover: pin (pinned items stay at the front and are
   never cleared), a hand-off (text to Tasks; images and files to the Files
   tab) and ×. The bar holds type filters (text, links,
-  images, files; the chosen one lit, the others dimmed), a search field and
+  images, files; the chosen one lit, the others dimmed), search (a round
+  button that opens into a field, closing again when left empty) and
   Clear all (asks once more; pinned items are kept). Opened with Super+V, the search
   field has the keyboard: ← → choose a card (white outline), Enter pastes it
   into the window in front (Ctrl+Shift+V in terminals).
@@ -219,12 +225,13 @@ when a password manager marks them secret, from ignored apps (password
 managers by default; Settings → Clipboard), or while history is off.
 
 **Tasks** (title "Tasks"): a plain list, with no times or reminders. Left: a
-white progress ring with done / total inside, "2 to go" and "3 of 5 done
-today". Right: an "Add a task" field (Enter adds and stays ready, Esc
+white progress ring with done / total inside, and under it "2 to go" and "3
+of 5 done today" (or "No tasks yet · Plan your day"). Right: an "Add a task" field (Enter adds and stays ready, Esc
 stops), then open tasks in the order they were added. On a task: the circle
 ticks it off; clicking the title renames it in place (Enter or clicking away
 saves, Esc cancels); × appears on hover. Finished tasks fold under
-"Completed · N" and show as plain struck-through rows when unfolded.
+"Completed · N" and show as plain struck-through rows when unfolded, the
+list scrolling to them.
 Finished tasks are cleared at midnight.
 
 ## 6. Alerts

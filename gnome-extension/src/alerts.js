@@ -3,6 +3,7 @@
 // Turns events into alerts for the peek view (see peek.js for the format).
 
 import * as Format from './format.js';
+import * as Playback from './playback.js';
 import {notificationIcon, plainBody} from './notifications.js';
 
 const OSD_DURATION = 1500;
@@ -27,7 +28,7 @@ export function osd(gicon, text, level, maxLevel) {
     const kinds = [
         ['audio-volume', 'Volume'],
         ['microphone', 'Microphone'],
-        ['keyboard-brightness', 'Keyboard brightness'],
+        ['keyboard-brightness', 'Keyboard light'],
         ['display-brightness', 'Brightness'],
     ];
     const kind = kinds.find(([prefix]) => iconName.startsWith(prefix))?.[1];
@@ -136,7 +137,7 @@ export function pomodoroFinished(finished, next, state, daemon) {
     if (finished === 'focus') {
         return {
             key: 'pomodoro',
-            icon: 'isle-timer',
+            icon: 'isle-timer-symbolic',
             title: 'Focus session done',
             subtitle: waiting ? 'Take a break when you are ready' : `Enjoy a ${minutes}-minute break`,
             tone: 'good',
@@ -147,7 +148,7 @@ export function pomodoroFinished(finished, next, state, daemon) {
     }
     return {
         key: 'pomodoro',
-        icon: 'isle-timer',
+        icon: 'isle-timer-symbolic',
         title: next === 'focus' ? 'Break is over' : Format.phaseName(next),
         subtitle: waiting ? 'Ready for another focus session?' : `${minutes} minutes of focus`,
         tone: 'focus',
@@ -161,6 +162,7 @@ export function track(nowPlaying) {
     return {
         key: 'track',
         art: nowPlaying.art_path,
+        badge: Playback.playerApp(nowPlaying)?.get_icon() ?? null,
         title: nowPlaying.title,
         subtitle: nowPlaying.artist || nowPlaying.identity,
         duration: STATUS_DURATION,
@@ -184,6 +186,8 @@ export function notification(item, urgent) {
         icon: 'dialog-information-symbolic',
         title,
         subtitle: body,
+        // A critical one stands out in red.
+        tone: urgent ? 'bad' : 'neutral',
         priority: urgent ? 'instant' : undefined,
         duration: urgent ? REMINDER_DURATION : NOTIFICATION_DURATION,
         page: 'notifications',

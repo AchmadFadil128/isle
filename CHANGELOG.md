@@ -13,6 +13,21 @@ All notable changes to Isle are listed here. The format follows
   the theme's; controls are pills and cards share a 12 px corner; the
   Clipboard / Files switch is a segmented control whose chosen segment is
   raised.
+- Music laid out like macOS's Now Playing: a large cover beside the title,
+  the scrubber and the controls, with lyrics and output as small buttons
+  at the top right. Tasks stack today's progress under the ring, drop the
+  repeated empty message, and scroll to the finished tasks when unfolded.
+- Alerts: the first one shown measures its width right (Volume read
+  "Vol…"); focus alerts tint their icon; a critical notification is red; a
+  new song carries the playing app's icon; battery and Bluetooth rings hold
+  a lit badge; "Keyboard brightness" reads "Keyboard light".
+- The closed island keeps the clock centred and whole next to the privacy
+  dots. Shelf files that are gone show a plain file icon.
+- Tidier pages: Notifications fill the width under a slim row with the
+  count and round Do Not Disturb and Clear All buttons; Focus shows the
+  time inside its ring with the phase, today's total and one row of
+  controls beside it; the clipboard search is a round button that opens
+  into a field.
 - Notification cards like macOS's: the app's icon (a system one on a grey
   tile), the title with its time on the right, and a close button in the
   time's place under the pointer. Lists fade out at an edge that scrolls
@@ -22,7 +37,8 @@ All notable changes to Isle are listed here. The format follows
 - Type like macOS: SF Pro where installed, else Inter, which the installer
   now puts in `~/.local/share/fonts/isle`; semibold titles, tighter
   tracking on large figures, medium-weight top bar text instead of the
-  theme's bold, and the date without the year ("Tue 20 Oct").
+  theme's bold, and the date without the year ("Tue 20 Oct"). The shelf's
+  drag-and-drop window uses the same type.
 - Tabs in the open island's header, like NotchNook: one per page, the open
   one named on a dark grey pill, and a red dot while notifications are unseen.
   They replace the side arrows and page dots. The island

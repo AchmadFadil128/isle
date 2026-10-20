@@ -13,8 +13,6 @@ import * as Format from './format.js';
 import * as Playback from './playback.js';
 import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon} from './widgets.js';
 
-/** Extra width while privacy dots are shown. */
-const WIDTH_PRIVACY = 22;
 /** Sizes hanging below the top bar, and inside it with smaller text. */
 const SIZES = {
     hanging: {clock: 164, activities: 256, art: 24, artRadius: 6, ring: 20, bars: 16, moon: 13},
@@ -43,6 +41,7 @@ export const CompactView = GObject.registerClass({
         this._timeouts = {};
 
         const row = new St.BoxLayout({style_class: 'isle-compact-row', x_expand: true, y_expand: true});
+        this._row = row;
         this.add_child(row);
 
         this._left = new St.Bin({style_class: 'isle-compact-slot', y_align: Clutter.ActorAlign.CENTER});
@@ -64,6 +63,9 @@ export const CompactView = GObject.registerClass({
 
         this._privacyDots = new PrivacyDots();
 
+        // As wide as the privacy dots at the far right, so the clock stays centred.
+        this._privacyBalance = new St.Widget({visible: false});
+        row.add_child(this._privacyBalance);
         row.add_child(this._left);
         row.add_child(center);
         row.add_child(this._right);
@@ -85,8 +87,17 @@ export const CompactView = GObject.registerClass({
     /** The width the island should have to fit what is shown. */
     get preferredWidth() {
         const size = SIZES[this._inBar ? 'inBar' : 'hanging'];
-        const privacy = this._showingPrivacy() ? WIDTH_PRIVACY : 0;
+        const privacy = this._privacyWidth();
         return (this._left.child || this._right.child ? size.activities : size.clock) + privacy;
+    }
+
+    /** Room for the privacy dots and their balance on the other side. */
+    _privacyWidth() {
+        if (!this._privacyDots.visible)
+            return 0;
+        const [, dots] = this._privacyDots.get_preferred_width(-1);
+        const spacing = this._row.get_theme_node().get_length('spacing');
+        return 2 * Math.ceil(dots + spacing);
     }
 
     _showingPrivacy() {
@@ -153,6 +164,8 @@ export const CompactView = GObject.registerClass({
         this._right.child = playing ? this._bars : null;
         this._syncBars();
         this._privacyDots.update(this._showingPrivacy() ? this._privacy : {});
+        this._privacyBalance.visible = this._privacyDots.visible;
+        this._privacyBalance.width = this._privacyDots.get_preferred_width(-1)[1];
 
         if (timerActive) {
             this._ring.color = timerColor(pomodoro.phase);

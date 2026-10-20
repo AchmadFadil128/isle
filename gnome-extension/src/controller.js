@@ -43,6 +43,8 @@ const EXPAND_DELAY_MS = 120;
 const COLLAPSE_DELAY_MS = 300;
 /** A page picked by hand is kept for this long before smart defaults resume. */
 const PAGE_MEMORY_MS = 5 * 60 * 1000;
+/** An alert's width is checked again this soon after it shows. */
+const ALERT_FIT_DELAY_MS = 60;
 /** Without input for this long, the user is away and animations rest. */
 const IDLE_MS = 60 * 1000;
 
@@ -454,6 +456,12 @@ export class Controller {
         this._peek.setAlert(alert, () => this._dismissAlert(true));
         this._later('alert', alert.duration ?? 3000, () => this._dismissAlert(true));
         this._render();
+        // Parts shown for the first time are only measured right once styled;
+        // fit the island again then.
+        this._later('alert-fit', ALERT_FIT_DELAY_MS, () => {
+            if (this._presentation === 'peek')
+                this._render();
+        });
     }
 
     _dismissAlert(showNext) {

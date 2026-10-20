@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Now playing: cover, title, a scrubber and controls; or, with lyrics on, a
-// wider island with the player on the left and synced lyrics on the right.
+// Now playing, like macOS's Now Playing: the cover on the left; title,
+// artist, a scrubber and the controls beside it. With lyrics on, a wider
+// island with the player on the left and synced lyrics on the right.
 // See docs/product-spec.md, section 5.
 
 import Clutter from 'gi://Clutter';
 import GdkPixbuf from 'gi://GdkPixbuf';
 import GObject from 'gi://GObject';
-import Gio from 'gi://Gio';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
@@ -16,6 +16,8 @@ import * as Playback from '../playback.js';
 import {Art, Slider, icon, iconButton, label, setButtonIcon} from '../widgets.js';
 import {Page} from './page.js';
 
+/** The cover beside the player: as tall as its column. */
+const ART_SIZE = 104;
 /** The island widens to this while lyrics are shown. */
 const LYRICS_WIDTH = 720;
 /** How often the elapsed time and scrubber move while playing. */
@@ -26,32 +28,6 @@ const LYRIC_ANCHOR = 0.42;
 const MANUAL_SCROLL_HOLD_MS = 4000;
 /** Line opacity by distance from the current line; lines fade out with distance. */
 const LINE_OPACITY = [255, 120, 80, 55];
-
-/** The playing app per player, looked up once: `desktop_entry|identity`. */
-const playerApps = new Map();
-
-/**
- * The app that is playing: from the player's desktop entry, or else found
- * by its name (Chrome gives only "Chrome"). Null when there is none.
- */
-function playerApp({desktop_entry: entry, identity}) {
-    const key = `${entry}|${identity}`;
-    if (!playerApps.has(key)) {
-        const ids = [];
-        if (entry)
-            ids.push(`${entry}.desktop`);
-        if (identity)
-            ids.push(...Gio.DesktopAppInfo.search(identity).flat());
-        let app = null;
-        for (const id of ids) {
-            app = Gio.DesktopAppInfo.new(id);
-            if (app)
-                break;
-        }
-        playerApps.set(key, app);
-    }
-    return playerApps.get(key);
-}
 
 const LYRICS_MESSAGES = {
     none: '',
@@ -297,7 +273,7 @@ class MediaPage extends Page {
         });
         this._arts.push(art);
 
-        const badgeIcon = new St.Icon({icon_size: Math.round(size * 0.3)});
+        const badgeIcon = new St.Icon({icon_size: Math.min(22, Math.round(size * 0.3))});
         const badge = new St.Bin({
             style_class: 'isle-app-badge',
             child: badgeIcon,
@@ -375,28 +351,25 @@ class MediaPage extends Page {
     // Layouts.
 
     _buildPlayer() {
-        const player = new St.BoxLayout({vertical: true, style_class: 'isle-player', x_expand: true, y_expand: true});
+        const player = new St.BoxLayout({style_class: 'isle-player', x_expand: true, y_expand: true});
+        player.add_child(this._art(ART_SIZE, 16));
 
-        const top = new St.BoxLayout({style_class: 'isle-player-top'});
-        top.add_child(this._art(72, 14));
-        top.add_child(this._texts('isle-track-title', 'isle-track-subtitle'));
-
-        const controls = new St.Widget({layout_manager: new Clutter.BinLayout(), style_class: 'isle-player-controls', x_expand: true});
-        const lyrics = this._modeButton('lyrics', 'isle-lyrics', 'Show lyrics', false);
-        lyrics.x_expand = true;
-        lyrics.x_align = Clutter.ActorAlign.START;
+        const column = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-player-column'});
+        // Title and artist, with lyrics and output as small buttons at the right.
+        const head = new St.BoxLayout({style_class: 'isle-player-head'});
+        const texts = this._texts('isle-track-title', 'isle-track-subtitle');
+        texts.y_align = Clutter.ActorAlign.START;
+        head.add_child(texts);
+        const modes = new St.BoxLayout({style_class: 'isle-player-modes', y_align: Clutter.ActorAlign.START});
+        modes.add_child(this._modeButton('lyrics', 'isle-lyrics', 'Show lyrics', false));
+        modes.add_child(this._modeButton('audio', 'isle-output', 'Volume and output', false));
+        head.add_child(modes);
+        column.add_child(head);
+        column.add_child(this._progress());
         const transport = this._transport();
         transport.x_align = Clutter.ActorAlign.CENTER;
-        const output = this._modeButton('audio', 'isle-output', 'Volume and output', false);
-        output.x_expand = true;
-        output.x_align = Clutter.ActorAlign.END;
-        controls.add_child(lyrics);
-        controls.add_child(transport);
-        controls.add_child(output);
-
-        player.add_child(top);
-        player.add_child(this._progress());
-        player.add_child(controls);
+        column.add_child(transport);
+        player.add_child(column);
         return player;
     }
 
@@ -495,7 +468,7 @@ class MediaPage extends Page {
             setButtonIcon(button, playIcon);
 
         // Which app plays it, unless the cover already is that app's logo.
-        const appIcon = playerApp(nowPlaying)?.get_icon() ?? null;
+        const appIcon = Playback.playerApp(nowPlaying)?.get_icon() ?? null;
         for (const {badge, icon: badgeIcon} of this._badges) {
             badgeIcon.gicon = appIcon;
             badge.visible = Boolean(appIcon) && !this._arts[0].showsIcon;

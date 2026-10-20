@@ -9,6 +9,7 @@
 //     icon,      // icon name, or
 //     gicon,     // a Gio.Icon, or
 //     art,       // a cover art path
+//     badge,     // a Gio.Icon on the art's corner (the playing app)
 //     appIcon,   // true: show the icon large and uncircled (notifications)
 //     ring,      // 0..1 draws a ring around the icon that sweeps up to it
 //     title, subtitle,
@@ -80,9 +81,26 @@ class PeekView extends St.Widget {
         // Leading: one of these sits in the badge bin.
         this._badge = new St.Bin({y_align: Clutter.ActorAlign.CENTER});
         this._icon = new St.Icon({icon_size: 18});
+        // Cover art, with the playing app's icon on its corner.
         this._art = new Art({size: 38, radius: 10});
+        this._artBadgeIcon = new St.Icon({icon_size: 14});
+        this._artBadge = new St.Bin({
+            style_class: 'isle-app-badge',
+            child: this._artBadgeIcon,
+            x_expand: true,
+            y_expand: true,
+            x_align: Clutter.ActorAlign.END,
+            y_align: Clutter.ActorAlign.END,
+            translation_x: 4,
+            translation_y: 4,
+        });
+        this._artBox = new St.Widget({layout_manager: new Clutter.BinLayout()});
+        this._artBox.add_child(this._art);
+        this._artBox.add_child(this._artBadge);
+        // A level as a ring around a lit badge, like the other alerts' badges.
         this._ringIcon = new St.Icon({icon_size: 14});
-        this._ring = new Ring({size: 38, lineWidth: 4.5, child: this._ringIcon});
+        this._ringBadge = new St.Bin({style_class: 'isle-peek-ring-badge', child: this._ringIcon});
+        this._ring = new Ring({size: 38, lineWidth: 3.5, child: this._ringBadge});
         this._row.add_child(this._badge);
 
         const texts = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
@@ -98,7 +116,7 @@ class PeekView extends St.Widget {
         this._accessory = new St.Bin({y_align: Clutter.ActorAlign.CENTER});
         this._value = new St.Label({style_class: 'isle-peek-value', y_align: Clutter.ActorAlign.CENTER});
         this._status = new St.Label({style_class: 'isle-peek-status', y_align: Clutter.ActorAlign.CENTER});
-        this._level = new LevelBar({width: 96});
+        this._level = new LevelBar({width: 84});
         this._levelText = new St.Label({style_class: 'isle-peek-level-text', y_align: Clutter.ActorAlign.CENTER});
         this._levelBox = new St.BoxLayout({style_class: 'isle-peek-level-box'});
         this._levelBox.add_child(this._level);
@@ -122,11 +140,15 @@ class PeekView extends St.Widget {
 
         if (alert.art !== undefined) {
             this._art.setPath(alert.art);
-            this._setChild(this._badge, this._art);
+            this._artBadgeIcon.gicon = alert.badge ?? null;
+            this._artBadge.visible = Boolean(alert.badge) && !this._art.showsIcon;
+            this._setChild(this._badge, this._artBox);
             this._badge.style_class = '';
         } else if (hasRing) {
             this._ring.color = rgb;
             this._ringIcon.gicon = gicon;
+            this._ringIcon.style = `color: ${color};`;
+            this._ringBadge.style = badgeStyle(rgb, (alert.tone ?? 'neutral') === 'neutral');
             this._setChild(this._badge, this._ring);
             this._badge.style_class = '';
             // Sweep only when the alert is new, not when it updates in place.
@@ -194,7 +216,7 @@ class PeekView extends St.Widget {
 
     _onDestroy() {
         // Pieces not currently shown are not children and must be freed here.
-        for (const actor of [this._icon, this._art, this._ring, this._value, this._status, this._levelBox]) {
+        for (const actor of [this._icon, this._artBox, this._ring, this._value, this._status, this._levelBox]) {
             if (!actor.get_parent())
                 actor.destroy();
         }

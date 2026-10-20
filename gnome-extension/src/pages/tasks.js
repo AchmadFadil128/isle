@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Tasks: a plain list to write things down and tick them off. Today's
-// progress on the left; on the right, a field to add a task and the list.
+// progress stacked on the left (ring, headline, caption); on the right, a
+// field to add a task and the list.
 // Click a title to rename it, × to remove it. Finished tasks fold away under
 // "Completed". See docs/product-spec.md, section 5.
 
@@ -13,14 +14,17 @@ import St from 'gi://St';
 import {Ring, icon, iconButton, label} from '../widgets.js';
 import {Page} from './page.js';
 
-const RING_SIZE = 64;
+const RING_SIZE = 70;
+/** Unfolded finished tasks scroll into view once laid out. */
+const REVEAL_DELAY_MS = 60;
 
 export const TasksPage = GObject.registerClass(
 class TasksPage extends Page {
     _init(daemon, {height}) {
         super._init(daemon, {
             style_class: 'isle-page isle-tasks',
-            layout_manager: new Clutter.BoxLayout(),
+            // St's `spacing` only reaches St.BoxLayout, so it is set here.
+            layout_manager: new Clutter.BoxLayout({spacing: 22}),
             height,
         });
         this.name = 'tasks';
@@ -43,14 +47,15 @@ class TasksPage extends Page {
     // Building
 
     _buildSummary() {
-        const side = new St.BoxLayout({style_class: 'isle-tasks-side', y_align: Clutter.ActorAlign.CENTER});
+        const side = new St.BoxLayout({vertical: true, style_class: 'isle-tasks-side', y_align: Clutter.ActorAlign.CENTER});
         this._count = label('0/0', 'isle-tasks-ring-count');
         this._ring = new Ring({size: RING_SIZE, lineWidth: 5, child: this._count});
         side.add_child(this._ring);
 
-        const info = new St.BoxLayout({vertical: true, y_align: Clutter.ActorAlign.CENTER, x_expand: true});
-        this._headline = label('', 'isle-tasks-headline');
-        this._caption = label('', 'isle-tasks-caption');
+        this._ring.x_align = Clutter.ActorAlign.CENTER;
+        const info = new St.BoxLayout({vertical: true, x_align: Clutter.ActorAlign.CENTER});
+        this._headline = label('', 'isle-tasks-headline', {x_align: Clutter.ActorAlign.CENTER});
+        this._caption = label('', 'isle-tasks-caption', {x_align: Clutter.ActorAlign.CENTER});
         for (const line of [this._headline, this._caption]) {
             line.clutter_text.ellipsize = Pango.EllipsizeMode.END;
             info.add_child(line);
@@ -139,8 +144,17 @@ class TasksPage extends Page {
                     this._list.add_child(this._row(task));
             }
         }
-        if (open.length === 0 && done.length === 0)
-            this._list.add_child(label('Nothing yet. Type above to add a task.', 'isle-tasks-empty'));
+    }
+
+    /** Scrolls the unfolded finished tasks into view. */
+    _revealDone() {
+        this.later('reveal', REVEAL_DELAY_MS, () => {
+            const adjustment = this._scroll.vadjustment;
+            adjustment.ease(adjustment.upper - adjustment.page_size, {
+                duration: 250,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
+        });
     }
 
     _updateSummary(open, done) {
@@ -215,6 +229,8 @@ class TasksPage extends Page {
         header.connect('clicked', () => {
             this._showDone = !this._showDone;
             this._update();
+            if (this._showDone)
+                this._revealDone();
         });
         return header;
     }

@@ -101,7 +101,8 @@ export const ShelfPage = GObject.registerClass({
         }
         bar.add_child(tabs);
 
-        // Clipboard: type filters, search and Clear all.
+        // Clipboard: type filters, search (a button that opens into a field)
+        // and Clear all.
         this._clipboardControls = new St.BoxLayout({style_class: 'isle-shelf-controls', x_expand: true});
         const filters = new St.BoxLayout({style_class: 'isle-segmented isle-segmented-icons'});
         this._filterButtons = new Map();
@@ -131,10 +132,21 @@ export const ShelfPage = GObject.registerClass({
         text.connect('key-press-event', (_text, event) => this._onSearchKey(event));
         // The selection outline only means something while typing.
         text.connect('key-focus-in', () => (this._clips.keyboard = true));
-        text.connect('key-focus-out', () => (this._clips.keyboard = false));
+        text.connect('key-focus-out', () => {
+            this._clips.keyboard = false;
+            if (!this._search.text)
+                this._closeSearch();
+        });
+        this._search.hide();
+        // Keeps the buttons at the end while the field is closed.
+        this._searchSpacer = new St.Widget({x_expand: true});
+        this._searchButton = iconButton('isle-search', 'isle-button-round isle-button-small',
+            () => this._openSearch(), {size: 13, accessibleName: 'Search the clipboard history'});
+        this._clipboardControls.add_child(this._searchSpacer);
         this._clipboardControls.add_child(this._search);
+        this._clipboardControls.add_child(this._searchButton);
 
-        this._clear = iconButton('isle-trash', 'isle-button-flat isle-shelf-clear', () => this._askToClear(),
+        this._clear = iconButton('isle-trash', 'isle-button-round isle-button-small', () => this._askToClear(),
             {size: 14, accessibleName: 'Clear the clipboard history'});
         this._confirm = pillButton('Clear all', 'isle-pill-small isle-shelf-confirm', () => this._clearHistory());
         this._confirm.hide();
@@ -150,6 +162,23 @@ export const ShelfPage = GObject.registerClass({
         });
         bar.add_child(this._filesHint);
         return bar;
+    }
+
+    // Search
+
+    /** Opens the search field in place of its button, ready to type. */
+    _openSearch() {
+        this._searchSpacer.hide();
+        this._searchButton.hide();
+        this._search.show();
+        this.emit('request-keyboard', true);
+        this._search.grab_key_focus();
+    }
+
+    _closeSearch() {
+        this._search.hide();
+        this._searchSpacer.show();
+        this._searchButton.show();
     }
 
     // Tabs
@@ -189,7 +218,7 @@ export const ShelfPage = GObject.registerClass({
             this.emit('request-keyboard', false);
         if (focusSearch) {
             this._search.text = '';
-            this._search.grab_key_focus();
+            this._openSearch();
         }
         if (changed)
             this.emit('helper-area-changed');
@@ -337,6 +366,7 @@ export const ShelfPage = GObject.registerClass({
         this._copied = [];
         // Each visit starts with an empty search.
         this._search.text = '';
+        this._closeSearch();
         this._endConfirm();
     }
 });

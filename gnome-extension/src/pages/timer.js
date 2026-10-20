@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Focus timer (Pomodoro): a ring with a stopwatch, the time remaining, and
-// chips to jump between a short break and focus. See docs/product-spec.md.
+// Focus timer (Pomodoro): a ring with the time remaining inside, and beside
+// it the phase, today's total and one row of controls. See
+// docs/product-spec.md.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -9,7 +10,7 @@ import St from 'gi://St';
 
 import {timerColor} from '../compact.js';
 import * as Format from '../format.js';
-import {Ring, chipButton, icon, iconButton, label, setButtonIcon, setChip, setEnabled} from '../widgets.js';
+import {Ring, chipButton, iconButton, label, setButtonIcon, setChip, setEnabled} from '../widgets.js';
 import {Page} from './page.js';
 
 const CAPTIONS = {
@@ -18,51 +19,47 @@ const CAPTIONS = {
     short_break: 'Short break',
     long_break: 'Long break',
 };
+const RING_SIZE = 104;
+/** Shown until isled reports the timer: a fresh 25-minute focus session. */
+const DEFAULT_STATE = {phase: 'idle', running: false, remaining_ms: 25 * 60000, duration_ms: 25 * 60000, today_sessions: 0};
 
 export const TimerPage = GObject.registerClass(
 class TimerPage extends Page {
     _init(daemon, {height}) {
         super._init(daemon, {
             style_class: 'isle-page isle-timer',
-            layout_manager: new Clutter.BoxLayout(),
+            // St's `spacing` only reaches St.BoxLayout, so it is set here.
+            layout_manager: new Clutter.BoxLayout({spacing: 24}),
             height,
         });
         this.name = 'focus';
 
-        // A thin ring that fills clockwise as the phase runs, a clock inside.
-        this._clock = new St.Icon({gicon: icon('isle-timer'), icon_size: 28, style_class: 'isle-focus-icon'});
-        this._ring = new Ring({size: 88, lineWidth: 4, trackOpacity: 0.14, child: this._clock});
+        // A ring that fills clockwise as the phase runs, the time inside.
+        this._time = label('25:00', 'isle-timer-time');
+        this._ring = new Ring({size: RING_SIZE, lineWidth: 5, trackOpacity: 0.14, child: this._time});
+        this._ring.y_align = Clutter.ActorAlign.CENTER;
         this.add_child(this._ring);
 
-        const center = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-timer-center'});
+        const side = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-timer-side'});
+        this._caption = label('', 'isle-timer-caption');
+        // Today's focus, or how to begin.
+        this._stats = label('', 'isle-timer-stats');
+        side.add_child(this._caption);
+        side.add_child(this._stats);
 
-        const timeRow = new St.BoxLayout({x_align: Clutter.ActorAlign.CENTER, style_class: 'isle-timer-row'});
-        this._time = label('25:00', 'isle-timer-time');
-        timeRow.add_child(this._time);
-        this._reset = iconButton('isle-reset', 'isle-button-round isle-button-small',
-            () => daemon.call('pomodoro', 'Stop'), {size: 14, accessibleName: 'Reset the timer'});
-        timeRow.add_child(this._reset);
-        center.add_child(timeRow);
-
-        this._caption = label('', 'isle-timer-caption', {x_align: Clutter.ActorAlign.CENTER});
-        center.add_child(this._caption);
-
-        // Today's focus, shown once there is some.
-        this._stats = label('', 'isle-timer-stats', {x_align: Clutter.ActorAlign.CENTER, visible: false});
-        center.add_child(this._stats);
-
-        const buttons = new St.BoxLayout({x_align: Clutter.ActorAlign.CENTER, style_class: 'isle-timer-buttons'});
-        this._shortBreak = chipButton('isle-coffee', 'Short Break',
-            () => daemon.call('pomodoro', 'StartPhase', 'short_break'), 'isle-chip-break');
+        const buttons = new St.BoxLayout({style_class: 'isle-timer-buttons'});
         this._play = iconButton('isle-play-symbolic', 'isle-play-pill', () => this._toggle(),
             {size: 16, accessibleName: 'Start or pause'});
+        this._reset = iconButton('isle-reset', 'isle-button-round isle-button-small',
+            () => daemon.call('pomodoro', 'Stop'), {size: 14, accessibleName: 'Reset the timer'});
+        this._shortBreak = chipButton('isle-coffee', 'Short Break',
+            () => daemon.call('pomodoro', 'StartPhase', 'short_break'), 'isle-chip-break');
         this._focus = chipButton('isle-target', 'Focus Time',
             () => daemon.call('pomodoro', 'StartPhase', 'focus'), 'isle-chip-focus');
-        buttons.add_child(this._shortBreak);
-        buttons.add_child(this._play);
-        buttons.add_child(this._focus);
-        center.add_child(buttons);
-        this.add_child(center);
+        for (const button of [this._play, this._reset, this._shortBreak, this._focus])
+            buttons.add_child(button);
+        side.add_child(buttons);
+        this.add_child(side);
 
         this.watch(['pomodoro'], () => this._update());
         this._update();
@@ -79,9 +76,7 @@ class TimerPage extends Page {
     }
 
     _update() {
-        const state = this.daemon.state.pomodoro;
-        if (!state)
-            return;
+        const state = this.daemon.state.pomodoro ?? DEFAULT_STATE;
         const idle = state.phase === 'idle';
         const remaining = this._remaining(state);
 
@@ -91,17 +86,19 @@ class TimerPage extends Page {
         this._caption.text = state.running || idle ? CAPTIONS[state.phase] : `${CAPTIONS[state.phase]} · paused`;
 
         const sessions = state.today_sessions ?? 0;
-        this._stats.visible = sessions > 0;
-        this._stats.text = `Today · ${sessions} ${sessions === 1 ? 'session' : 'sessions'} · ${Format.hoursMinutes(state.today_focus_ms ?? 0)}`;
+        const length = Format.hoursMinutes(state.duration_ms);
+        const onBreak = state.phase === 'short_break' || state.phase === 'long_break';
+        if (sessions > 0)
+            this._stats.text = `Today · ${sessions} ${sessions === 1 ? 'session' : 'sessions'} · ${Format.hoursMinutes(state.today_focus_ms ?? 0)}`;
+        else
+            this._stats.text = onBreak ? `${length} break, then back to focus` : `${length} of focus, then a break`;
 
         setButtonIcon(this._play, state.running ? 'isle-pause-symbolic' : 'isle-play-symbolic');
-        // The stopwatch fills in while running; reset only acts once started.
-        this._clock.gicon = icon(state.running ? 'isle-timer-fill' : 'isle-timer');
+        // Reset only acts once started.
         setEnabled(this._reset, !idle);
 
         // The chip of the current phase lights up in its colour and its icon
         // fills in, like Do Not Disturb.
-        const onBreak = state.phase === 'short_break' || state.phase === 'long_break';
         const focus = state.phase === 'focus';
         setChip(this._shortBreak, {
             active: onBreak,

@@ -212,6 +212,13 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
+/* Inside a level ring: a smaller badge, lit like the others (peek.js). */
+.isle-peek-ring-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
+}
+
 /* A short state on the right, e.g. Caps Lock "On", in the alert's colour. */
 .isle-peek-status {
   font-size: 13px;
@@ -273,9 +280,14 @@
 
 /* ── Music ────────────────────────────────────────────── */
 
+.isle-player { spacing: 20px; }
+.isle-player-column { spacing: 4px; }
+.isle-player-head { spacing: 8px; }
+.isle-player-modes { spacing: 2px; }
+.isle-player-modes .isle-button { padding: 5px; color: rgba(255, 255, 255, 0.75); }
 .isle-player-top { spacing: 14px; }
-.isle-player-texts { spacing: 2px; }
-.isle-track-title { font-size: 18px; font-weight: 600; letter-spacing: -0.2px; }
+.isle-player-texts { spacing: 1px; }
+.isle-track-title { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
 .isle-track-subtitle { font-size: 13px; color: rgba(255, 255, 255, 0.55); }
 /* The playing app's icon on the cover's corner, ringed in black. */
 .isle-app-badge {
@@ -284,13 +296,13 @@
   background-color: #000000;
 }
 
-.isle-player-progress { spacing: 12px; padding-top: 10px; }
+.isle-player-progress { spacing: 10px; padding-top: 6px; }
 
 .isle-time {
   font-size: 12px;
-  font-weight: 600;
-  min-width: 38px;
-  color: rgba(255, 255, 255, 0.85);
+  font-weight: 500;
+  min-width: 34px;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .isle-time-end { text-align: right; }
@@ -300,8 +312,7 @@
 .isle-slider-fill { border-radius: 2px; background-color: #ffffff; }
 .isle-slider-knob { border-radius: 6px; background-color: #ffffff; }
 
-.isle-player-controls { padding-top: 2px; }
-.isle-transport { spacing: 16px; }
+.isle-transport { spacing: 20px; }
 .isle-play { padding: 6px; }
 .isle-mode-toggle.on { background-color: rgba(255, 255, 255, 0.16); }
 
@@ -354,14 +365,11 @@
 
 /* ── Focus ────────────────────────────────────────────── */
 
-.isle-timer { spacing: 28px; }
-.isle-focus-icon { color: #ffffff; }
-.isle-timer-center { spacing: 2px; }
-.isle-timer-row { spacing: 12px; }
-.isle-timer-time { font-size: 40px; font-weight: 700; letter-spacing: -1px; }
-.isle-timer-caption { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
-.isle-timer-stats { font-size: 12px; color: rgba(255, 255, 255, 0.4); padding-top: 1px; }
-.isle-timer-buttons { spacing: 10px; padding-top: 12px; }
+.isle-timer-time { font-size: 26px; font-weight: 600; letter-spacing: -0.5px; }
+.isle-timer-side { spacing: 2px; }
+.isle-timer-caption { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+.isle-timer-stats { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
+.isle-timer-buttons { spacing: 8px; padding-top: 14px; }
 
 .isle-play-pill {
   padding: 8px 24px;
@@ -373,13 +381,10 @@
 
 /* ── Tasks ────────────────────────────────────────────── */
 
-.isle-tasks { spacing: 22px; }
-.isle-tasks-side { width: 206px; spacing: 14px; }
-.isle-tasks-count { font-size: 38px; font-weight: 700; letter-spacing: -1px; }
+.isle-tasks-side { width: 150px; spacing: 10px; }
 .isle-tasks-ring-count { font-size: 15px; font-weight: 700; }
 .isle-tasks-headline { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
-.isle-tasks-caption { font-size: 12px; color: rgba(255, 255, 255, 0.55); padding-top: 2px; }
-.isle-tasks-empty { font-size: 12px; color: rgba(255, 255, 255, 0.45); padding: 8px 4px; }
+.isle-tasks-caption { font-size: 12px; color: rgba(255, 255, 255, 0.55); padding-top: 1px; }
 
 .isle-tasks-column { spacing: 6px; }
 .isle-task-add { padding: 6px 12px; }
@@ -391,7 +396,7 @@
 
 .isle-task {
   spacing: 10px;
-  padding: 6px 8px 6px 10px;
+  padding: 5px 8px 5px 10px;
   border-radius: 12px;
   background-color: #1c1c1e;
 }
@@ -431,9 +436,10 @@
 
 /* ── Notifications ────────────────────────────────────── */
 
-.isle-notifications { spacing: 22px; }
-.isle-notifications-side { width: 196px; }
-.isle-notifications-buttons { spacing: 6px; padding-top: 10px; }
+.isle-notifications-bar { spacing: 6px; padding-bottom: 2px; }
+.isle-notifications-count { font-size: 12px; font-weight: 500; color: rgba(255, 255, 255, 0.5); }
+.isle-dnd-toggle:checked { background-color: #5e5ce6; }
+.isle-dnd-toggle:checked:hover { background-color: #6e6cf0; }
 .isle-notification-list { spacing: 6px; }
 
 .isle-notification-row {
@@ -498,7 +504,6 @@
 
 .isle-shelf-field { padding: 5px 12px; font-size: 12px; }
 .isle-shelf-field-icon { padding-right: 6px; }
-.isle-shelf-clear { padding: 6px; }
 .isle-shelf-confirm { padding: 5px 12px; }
 .isle-shelf-hint { font-size: 12px; color: rgba(255, 255, 255, 0.45); transition-duration: 180ms; }
 /* While a file is on its way in. */

@@ -2,6 +2,8 @@
 
 // Helpers for the daemon's `NowPlaying` and `Lyrics` state.
 
+import Gio from 'gi://Gio';
+
 import {nowMs} from './format.js';
 
 export function isPlaying(nowPlaying) {
@@ -57,4 +59,30 @@ export function msUntilLine(nowPlaying, lines, index) {
         return null;
     const rate = nowPlaying.rate || 1;
     return Math.max(0, (next.time_ms - positionMs(nowPlaying)) / rate);
+}
+
+/** The playing app per player, looked up once: `desktop_entry|identity`. */
+const playerApps = new Map();
+
+/**
+ * The app that is playing: from the player's desktop entry, or else found
+ * by its name (Chrome gives only "Chrome"). Null when there is none.
+ */
+export function playerApp({desktop_entry: entry, identity}) {
+    const key = `${entry}|${identity}`;
+    if (!playerApps.has(key)) {
+        const ids = [];
+        if (entry)
+            ids.push(`${entry}.desktop`);
+        if (identity)
+            ids.push(...Gio.DesktopAppInfo.search(identity).flat());
+        let app = null;
+        for (const id of ids) {
+            app = Gio.DesktopAppInfo.new(id);
+            if (app)
+                break;
+        }
+        playerApps.set(key, app);
+    }
+    return playerApps.get(key);
 }

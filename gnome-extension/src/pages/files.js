@@ -42,7 +42,7 @@ class FilesView extends St.Widget {
         });
         this._empty.add_child(new St.Icon({gicon: icon('isle-shelf'), icon_size: 24, style_class: 'isle-empty-icon'}));
         this._empty.add_child(label('No files on the shelf', 'isle-empty-title', {x_align: Clutter.ActorAlign.CENTER}));
-        this._empty.add_child(label('Install isle-shelf to drag files in and out', 'isle-empty-hint', {x_align: Clutter.ActorAlign.CENTER}));
+        this._empty.add_child(label('Drag and drop needs the shelf helper; run install.sh again', 'isle-empty-hint', {x_align: Clutter.ActorAlign.CENTER}));
         this.add_child(this._empty);
         this.update();
     }
@@ -75,7 +75,15 @@ class FilesView extends St.Widget {
     _tile(item) {
         const file = Gio.File.new_for_uri(item.uri);
         const box = new St.BoxLayout({vertical: true});
-        const preview = new St.Bin({style_class: 'isle-shelf-preview', width: TILE_ICON_SIZE, height: TILE_ICON_SIZE, x_align: Clutter.ActorAlign.CENTER});
+        // A plain file icon until the file's own one is known (or for good,
+        // if the file is gone).
+        const preview = new St.Bin({
+            style_class: 'isle-shelf-preview',
+            width: TILE_ICON_SIZE,
+            height: TILE_ICON_SIZE,
+            x_align: Clutter.ActorAlign.CENTER,
+            child: new St.Icon({gicon: icon('isle-file'), icon_size: TILE_ICON_SIZE * 0.6, opacity: 160}),
+        });
         const name = label(item.name, 'isle-shelf-name', {x_align: Clutter.ActorAlign.CENTER});
         name.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
         box.add_child(preview);
