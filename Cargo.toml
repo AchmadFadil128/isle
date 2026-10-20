@@ -1,14 +1,14 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/pulau-core",
-    "crates/pulau-daemon",
-    "crates/pulau-island",
-    "crates/pulau-shelf",
+    "crates/isle-core",
+    "crates/isle-daemon",
+    "crates/isle-island",
+    "crates/isle-shelf",
 ]
-# The GTK crates (pulau-island, pulau-shelf) need the GTK 4 development files,
-# so they are only built when asked for: `cargo build -p pulau-shelf`.
-default-members = ["crates/pulau-core", "crates/pulau-daemon"]
+# The GTK crates (isle-island, isle-shelf) need the GTK 4 development files,
+# so they are only built when asked for: `cargo build -p isle-shelf`.
+default-members = ["crates/isle-core", "crates/isle-daemon"]
 
 [workspace.package]
 version = "0.1.0"
@@ -17,7 +17,7 @@ rust-version = "1.85"
 license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
-pulau-core = { path = "crates/pulau-core" }
+isle-core = { path = "crates/isle-core" }
 
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }

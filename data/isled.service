@@ -1,0 +1,15 @@
+[Unit]
+Description=Isle dynamic island service
+Documentation=file://%h/.local/share/doc/isle/README.md
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=io.github.isle.Daemon
+ExecStart=@BINDIR@/isled
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GTK 4
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Lint
+        run: |
+          cargo clippy -p isle-core -p isle-daemon -p isle-shelf --all-targets -- -D warnings
+          cargo clippy -p isle-island --no-default-features --features x11 -- -D warnings
+      - name: Test
+        run: cargo test --workspace --exclude isle-island
+
+  extension:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: |
+          for file in gnome-extension/*.js gnome-extension/src/*.js gnome-extension/src/pages/*.js; do
+            node --experimental-default-type=module --check "$file"
+          done
+      - name: Check the settings schema
+        run: |
+          sudo apt-get update && sudo apt-get install -y libglib2.0-bin
+          glib-compile-schemas --strict --dry-run gnome-extension/schemas

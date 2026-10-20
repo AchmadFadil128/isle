@@ -1,11 +1,11 @@
-# Pulau product spec
+# Isle product spec
 
 The single source of truth for how the island looks and behaves. Code that
 disagrees with this document is a bug in one or the other; fix both together.
 
 ## 1. Who it is for and what they need
 
-| As a user I want to… | So Pulau must… |
+| As a user I want to… | So Isle must… |
 |---|---|
 | see the time and what is running at a glance | show the clock in the closed island, with live activities beside it (timer ring, music) |
 | control music without switching windows | open on hover with cover, scrubber, controls; sing along with synced lyrics |
@@ -129,7 +129,7 @@ break", "Long break"). Buttons: **Short Break** · white play/pause ·
 **Focus Time**; the chips start that phase at once and the current one is
 highlighted. No glows or accent fills.
 
-**Shelf** (title "Shelf"). With `pulau-shelf` installed: a drop zone, file
+**Shelf** (title "Shelf"). With `isle-shelf` installed: a drop zone, file
 tiles with previews; drag out to any app, double-click to open, × to remove,
 trash to clear. Dragging a file near the island opens this page by itself.
 Without the helper: read-only tiles and an install hint.
@@ -176,15 +176,15 @@ hovering opens the Notifications page.
 
 ## 7. Data and reliability
 
-- Tasks, shelf and timer settings live in `~/.local/share/pulau/*.json`,
+- Tasks, shelf and timer settings live in `~/.local/share/isle/*.json`,
   written atomically and flushed to disk (file and folder), so they survive
   reboots and power cuts. A corrupt file is set aside, never lost silently.
-- Lyrics and cover art are cached in `~/.cache/pulau`.
-- `pulaud` restarts on failure (systemd); the extension reconnects on its own.
+- Lyrics and cover art are cached in `~/.cache/isle`.
+- `isled` restarts on failure (systemd); the extension reconnects on its own.
 
 ## 8. Performance budget
 
 - Idle, nothing playing: one wake-up per minute (the clock). No polling.
 - Animations run on the display's frame clock only while a spring moves.
 - The open island ticks only the visible page (scrubber 4×/s, timer 1×/s).
-- `pulaud` sleeps until a D-Bus signal arrives.
+- `isled` sleeps until a D-Bus signal arrives.

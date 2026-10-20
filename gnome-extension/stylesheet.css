@@ -1,0 +1,347 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+
+/* Isle. The island itself is drawn black by island.js; this styles what
+ * sits on it. Layout and sizes follow docs/product-spec.md.
+ *
+ * Palette (dark, iOS-like):
+ *   text      #ffffff · secondary rgba(255,255,255,0.55) · faint 0.35
+ *   surfaces  #1c1c1e · #2c2c2e · #3a3a3c (hover)
+ *   accents   green #34d67a · amber #ffb833 · red #ff5c5c (errors) · blue #5aabff
+ */
+
+/* ── Shared ───────────────────────────────────────────── */
+
+#isleIsland {
+  color: #ffffff;
+  font-feature-settings: "tnum";
+}
+
+.isle-button {
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 6px;
+  transition-duration: 120ms;
+}
+
+.isle-button:hover { background-color: rgba(255, 255, 255, 0.12); }
+.isle-button:active { background-color: rgba(255, 255, 255, 0.2); }
+.isle-button:focus { box-shadow: inset 0 0 0 2px rgba(90, 171, 255, 0.8); }
+
+.isle-button-flat { background-color: transparent; }
+
+.isle-button-round { background-color: #2c2c2e; padding: 8px; }
+.isle-button-round:hover { background-color: #3a3a3c; }
+.isle-button-small { padding: 6px; }
+
+/* Pill button with text (alert actions). */
+.isle-pill {
+  font-weight: 600;
+  border-radius: 999px;
+  transition-duration: 120ms;
+}
+
+.isle-pill-small {
+  font-size: 12px;
+  padding: 6px 14px;
+  background-color: #ffffff;
+  color: #000000;
+}
+
+.isle-pill-small:hover { background-color: #e6e6e6; }
+
+/* Pill with an icon and a label (Short Break, Add Task…). */
+.isle-chip {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 7px 14px;
+  background-color: #1c1c1e;
+  transition-duration: 150ms;
+}
+
+.isle-chip:hover { background-color: #2c2c2e; }
+.isle-chip:checked { background-color: rgba(255, 255, 255, 0.2); }
+.isle-chip:insensitive { color: rgba(255, 255, 255, 0.35); background-color: #141416; }
+/* Do Not Disturb on: indigo, like a Focus mode. */
+.isle-chip-dnd:checked { background-color: #5e5ce6; }
+.isle-chip-dnd:checked:hover { background-color: #6e6cf0; }
+.isle-chip:focus { box-shadow: inset 0 0 0 2px rgba(90, 171, 255, 0.8); }
+.isle-chip-box { spacing: 7px; }
+
+.isle-art { background-color: #2c2c2e; }
+.isle-art-placeholder { color: rgba(255, 255, 255, 0.4); }
+
+.isle-level {
+  height: 5px;
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+.isle-level-fill { border-radius: 3px; background-color: #ffffff; }
+
+.isle-bars { spacing: 2px; }
+.isle-bar { width: 3px; border-radius: 2px; background-color: #ffffff; }
+
+.isle-empty { spacing: 4px; }
+.isle-empty-icon { color: rgba(255, 255, 255, 0.35); padding-bottom: 4px; }
+.isle-empty-title { font-size: 15px; font-weight: 700; }
+.isle-empty-hint { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
+
+.isle-entry {
+  color: #ffffff;
+  font-size: 13px;
+  border-radius: 999px;
+  padding: 8px 14px;
+  border: none;
+  background-color: #1c1c1e;
+  caret-color: #5aabff;
+  selection-background-color: rgba(90, 171, 255, 0.5);
+  selected-color: #ffffff;
+}
+
+.isle-entry:focus { background-color: #2c2c2e; box-shadow: inset 0 0 0 1px rgba(90, 171, 255, 0.7); }
+.isle-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.4); }
+
+/* ── Compact ──────────────────────────────────────────── */
+
+.isle-compact-row { padding: 0 14px; spacing: 8px; }
+
+/* Both slots keep their width when empty so the clock stays centred. */
+.isle-compact-slot { width: 20px; }
+
+.isle-compact-clock { font-size: 15px; font-weight: 700; }
+.isle-compact-lyric { font-size: 13px; font-weight: 600; text-align: center; }
+
+.isle-unseen-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background-color: #ffffff;
+}
+
+.isle-eyes { spacing: 10px; }
+
+.isle-eye {
+  width: 8px;
+  height: 12px;
+  border-radius: 4px;
+  background-color: #ffffff;
+  /* A soft blue glow; drawn once, not per frame. */
+  box-shadow: 0 0 6px 1px rgba(120, 190, 255, 0.6);
+}
+
+.isle-zzz {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  margin-left: -4px;
+}
+
+/* ── Alerts (peek) ────────────────────────────────────── */
+
+.isle-peek { padding: 0 20px 0 16px; spacing: 12px; }
+
+.isle-peek-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 19px;
+  background-color: #1c1c1e;
+}
+
+.isle-peek-glyph { font-size: 18px; font-weight: 700; }
+.isle-peek-title { font-size: 15px; font-weight: 600; }
+.isle-peek-subtitle { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-top: 1px; }
+.isle-peek-value { font-size: 24px; font-weight: 600; }
+.isle-peek-level-box { spacing: 10px; }
+.isle-peek-level-text { font-size: 12px; font-weight: 600; min-width: 32px; text-align: right; }
+
+/* ── Expanded: frame ──────────────────────────────────── */
+
+.isle-header { padding: 0 26px; }
+.isle-header-title { font-size: 15px; font-weight: 700; }
+.isle-header-clock { spacing: 8px; }
+.isle-header-date { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
+.isle-header-time { font-size: 13px; font-weight: 700; }
+
+/* Pages leave room at the sides for the arrows. */
+.isle-page { padding: 4px 52px 0 52px; }
+
+.isle-nav {
+  margin: 0 12px;
+  padding: 7px;
+  background-color: #2c2c2e;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.isle-nav:hover { background-color: #3a3a3c; color: #ffffff; }
+
+.isle-dots { spacing: 5px; }
+
+.isle-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.3);
+  transition-duration: 200ms;
+}
+
+.isle-dot:hover { background-color: rgba(255, 255, 255, 0.6); }
+.isle-dot:checked { width: 18px; background-color: #ffffff; }
+
+/* ── Music ────────────────────────────────────────────── */
+
+.isle-player-top { spacing: 14px; }
+.isle-player-texts { spacing: 2px; }
+.isle-track-title { font-size: 18px; font-weight: 700; }
+.isle-track-subtitle { font-size: 13px; color: rgba(255, 255, 255, 0.55); }
+.isle-app-icon { opacity: 0.9; }
+
+.isle-player-progress { spacing: 12px; padding-top: 10px; }
+
+.isle-time {
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 38px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.isle-time-end { text-align: right; }
+
+.isle-scrubber { height: 16px; }
+.isle-scrubber-track { border-radius: 2px; background-color: rgba(255, 255, 255, 0.2); }
+.isle-scrubber-fill { border-radius: 2px; background-color: #ffffff; }
+.isle-scrubber-knob { border-radius: 6px; background-color: #ffffff; }
+
+.isle-player-controls { padding-top: 2px; }
+.isle-transport { spacing: 16px; }
+.isle-play { padding: 6px; }
+.isle-lyrics-toggle.on { background-color: rgba(255, 255, 255, 0.16); }
+
+/* Lyrics */
+
+.isle-lyrics-layout { spacing: 20px; padding-bottom: 6px; }
+.isle-lyrics-side { width: 250px; spacing: 6px; }
+.isle-lyrics-controls { spacing: 6px; }
+.isle-side-title { font-size: 15px; font-weight: 700; }
+.isle-side-artist { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
+
+.isle-divider {
+  width: 1px;
+  margin: 10px 0;
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.isle-lyrics-message { font-size: 13px; color: rgba(255, 255, 255, 0.5); }
+
+/* Lines fade with distance from the current one (set in media.js). */
+.isle-lyric-line {
+  font-size: 16px;
+  font-weight: 700;
+  padding: 3px 0;
+  color: #ffffff;
+}
+
+.isle-lyric-line:hover { color: rgba(255, 255, 255, 0.85); }
+.isle-lyric-line.plain { font-size: 14px; font-weight: 500; color: rgba(255, 255, 255, 0.8); }
+
+/* ── Focus ────────────────────────────────────────────── */
+
+.isle-timer { spacing: 28px; }
+.isle-focus-icon { color: #ffffff; }
+.isle-timer-center { spacing: 2px; }
+.isle-timer-row { spacing: 12px; }
+.isle-timer-time { font-size: 40px; font-weight: 800; }
+.isle-timer-caption { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
+.isle-timer-buttons { spacing: 10px; padding-top: 12px; }
+
+.isle-play-pill {
+  padding: 8px 24px;
+  color: #000000;
+  background-color: #ffffff;
+}
+
+.isle-play-pill:hover { background-color: #e6e6e6; }
+
+/* ── Tasks ────────────────────────────────────────────── */
+
+.isle-tasks { spacing: 22px; }
+.isle-tasks-side { width: 196px; }
+.isle-tasks-count { font-size: 38px; font-weight: 800; }
+.isle-tasks-caption { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
+.isle-tasks-buttons { spacing: 8px; padding-top: 12px; }
+.isle-tasks-hint { font-size: 11px; color: rgba(255, 255, 255, 0.45); padding: 6px 4px 0 4px; }
+.isle-tasks-empty { font-size: 13px; color: rgba(255, 255, 255, 0.45); }
+
+.isle-task-scroll { padding: 6px 0; }
+.isle-task-list { spacing: 6px; }
+
+.isle-task {
+  spacing: 10px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background-color: #1c1c1e;
+}
+
+.isle-task.done { background-color: rgba(52, 214, 122, 0.16); }
+
+.isle-task-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  color: transparent;
+}
+
+.isle-task-check:hover { border-color: #ffffff; }
+.isle-task-check:checked { background-color: #34d67a; border-color: #34d67a; color: #000000; }
+
+.isle-task-title { font-size: 14px; }
+.isle-task.done .isle-task-title { color: rgba(255, 255, 255, 0.55); text-decoration: line-through; }
+
+.isle-task-due {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: #2c2c2e;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.isle-task-due.overdue { background-color: rgba(255, 92, 92, 0.2); color: #ff8a8a; }
+.isle-task-remove { padding: 3px; color: rgba(255, 255, 255, 0.7); }
+
+/* ── Notifications ────────────────────────────────────── */
+
+.isle-notifications { spacing: 22px; }
+.isle-notifications-side { width: 196px; }
+.isle-notifications-buttons { spacing: 6px; padding-top: 10px; }
+.isle-notification-list { spacing: 6px; }
+
+.isle-notification-row {
+  border-radius: 12px;
+  background-color: #1c1c1e;
+  transition-duration: 120ms;
+}
+
+.isle-notification-row:hover { background-color: #2c2c2e; }
+.isle-notification { spacing: 10px; padding: 7px 10px; }
+.isle-notification-title { font-size: 13px; font-weight: 700; }
+.isle-notification-body { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
+.isle-notification-time { font-size: 11px; color: rgba(255, 255, 255, 0.4); }
+
+.isle-dnd-moon { color: rgba(255, 255, 255, 0.85); }
+
+/* ── Shelf ────────────────────────────────────────────── */
+
+.isle-shelf-tiles { spacing: 10px; padding: 4px 0; }
+
+.isle-shelf-tile {
+  width: 84px;
+  padding: 8px 4px;
+  border-radius: 14px;
+  color: #ffffff;
+}
+
+.isle-shelf-tile:hover { background-color: #1c1c1e; }
+.isle-shelf-name { font-size: 11px; padding-top: 6px; }

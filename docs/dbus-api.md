@@ -1,12 +1,12 @@
-# pulaud D-Bus API
+# isled D-Bus API
 
-`pulaud` owns `io.github.pulau.Daemon` on the session bus and serves every
-interface at `/io/github/pulau/Daemon`. State is exposed as read-only string
+`isled` owns `io.github.isle.Daemon` on the session bus and serves every
+interface at `/io/github/isle/Daemon`. State is exposed as read-only string
 properties holding JSON, with `PropertiesChanged` emitted on every change.
 Timestamps are milliseconds since the Unix epoch; durations are
 milliseconds unless the name says `_us` (microseconds).
 
-## io.github.pulau.Media1
+## io.github.isle.Media1
 
 The active MPRIS player: the one playing, or else the one that played last.
 
@@ -21,7 +21,7 @@ The active MPRIS player: the one playing, or else the one that played last.
 The position is only sampled when something changes. While playing, the
 current position is `position_us + (now - sampled_at_ms) * 1000 * rate`.
 
-## io.github.pulau.Pomodoro1
+## io.github.isle.Pomodoro1
 
 | Member | Signature | |
 |---|---|---|
@@ -32,7 +32,7 @@ current position is `position_us + (now - sampled_at_ms) * 1000 * rate`.
 | `Config` | `s` | `{focus_minutes, short_break_minutes, long_break_minutes, sessions_before_long_break, auto_start_breaks, auto_start_focus}` |
 | `PhaseFinished(s finished, s next)` | signal | A phase ran out (not emitted for `Skip` or `Stop`). |
 
-## io.github.pulau.Todo1
+## io.github.isle.Todo1
 
 | Member | Signature | |
 |---|---|---|
@@ -41,7 +41,7 @@ current position is `position_us + (now - sampled_at_ms) * 1000 * rate`.
 | `Items` | `s` | `[{id, title, due_at_ms, done, alerted}]` |
 | `Due(t id, s title)` | signal | A task's due time arrived. |
 
-## io.github.pulau.Shelf1
+## io.github.isle.Shelf1
 
 | Member | Signature | |
 |---|---|---|
@@ -50,17 +50,17 @@ current position is `position_us + (now - sampled_at_ms) * 1000 * rate`.
 | `Refresh()` | | Drop items whose files no longer exist. |
 | `Items` | `s` | `[{uri, name, added_at_ms}]`, newest first. |
 
-## io.github.pulau.System1
+## io.github.isle.System1
 
 | Member | Signature | |
 |---|---|---|
 | `State` | `s` | `{battery: {percent, plugged, charging, time_to_empty_s, time_to_full_s} or null, network: {connected, connection, name}, bluetooth: [{path, name, icon, battery}]}` |
 | `Event(s json)` | signal | One of `{kind: "power", plugged, percent}`, `{kind: "battery_low", percent}`, `{kind: "battery_full"}`, `{kind: "network", connected, connection, name}`, `{kind: "bluetooth", connected, device}`. |
 
-## io.github.pulau.ShelfWindow1
+## io.github.isle.ShelfWindow1
 
-Served by `pulau-shelf` (not `pulaud`) as `io.github.pulau.ShelfWindow` at
-`/io/github/pulau/ShelfWindow`.
+Served by `isle-shelf` (not `isled`) as `io.github.isle.ShelfWindow` at
+`/io/github/isle/ShelfWindow`.
 
 | Member | | |
 |---|---|---|

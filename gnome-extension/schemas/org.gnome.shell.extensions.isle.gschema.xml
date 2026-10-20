@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.isle" path="/org/gnome/shell/extensions/isle/">
+    <key name="black-top-bar" type="b">
+      <default>true</default>
+      <summary>Black top bar</summary>
+      <description>Paint the top bar black so the island blends into it.</description>
+    </key>
+    <key name="notch-depth" type="i">
+      <range min="22" max="36"/>
+      <default>22</default>
+      <summary>Island height</summary>
+      <description>How far the closed island hangs below the top bar, in pixels.</description>
+    </key>
+    <key name="replace-osd" type="b">
+      <default>true</default>
+      <summary>Show volume and brightness in the island</summary>
+    </key>
+    <key name="system-alerts" type="b">
+      <default>true</default>
+      <summary>Show battery, network, Bluetooth and keyboard alerts</summary>
+    </key>
+    <key name="track-peek" type="b">
+      <default>true</default>
+      <summary>Briefly show the new song when the track changes</summary>
+    </key>
+    <key name="compact-lyrics" type="b">
+      <default>false</default>
+      <summary>Show the current lyric line in the compact island</summary>
+    </key>
+    <key name="sleepy-eyes" type="b">
+      <default>true</default>
+      <summary>Show sleepy eyes when the computer is idle</summary>
+    </key>
+    <key name="idle-seconds" type="i">
+      <range min="15" max="3600"/>
+      <default>90</default>
+      <summary>Seconds without input before the eyes appear</summary>
+    </key>
+    <key name="chimes" type="b">
+      <default>true</default>
+      <summary>Play a sound for timers and reminders</summary>
+    </key>
+  </schema>
+</schemalist>

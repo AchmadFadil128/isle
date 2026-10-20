@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=io.github.isle.Daemon
+Exec=@BINDIR@/isled
+SystemdService=isled.service

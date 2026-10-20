@@ -1,0 +1,31 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+
+window.isle {
+  background: transparent;
+}
+
+.isle-island label {
+  color: white;
+  font-feature-settings: "tnum";
+}
+
+.isle-compact-time {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.isle-expanded-date {
+  font-size: 13px;
+  font-weight: 600;
+  color: alpha(white, 0.6);
+}
+
+.isle-expanded-time {
+  font-size: 42px;
+  font-weight: 800;
+}
+
+.isle-expanded-hint {
+  font-size: 12px;
+  color: alpha(white, 0.4);
+}
