@@ -116,3 +116,5 @@ issues.
 ## License
 
 Isle is free software under the [GNU General Public License v3.0 or later](LICENSE).
+The bundled [Inter](https://rsms.me/inter/) typeface (`data/fonts`) is under
+the [SIL Open Font License 1.1](data/fonts/Inter-LICENSE.txt).

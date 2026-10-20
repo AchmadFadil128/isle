@@ -8,8 +8,14 @@ All notable changes to Isle are listed here. The format follows
 
 ### Added
 
+- Alerts look like iOS's: icon badges lit in the alert's colour with a soft
+  gradient, and Caps Lock as its own icon with an "On" / "Off" pill.
+- Type like macOS: SF Pro where installed, else Inter, which the installer
+  now puts in `~/.local/share/fonts/isle`; semibold titles, tighter
+  tracking on large figures, medium-weight top bar text instead of the
+  theme's bold, and the date without the year ("Tue 20 Oct").
 - Tabs in the open island's header, like NotchNook: one per page, the open
-  one named in a lit pill, and a red dot while notifications are unseen.
+  one named on a dark grey pill with a hairline edge, and a red dot while notifications are unseen.
   They replace the side arrows and page dots. The island
   reopens on the page picked last (for 5 minutes), and stays on the Shelf
   after a file was dragged onto it.
@@ -71,5 +77,10 @@ All notable changes to Isle are listed here. The format follows
   counted twice (as a smooth scroll and as clicks), and the leftover of one
   swipe carried into the next. Sideways swipes now turn pages even over
   lists and lyrics.
-- Alerts on a glass bar no longer start with an empty black band.
+- Alerts on a glass bar no longer start with an empty black band, and fit
+  their content instead of always being 380 px wide.
+- With Blur my Shell's popup blur on, the Tasks and clipboard search fields
+  were black on black: it restyles every text field in the shell.
+- Lyrics over a grey cover are readable: neutral covers now tint the island
+  dark, vivid ones bright.
 - Text is at least 12 px throughout.

@@ -97,7 +97,10 @@ function coverColor(path) {
         return null;
     const color = [r / total, g / total, b / total];
     const peak = Math.max(...color, 1);
-    return color.map(channel => (channel / peak) * 0.8);
+    // Vivid covers wash bright; grey ones stay dark, so white lyrics read.
+    const saturation = (peak - Math.min(...color)) / peak;
+    const brightness = 0.35 + 0.45 * Math.min(1, saturation * 2);
+    return color.map(channel => (channel / peak) * brightness);
 }
 
 /** Synced lyrics that follow the song; click a line to jump to it. */

@@ -18,9 +18,9 @@ export function clockTime(dateTime = GLib.DateTime.new_now_local()) {
     return dateTime.format(uses12Hour() ? '%l:%M' : '%H:%M').trim();
 }
 
-/** "Tue 20 Oct 2026". */
+/** "Tue 20 Oct", like a Mac's menu bar. */
 export function longDate(dateTime = GLib.DateTime.new_now_local()) {
-    return dateTime.format('%a %-d %b %Y');
+    return dateTime.format('%a %-d %b');
 }
 
 /** Formats a duration as "3:07" or "1:02:07". */

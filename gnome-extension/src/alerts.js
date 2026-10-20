@@ -52,8 +52,9 @@ export function capsLock(on) {
         key: 'keyboard',
         priority: 'instant',
         transient: true,
-        glyph: '⇪',
-        title: on ? 'Caps Lock on' : 'Caps Lock off',
+        icon: 'isle-capslock-symbolic',
+        title: 'Caps Lock',
+        status: on ? 'On' : 'Off',
         tone: on ? 'warn' : 'neutral',
         duration: OSD_DURATION,
     };

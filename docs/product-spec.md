@@ -31,7 +31,7 @@ sizes are logical pixels.
 |---|---|---|---|---|
 | Compact | 144 × P; 232 with an activity | 10 | 7 | Clock; activity slots left/right |
 | Compact, hanging | 164 × (P + 30); 256 with an activity | 16 | 10 | As above |
-| Peek (alert) | 380 × (P + 56); 380 × 62 off a black bar | 22 | 13 | Badge · title/subtitle · value, level bar or button |
+| Peek (alert) | fits its content, 220–380 wide × (P + 56); 62 high off a black bar | 22 | 13 | Badge · title/subtitle · value, level bar or button, centred |
 | Expanded | 600 × (P + 164); 720 for lyrics | 32 | 22 | Header row (tabs) · page |
 
 The top bar is slimmed to a thin bezel (status icons and the tray stay in
@@ -45,6 +45,11 @@ bar; they cover windows only for as long as they are shown. Their content
 sits below the bar's height, and the open island's header row level with
 the bar. In the settings the closed island can hang below the bar instead
 ("Compact, hanging").
+
+Type is set like macOS: SF Pro where installed, else Inter (installed with
+Isle), semibold for titles, nothing heavier than bold, and slightly tighter
+tracking on large figures. The island's text fields keep their own look
+when Blur my Shell restyles the shell's.
 
 The bar can also be black, so that bar and island read as one shape: the
 shoulders then curve out of the bar's lower edge instead of the screen's
@@ -133,7 +138,7 @@ Every page shares the header row inside the top bar, like NotchNook's. On
 the left, a tab per page: icons, the open page's in a lit pill with its
 name, and a red dot on Notifications while some are unseen. On the right a
 red "● 0:42" pill while the screen records (click to stop), the privacy
-dots, the music bars and `[timer ring] Tue 20 Oct 2026 12:26`.
+dots, the music bars and `[timer ring] Tue 20 Oct 12:26`.
 
 **Music**. Cover (click: bring the player forward) with the playing app's
 icon on its corner (Spotify, Chrome, …; found by name when the player gives

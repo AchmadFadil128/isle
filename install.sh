@@ -4,6 +4,7 @@
 #   ~/.local/share/gnome-shell/extensions     the GNOME Shell extension
 #   ~/.local/share/dbus-1/services            D-Bus activation files
 #   ~/.config/systemd/user                    isled.service
+#   ~/.local/share/fonts/isle                 Inter, the island's typeface
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -48,6 +49,12 @@ if [ "$SHELF" = 1 ]; then
 fi
 install_service isled.service "$CONFIG/systemd/user"
 install -Dm644 README.md "$DATA/doc/isle/README.md"
+
+step "Installing the Inter font"
+# The island is set in SF Pro where installed, else Inter, its open cousin.
+install -Dm644 data/fonts/InterVariable.ttf "$DATA/fonts/isle/InterVariable.ttf"
+install -Dm644 data/fonts/Inter-LICENSE.txt "$DATA/fonts/isle/Inter-LICENSE.txt"
+fc-cache "$DATA/fonts/isle" >/dev/null 2>&1 || true
 
 step "Installing the GNOME Shell extension"
 DEST="$DATA/gnome-shell/extensions/$UUID"

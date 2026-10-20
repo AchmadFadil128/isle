@@ -8,13 +8,13 @@
 //     key,       // alerts with the same key replace each other in place
 //     icon,      // icon name, or
 //     gicon,     // a Gio.Icon, or
-//     glyph,     // a character drawn instead of an icon (e.g. '⇪'), or
 //     art,       // a cover art path
 //     appIcon,   // true: show the icon large and uncircled (notifications)
 //     ring,      // 0..1 draws a ring around the icon that sweeps up to it
 //     title, subtitle,
 //     tone,      // 'neutral' | 'good' | 'warn' | 'bad' | 'focus' | 'break'
 //     value,     // large text on the right, e.g. '70%'
+//     status,    // a short state in a tinted pill on the right, e.g. 'On'
 //     level,     // 0..1 shows a level bar on the right, with levelText
 //     action,    // {label, callback} shows a button on the right
 //     duration,  // milliseconds on screen
@@ -31,7 +31,9 @@ import St from 'gi://St';
 
 import {Art, LevelBar, Ring, icon, pillButton} from './widgets.js';
 
-export const PEEK_WIDTH = 380;
+/** Narrowest and widest an alert gets; in between it fits its content. */
+const MIN_WIDTH = 220;
+const MAX_WIDTH = 380;
 /** Height of the part that hangs below the top bar. */
 export const PEEK_HEIGHT = 56;
 
@@ -47,21 +49,41 @@ const TONE_COLORS = {
     break: [0.35, 0.67, 1],
 };
 
-const css = ([r, g, b]) => `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
+const css = ([r, g, b], alpha = 1) =>
+    `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${alpha})`;
+
+/**
+ * The badge behind an icon, lit in the alert's colour from the top, like
+ * iOS's: a neutral alert gets a grey one.
+ */
+function badgeStyle(rgb, neutral) {
+    const [top, bottom] = neutral ? [0.16, 0.08] : [0.34, 0.16];
+    const base = neutral ? [1, 1, 1] : rgb;
+    return `background-gradient-direction: vertical; background-gradient-start: ${css(base, top)}; ` +
+        `background-gradient-end: ${css(base, bottom)};`;
+}
 
 export const PeekView = GObject.registerClass(
-class PeekView extends St.BoxLayout {
+class PeekView extends St.Widget {
     _init() {
-        super._init({style_class: 'isle-peek'});
+        super._init({style_class: 'isle-peek', layout_manager: new Clutter.BinLayout()});
+
+        // The content sits in one row, centred; the island fits its width.
+        this._row = new St.BoxLayout({
+            style_class: 'isle-peek-row',
+            x_expand: true,
+            x_align: Clutter.ActorAlign.CENTER,
+            y_expand: true,
+        });
+        this.add_child(this._row);
 
         // Leading: one of these sits in the badge bin.
         this._badge = new St.Bin({y_align: Clutter.ActorAlign.CENTER});
         this._icon = new St.Icon({icon_size: 18});
-        this._glyph = new St.Label({style_class: 'isle-peek-glyph', y_align: Clutter.ActorAlign.CENTER});
         this._art = new Art({size: 38, radius: 10});
         this._ringIcon = new St.Icon({icon_size: 14});
         this._ring = new Ring({size: 38, lineWidth: 4.5, child: this._ringIcon});
-        this.add_child(this._badge);
+        this._row.add_child(this._badge);
 
         const texts = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         this._title = new St.Label({style_class: 'isle-peek-title'});
@@ -70,17 +92,18 @@ class PeekView extends St.BoxLayout {
             text.clutter_text.ellipsize = Pango.EllipsizeMode.END;
             texts.add_child(text);
         }
-        this.add_child(texts);
+        this._row.add_child(texts);
 
         // Trailing: a value, a level bar or a button.
         this._accessory = new St.Bin({y_align: Clutter.ActorAlign.CENTER});
         this._value = new St.Label({style_class: 'isle-peek-value', y_align: Clutter.ActorAlign.CENTER});
+        this._status = new St.Label({style_class: 'isle-peek-status', y_align: Clutter.ActorAlign.CENTER});
         this._level = new LevelBar({width: 96});
         this._levelText = new St.Label({style_class: 'isle-peek-level-text', y_align: Clutter.ActorAlign.CENTER});
         this._levelBox = new St.BoxLayout({style_class: 'isle-peek-level-box'});
         this._levelBox.add_child(this._level);
         this._levelBox.add_child(this._levelText);
-        this.add_child(this._accessory);
+        this._row.add_child(this._accessory);
 
         this._actionButton = null;
         this._ringKey = null;
@@ -113,11 +136,6 @@ class PeekView extends St.BoxLayout {
             else
                 this._ring.progress = alert.ring;
             this._ringKey = ringKey;
-        } else if (alert.glyph) {
-            this._glyph.text = alert.glyph;
-            this._glyph.style = `color: ${color};`;
-            this._setChild(this._badge, this._glyph);
-            this._badge.style_class = 'isle-peek-icon';
         } else {
             this._icon.gicon = gicon;
             this._icon.icon_size = alert.appIcon ? 34 : 18;
@@ -125,6 +143,9 @@ class PeekView extends St.BoxLayout {
             this._setChild(this._badge, this._icon);
             this._badge.style_class = alert.appIcon ? '' : 'isle-peek-icon';
         }
+        this._badge.style = this._badge.style_class
+            ? badgeStyle(rgb, (alert.tone ?? 'neutral') === 'neutral')
+            : null;
         if (!hasRing)
             this._ringKey = null;
 
@@ -149,9 +170,19 @@ class PeekView extends St.BoxLayout {
         } else if (alert.value) {
             this._value.text = alert.value;
             this._setChild(this._accessory, this._value);
+        } else if (alert.status) {
+            this._status.text = alert.status;
+            this._status.style = `color: ${color}; background-color: ${css(alert.tone === 'neutral' || !alert.tone ? [1, 1, 1] : rgb, 0.14)};`;
+            this._setChild(this._accessory, this._status);
         } else {
             this._setChild(this._accessory, null);
         }
+    }
+
+    /** The width the island should have for this alert. */
+    get preferredWidth() {
+        const [, natural] = this._row.get_preferred_width(-1);
+        return Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, natural)));
     }
 
     _setChild(bin, child) {
@@ -161,7 +192,7 @@ class PeekView extends St.BoxLayout {
 
     _onDestroy() {
         // Pieces not currently shown are not children and must be freed here.
-        for (const actor of [this._icon, this._glyph, this._art, this._ring, this._value, this._levelBox]) {
+        for (const actor of [this._icon, this._art, this._ring, this._value, this._status, this._levelBox]) {
             if (!actor.get_parent())
                 actor.destroy();
         }

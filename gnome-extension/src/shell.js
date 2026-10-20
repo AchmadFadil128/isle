@@ -4,6 +4,7 @@
 // OSD and keyboard state. Everything here is undone in `destroy()`.
 
 import Clutter from 'gi://Clutter';
+import PangoCairo from 'gi://PangoCairo';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
@@ -20,6 +21,14 @@ const BAR_STYLES = {
 };
 /** Style class giving the glass bar's text a shadow to read on any wallpaper. */
 const GLASS_BAR_CLASS = 'isle-glass-bar';
+/** Style class setting SF Pro instead of Inter; see stylesheet.css. */
+export const SF_PRO_CLASS = 'isle-sf';
+
+/** Whether Apple's SF Pro is installed, to use it instead of Inter. */
+export function hasSfPro() {
+    return PangoCairo.FontMap.get_default().list_families()
+        .some(family => family.get_name() === 'SF Pro Display');
+}
 /** Style class making the top bar slimmer; see stylesheet.css. */
 const COMPACT_BAR_CLASS = 'isle-compact-bar';
 /** Style class making the top bar as tall as the closed island. */
@@ -88,6 +97,7 @@ export class TopBar extends Signals.EventEmitter {
         toggleStyleClass(Main.panel, COMPACT_BAR_CLASS, this._settings.get_boolean('compact-top-bar'));
         toggleStyleClass(Main.panel, NOTCH_BAR_CLASS, this._settings.get_boolean('island-in-top-bar'));
         toggleStyleClass(Main.panel, GLASS_BAR_CLASS, this._settings.get_string('top-bar-style') === 'glass');
+        toggleStyleClass(Main.panel, SF_PRO_CLASS, hasSfPro());
     }
 
     /** Sets Isle's colour rule, leaving the rest of the style alone. */
@@ -115,6 +125,7 @@ export class TopBar extends Signals.EventEmitter {
         Main.panel.remove_style_class_name(COMPACT_BAR_CLASS);
         Main.panel.remove_style_class_name(NOTCH_BAR_CLASS);
         Main.panel.remove_style_class_name(GLASS_BAR_CLASS);
+        Main.panel.remove_style_class_name(SF_PRO_CLASS);
         this._dateMenu.set_width(-1);
         this._dateMenu.opacity = 255;
         this._dateMenu.reactive = true;

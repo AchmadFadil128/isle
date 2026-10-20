@@ -27,9 +27,9 @@ import {AudioOutputs} from './audio.js';
 import {FocusMode} from './focusMode.js';
 import {NotificationCenter} from './notifications.js';
 import {PrivacyMonitor} from './privacy.js';
-import {PEEK_HEIGHT, PEEK_WIDTH, PeekView} from './peek.js';
+import {PEEK_HEIGHT, PeekView} from './peek.js';
 import * as Playback from './playback.js';
-import {KeyboardWatcher, OsdHook, TopBar} from './shell.js';
+import {KeyboardWatcher, OsdHook, SF_PRO_CLASS, TopBar, hasSfPro} from './shell.js';
 import {ShelfHelper} from './shelfHelper.js';
 import {MediaPage} from './pages/media.js';
 import {NotificationsPage} from './pages/notifications.js';
@@ -94,6 +94,8 @@ export class Controller {
         this._focusMode = new FocusMode(this._daemon, this._notifications, this._settings);
         this._clipboard = new ClipboardHistory(this._daemon, this._settings);
         this._island = new Island();
+        if (hasSfPro())
+            this._island.add_style_class_name(SF_PRO_CLASS);
         this._compact = new CompactView(this._daemon, this._settings, this._privacy);
         this._peek = new PeekView();
         this._expanded = this._buildExpanded();
@@ -245,7 +247,7 @@ export class Controller {
             break;
         case 'peek': {
             const inset = this._topBar.blendsIn ? top : PEEK_TOP_GLASS;
-            size = {width: PEEK_WIDTH, height: inset + PEEK_HEIGHT, radius: PEEK_RADIUS, shoulder: PEEK_SHOULDER};
+            size = {width: this._peek.preferredWidth, height: inset + PEEK_HEIGHT, radius: PEEK_RADIUS, shoulder: PEEK_SHOULDER};
             view = this._peek;
             view.style = `padding-top: ${inset}px;`;
             break;
