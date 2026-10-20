@@ -18,7 +18,7 @@ pkill -x isle-shelf 2>/dev/null
 
 rm -rf "$DATA/gnome-shell/extensions/$UUID" "$DATA/doc/isle" "$DATA/fonts/isle"
 fc-cache "$DATA/fonts" >/dev/null 2>&1
-rm -f "$HOME/.local/bin/isled" "$HOME/.local/bin/isle-shelf" \
+rm -f "$HOME/.local/bin/isled" "$HOME/.local/bin/isle-shelf" "$HOME/.local/bin/isle-uninstall" \
       "$DATA/dbus-1/services/io.github.zickrian.isle.Daemon.service" \
       "$DATA/dbus-1/services/io.github.zickrian.isle.ShelfWindow.service" \
       "$DATA/dbus-1/services/io.github.isle.Daemon.service" \

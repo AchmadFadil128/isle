@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds Isle and installs it for the current user (no root needed):
+# Builds Isle (or takes the programs a release package ships ready-built, in
+# bin/) and installs it for the current user (no root needed):
 #   ~/.local/bin                              isled, isle-shelf
 #   ~/.local/share/gnome-shell/extensions     the GNOME Shell extension
 #   ~/.local/share/dbus-1/services            D-Bus activation files
@@ -25,23 +26,29 @@ install_service() {
     install -Dm644 "$WORK/$1" "$2/$1"
 }
 
-step "Building isled"
-cargo build --release -p isle-daemon
-
 SHELF=0
-if pkg-config --exists gtk4; then
-    step "Building isle-shelf"
-    cargo build --release -p isle-shelf
-    SHELF=1
+if [ -x bin/isled ]; then
+    # A release package: the programs come built.
+    BUILT=bin
+    [ -x bin/isle-shelf ] && SHELF=1
 else
-    echo "GTK 4 development files not found: skipping isle-shelf (drag and drop on the shelf)."
-    echo "Install them with 'sudo apt install libgtk-4-dev' and run this script again."
+    BUILT=target/release
+    step "Building isled"
+    cargo build --release -p isle-daemon
+    if pkg-config --exists gtk4; then
+        step "Building isle-shelf"
+        cargo build --release -p isle-shelf
+        SHELF=1
+    else
+        echo "GTK 4 development files not found: skipping isle-shelf (drag and drop on the shelf)."
+        echo "Install them with 'sudo apt install libgtk-4-dev' and run this script again."
+    fi
 fi
 
 step "Installing binaries to $BINDIR"
-install -Dm755 target/release/isled "$BINDIR/isled"
+install -Dm755 "$BUILT/isled" "$BINDIR/isled"
 if [ "$SHELF" = 1 ]; then
-    install -Dm755 target/release/isle-shelf "$BINDIR/isle-shelf"
+    install -Dm755 "$BUILT/isle-shelf" "$BINDIR/isle-shelf"
 fi
 
 step "Installing services"

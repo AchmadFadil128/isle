@@ -53,39 +53,24 @@ your windows uncovered.
 
 ## Requirements
 
-- **GNOME Shell 46** on Wayland or X11 (Ubuntu 24.04, Fedora 40, …)
-- **Rust 1.85 or newer.** Ubuntu 24.04's `cargo` package is too old; use
-  [rustup](https://rustup.rs).
-- **GTK 4 development files** for the shelf's drag and drop (optional;
-  without them the files tray is read-only).
+- **GNOME Shell 46** on Wayland or X11 (Ubuntu 24.04, Fedora 40, …), on a
+  64-bit Intel or AMD PC (x86_64).
+- `curl`, which most systems have.
 
 ## Installation
 
-**1. Install the build tools.** On Ubuntu or Debian:
+Run this in a terminal:
 
 ```sh
-sudo apt install git build-essential pkg-config libgtk-4-dev
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash
 ```
 
-On Fedora: `sudo dnf install git gcc pkgconf gtk4-devel`, then rustup as above.
+Then **log out and back in**: GNOME Shell on Wayland only loads a new
+extension at login (on X11, press Alt+F2, type `r` and press Enter instead).
 
-**2. Build and install Isle.**
-
-```sh
-git clone https://github.com/zickrian/isle.git
-cd isle
-./install.sh
-```
-
-Everything is installed for your user only; no root is needed. The installer
-builds the Rust parts, installs the extension, starts the `isled` service and
-sets up the top bar.
-
-**3. Log out and back in.** GNOME Shell on Wayland only loads a new
-extension at login. On X11, press Alt+F2, type `r` and press Enter instead.
-
-To update later, `git pull` and run `./install.sh` again.
+The script downloads the latest release, checks it, and installs it for your
+user only: no root, no compiler and no cloning needed. Run the same command
+again to update.
 
 > [!NOTE]
 > The installer turns off settings and extensions that would fight with the
@@ -93,6 +78,32 @@ To update later, `git pull` and run `./install.sh` again.
 > extensions that take the same place in the top bar. Isle's look is the
 > same on every desktop: a slim top bar with no colour of its own, and the
 > island as a black notch.
+
+<details>
+<summary><b>Other ways to install</b></summary>
+
+**From a release package.** Download `isle-<version>-x86_64-linux.tar.gz`
+from [Releases](../../releases), then:
+
+```sh
+tar -xzf isle-*-x86_64-linux.tar.gz
+cd isle-*-x86_64-linux
+./install.sh
+```
+
+**From source**, for development or other architectures. You need Rust 1.85
+or newer ([rustup](https://rustup.rs); Ubuntu 24.04's own `cargo` is too
+old) and, for the shelf's drag and drop, the GTK 4 development files:
+
+```sh
+sudo apt install git build-essential pkg-config libgtk-4-dev   # Fedora: git gcc pkgconf gtk4-devel
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+git clone https://github.com/zickrian/isle.git
+cd isle
+./install.sh
+```
+
+</details>
 
 ## Usage
 
@@ -163,8 +174,9 @@ Wayland this is required once). Then check that it is enabled:
 `journalctl --user -u isled -f`. Songs LRCLIB does not know show "No lyrics
 found"; a busy service retries on its own.
 
-**Files cannot be dragged in or out.** Install `libgtk-4-dev` (Fedora:
-`gtk4-devel`) and run `./install.sh` again.
+**Files cannot be dragged in or out.** The release package includes the
+drag-and-drop helper; when building from source, install `libgtk-4-dev`
+(Fedora: `gtk4-devel`) and run `./install.sh` again.
 
 **Another extension covers the island.** Extensions that restyle or move the
 top bar (Dash to Panel, Hide Top Bar, other islands) can get in the way;
@@ -177,10 +189,11 @@ turn them off in the Extensions app.
 ## Uninstalling
 
 ```sh
-./uninstall.sh
+isle-uninstall
 ```
 
-This removes the extension, the programs, the service and the font. Your
+(or `./uninstall.sh` from the release package or the source folder). This
+removes the extension, the programs, the service and the font. Your
 tasks, clipboard history, shelf and timer settings stay in
 `~/.local/share/isle` until you delete that folder.
 

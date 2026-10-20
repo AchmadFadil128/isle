@@ -8,6 +8,13 @@ All notable changes to Isle are listed here. The format follows
 
 ### Added
 
+- A one-line install that needs no compiler or cloning:
+  `curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash`.
+  It downloads the latest release package, checks its checksum and installs
+  it, leaving an `isle-uninstall` command.
+- Release packages with the programs ready-built
+  (`isle-<version>-x86_64-linux.tar.gz`), made by a Release workflow for
+  every version tag; `install.sh` uses ready-built programs when present.
 - Notifications from one app fold into a stack, as on macOS: the newest
   card, the next one's edge under it and "+2 more from Chrome", which
   unfolds them under the app's name with "Show less".

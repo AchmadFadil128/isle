@@ -1,0 +1,42 @@
+name: Release
+
+# Builds the ready-to-install package for a version tag (v1.2.3) and attaches
+# it to the tag's GitHub release, creating the release if needed. Run by hand,
+# it only builds the package as a workflow artifact.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    # Built against Ubuntu 24.04's GLib and GTK, the oldest GNOME 46 system.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GTK 4
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Package
+        id: package
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then version="${GITHUB_REF_NAME#v}"; else version=""; fi
+          echo "file=$(scripts/package.sh $version | tail -n1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: isle-package
+          path: dist/*
+      - name: Attach to the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          gh release view "$tag" >/dev/null 2>&1 ||
+            gh release create "$tag" --title "Isle ${tag#v}" --generate-notes
+          gh release upload "$tag" dist/*.tar.gz dist/*.sha256 --clobber

@@ -70,3 +70,17 @@ journalctl -f /usr/bin/gnome-shell | grep -i isle    # the extension
 - Include screenshots for visual changes.
 - By contributing you agree that your work is licensed under the
   GPL-3.0-or-later, like the rest of Isle.
+
+## Releasing
+
+1. Move the `[Unreleased]` notes in `CHANGELOG.md` under a new version and
+   date, and set that version in `Cargo.toml` and in
+   `gnome-extension/metadata.json` (`version-name`).
+2. Commit, then tag and push: `git tag -a v1.2.3 -m "Isle 1.2.3"` and
+   `git push origin main v1.2.3`.
+3. The Release workflow builds `isle-1.2.3-x86_64-linux.tar.gz` with the
+   programs ready-built, and attaches it and its checksum to the tag's
+   GitHub release, which `get.sh` installs from. Edit the release notes
+   there.
+
+`scripts/package.sh` builds the same package locally, in `dist/`.
