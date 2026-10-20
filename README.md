@@ -131,7 +131,7 @@ GNOME 46:
 |---|---|---|
 | `isled` (background service) | 7.4 MB resident, of which about 0.7 MB its own | 0% (no polling) |
 | Extension, inside GNOME Shell | about 10 MB more for the shell | 0% when nothing moves |
-| `isle-shelf` (drag and drop) | about 40 MB, GTK 4; only after the files tray is first opened | 0% |
+| `isle-shelf` (drag and drop) | about 28 MB, GTK 4 drawn on the CPU; only after the files tray is first opened | 0% |
 
 | On disk | Size |
 |---|---|

@@ -90,7 +90,7 @@ pub struct SystemService {
     state: SystemState,
 }
 
-#[interface(name = "io.github.isle.System1")]
+#[interface(name = "io.github.zickrian.isle.System1")]
 impl SystemService {
     /// JSON `SystemState`.
     #[zbus(property)]

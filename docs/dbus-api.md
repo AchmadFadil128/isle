@@ -1,12 +1,12 @@
 # isled D-Bus API
 
-`isled` owns `io.github.isle.Daemon` on the session bus and serves every
-interface at `/io/github/isle/Daemon`. State is exposed as read-only string
+`isled` owns `io.github.zickrian.isle.Daemon` on the session bus and serves every
+interface at `/io/github/zickrian/isle/Daemon`. State is exposed as read-only string
 properties holding JSON, with `PropertiesChanged` emitted on every change.
 Timestamps are milliseconds since the Unix epoch; durations are
 milliseconds unless the name says `_us` (microseconds).
 
-## io.github.isle.Media1
+## io.github.zickrian.isle.Media1
 
 The active MPRIS player: the one playing, or else the one that played last.
 
@@ -25,7 +25,7 @@ The control methods only fail when no player is running. They return
 without waiting for the player, so a slow player cannot hold the daemon up;
 if the player then rejects the command, isled only logs it.
 
-## io.github.isle.Pomodoro1
+## io.github.zickrian.isle.Pomodoro1
 
 | Member | Signature | |
 |---|---|---|
@@ -37,7 +37,7 @@ if the player then rejects the command, isled only logs it.
 | `Config` | `s` | `{focus_minutes, short_break_minutes, long_break_minutes, sessions_before_long_break, auto_start_breaks, auto_start_focus}` |
 | `PhaseFinished(s finished, s next)` | signal | A phase ran out (not emitted for `Skip` or `Stop`). |
 
-## io.github.isle.Todo1
+## io.github.zickrian.isle.Todo1
 
 | Member | Signature | |
 |---|---|---|
@@ -45,7 +45,7 @@ if the player then rejects the command, isled only logs it.
 | `SetDone(t id, b done)`, `Rename(t id, s title)`, `Remove(t id)`, `ClearDone()` | | Finished tasks are cleared at midnight. |
 | `Items` | `s` | `[{id, title, done, done_at_ms}]`; `done_at_ms` is when the task was ticked off, or null. |
 
-## io.github.isle.Shelf1
+## io.github.zickrian.isle.Shelf1
 
 | Member | Signature | |
 |---|---|---|
@@ -54,7 +54,7 @@ if the player then rejects the command, isled only logs it.
 | `Refresh()` | | Drop items whose files no longer exist. |
 | `Items` | `s` | `[{uri, name, added_at_ms}]`, newest first. |
 
-## io.github.isle.Clipboard1
+## io.github.zickrian.isle.Clipboard1
 
 Clipboard history. The extension watches the clipboard and reports each
 copy; isled keeps the list in `~/.local/share/isle/clipboard.json` and
@@ -80,17 +80,17 @@ it was. Beyond 20 unpinned items the oldest are
 dropped; pinned items are only removed by hand. Unknown ids and invalid
 content are rejected with `InvalidArgs`.
 
-## io.github.isle.System1
+## io.github.zickrian.isle.System1
 
 | Member | Signature | |
 |---|---|---|
 | `State` | `s` | `{battery: {percent, plugged, charging, time_to_empty_s, time_to_full_s} or null, network: {connected, connection, name}, bluetooth: [{path, name, icon, battery}], camera_in_use}` |
 | `Event(s json)` | signal | One of `{kind: "power", plugged, percent}`, `{kind: "battery_low", percent}`, `{kind: "battery_full"}`, `{kind: "network", connected, connection, name}`, `{kind: "bluetooth", connected, device}`. |
 
-## io.github.isle.ShelfWindow1
+## io.github.zickrian.isle.ShelfWindow1
 
-Served by `isle-shelf` (not `isled`) as `io.github.isle.ShelfWindow` at
-`/io/github/isle/ShelfWindow`.
+Served by `isle-shelf` (not `isled`) as `io.github.zickrian.isle.ShelfWindow` at
+`/io/github/zickrian/isle/ShelfWindow`.
 
 | Member | | |
 |---|---|---|

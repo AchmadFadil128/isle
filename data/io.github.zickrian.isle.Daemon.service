@@ -1,4 +1,4 @@
 [D-BUS Service]
-Name=io.github.isle.Daemon
+Name=io.github.zickrian.isle.Daemon
 Exec=@BINDIR@/isled
 SystemdService=isled.service

@@ -5,7 +5,7 @@
 //! GNOME Shell's own widgets cannot exchange drag and drop with apps, so the
 //! extension asks this helper to draw the shelf in a borderless window laid
 //! exactly over the island's shelf page. The extension calls
-//! `io.github.isle.ShelfWindow1.Show(x, y, width, height)` and `Hide()`; the
+//! `io.github.zickrian.isle.ShelfWindow1.Show(x, y, width, height)` and `Hide()`; the
 //! shelf's contents live in isled.
 //!
 //! The window is an X11 override-redirect window (via XWayland on a Wayland
@@ -24,12 +24,19 @@ use gtk4 as gtk;
 
 use crate::shelf::ShelfWindow;
 
-const APP_ID: &str = "io.github.isle.ShelfWindow";
+const APP_ID: &str = "io.github.zickrian.isle.ShelfWindow";
 
 fn main() -> glib::ExitCode {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     // SAFETY: called before GTK starts and before any other thread exists.
     unsafe { env::set_var("GDK_BACKEND", "x11") };
+    // The window is small and plain: drawing it on the CPU saves about a
+    // third of the memory a GPU renderer takes. A renderer set by the user
+    // is kept.
+    if env::var_os("GSK_RENDERER").is_none() {
+        // SAFETY: as above.
+        unsafe { env::set_var("GSK_RENDERER", "cairo") };
+    }
 
     // The bus name is owned by hand (not through GApplication) so the
     // interface is exported before anyone can call it.

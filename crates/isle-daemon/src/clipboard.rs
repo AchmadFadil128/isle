@@ -143,7 +143,7 @@ fn invalid(err: ClipError) -> fdo::Error {
     fdo::Error::InvalidArgs(err.to_string())
 }
 
-#[interface(name = "io.github.isle.Clipboard1")]
+#[interface(name = "io.github.zickrian.isle.Clipboard1")]
 impl ClipboardService {
     /// Records copied text and returns its id; copying the same text again
     /// moves the existing item to the top.

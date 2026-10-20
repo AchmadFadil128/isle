@@ -122,12 +122,14 @@ a scrollbar.
 ## 4. Closed island
 
 - Left slot, first that applies: breathing red dot (screen recording) →
-  focus timer ring → cover art (music playing) → white dot (unseen
+  focus timer ring → cover art (a song playing or paused) → white dot (unseen
   notifications) → moon (Do Not Disturb on).
 - While the screen records, the centre shows how long it has been recording
   instead of the clock.
-- Right slot: music bars while playing. They dance only while the closed
-  island is on screen, and rest after a minute without input.
+- Right slot: music bars while a song is loaded. They dance only while it
+  plays and the closed island is on screen, and rest after a minute without
+  input. Paused, they rest and dim, and the cover stays until the player
+  closes, as in NotchNook.
 - Far right: privacy dots, as on iPhone: green camera, orange microphone,
   blue screen sharing (the island widens by 22 px while any is shown).
 - Centre: the clock (follows GNOME's 12/24-hour setting).
@@ -169,7 +171,10 @@ on) and **Clear All** (trash) as small round buttons. Below, the full
 width: newest first, each card with its app icon (a symbolic one on a grey
 tile), the title with how long ago on the right, and one line of text;
 click to open it (the island closes), × (in the time's place under the
-pointer) to dismiss. Opening the page marks them seen. Empty: a bell, "No
+pointer) to dismiss. An app with several is folded into a stack, as on
+macOS: its newest card, the next card's edge under it, and "+2 more from
+Chrome"; clicking that unfolds them under the app's name with **Show
+less**. Opening the page marks them seen. Empty: a bell, "No
 notifications · You're all caught up".
 
 **Focus**. A white ring that fills clockwise as the phase runs (green

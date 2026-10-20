@@ -11,10 +11,10 @@ import Gtk from 'gi://Gtk';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-const DAEMON = 'io.github.isle.Daemon';
-const DAEMON_PATH = '/io/github/isle/Daemon';
-const POMODORO_INTERFACE = 'io.github.isle.Pomodoro1';
-const CLIPBOARD_INTERFACE = 'io.github.isle.Clipboard1';
+const DAEMON = 'io.github.zickrian.isle.Daemon';
+const DAEMON_PATH = '/io/github/zickrian/isle/Daemon';
+const POMODORO_INTERFACE = 'io.github.zickrian.isle.Pomodoro1';
+const CLIPBOARD_INTERFACE = 'io.github.zickrian.isle.Clipboard1';
 /** Edits to the timer are sent once typing pauses for this long. */
 const SAVE_DELAY_MS = 400;
 

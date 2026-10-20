@@ -442,6 +442,37 @@
 .isle-dnd-toggle:checked:hover { background-color: #6e6cf0; }
 .isle-notification-list { spacing: 6px; }
 
+/* An app's notifications folded into a stack, the next card's edge under it. */
+.isle-notification-peek {
+  height: 5px;
+  margin: 0 12px;
+  border-radius: 0 0 10px 10px;
+  background-color: #161618;
+}
+
+.isle-notification-more {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 12px 0 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.isle-notification-more:hover { color: #ffffff; }
+
+.isle-notification-group-header { padding: 2px 2px 0 4px; }
+.isle-notification-group-name { font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.6); }
+
+.isle-notification-less {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.8);
+  background-color: #2c2c2e;
+}
+
+.isle-notification-less:hover { background-color: #3a3a3c; color: #ffffff; }
+
 .isle-notification-row {
   border-radius: 12px;
   background-color: #1c1c1e;

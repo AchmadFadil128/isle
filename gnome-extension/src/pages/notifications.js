@@ -15,6 +15,26 @@ import {icon, iconButton, isSymbolic, label, setButtonIcon, setEnabled} from '..
 import {Page} from './page.js';
 
 /**
+ * Notifications by app (their source), in the order of each app's newest;
+ * within an app, newest first.
+ */
+function groupByApp(notifications) {
+    const groups = new Map();
+    for (const notification of notifications) {
+        const source = notification.source ?? notification;
+        if (!groups.has(source))
+            groups.set(source, []);
+        groups.get(source).push(notification);
+    }
+    return groups;
+}
+
+/** The app's name for a stack, e.g. "Chrome". */
+function appName(source, notification) {
+    return source?.title || notification.title || 'this app';
+}
+
+/**
  * The app's icon: a colour app icon as it is, a symbolic one on a grey
  * rounded square, the way macOS shows system notifications.
  */
@@ -39,6 +59,8 @@ class NotificationsPage extends Page {
         });
         this.name = 'notifications';
         this._center = center;
+        /** Apps whose stack of notifications is unfolded. */
+        this._openGroups = new Set();
 
         this.add_child(this._buildBar());
         this.add_child(this._buildList());
@@ -108,14 +130,63 @@ class NotificationsPage extends Page {
         setEnabled(this._clearButton, notifications.some(n => !n.resident));
 
         this._list.destroy_all_children();
-        for (const notification of notifications)
-            this._list.add_child(this._row(notification));
+        const groups = groupByApp(notifications);
+        // Forget unfolded stacks of apps that have nothing left.
+        for (const source of this._openGroups) {
+            if (!groups.has(source))
+                this._openGroups.delete(source);
+        }
+        for (const [source, items] of groups) {
+            if (items.length === 1)
+                this._list.add_child(this._row(items[0]));
+            else if (this._openGroups.has(source))
+                this._addOpenGroup(source, items);
+            else
+                this._list.add_child(this._stack(source, items));
+        }
         this._empty.visible = notifications.length === 0;
         this._scroll.visible = notifications.length > 0;
 
         // Seen while open: no unread dot for something already on screen.
         if (this.active)
             this._center.acknowledgeAll();
+    }
+
+    /**
+     * An app's notifications folded into a stack, like macOS: the newest on
+     * top, the edge of the next peeking out under it, and "+2 more from …".
+     */
+    _stack(source, items) {
+        const stack = new St.BoxLayout({vertical: true, style_class: 'isle-notification-stack'});
+        stack.add_child(this._row(items[0]));
+        stack.add_child(new St.Widget({style_class: 'isle-notification-peek', x_expand: true}));
+        const more = new St.Button({
+            style_class: 'isle-notification-more',
+            label: `+${items.length - 1} more from ${appName(source, items[0])}`,
+            x_align: Clutter.ActorAlign.START,
+            can_focus: true,
+        });
+        more.connect('clicked', () => {
+            this._openGroups.add(source);
+            this._update();
+        });
+        stack.add_child(more);
+        return stack;
+    }
+
+    /** An unfolded stack: the app's name with "Show less", then each one. */
+    _addOpenGroup(source, items) {
+        const header = new St.BoxLayout({style_class: 'isle-notification-group-header'});
+        header.add_child(label(appName(source, items[0]), 'isle-notification-group-name', {x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
+        const less = new St.Button({style_class: 'isle-notification-less', label: 'Show less', can_focus: true});
+        less.connect('clicked', () => {
+            this._openGroups.delete(source);
+            this._update();
+        });
+        header.add_child(less);
+        this._list.add_child(header);
+        for (const notification of items)
+            this._list.add_child(this._row(notification));
     }
 
     _updateDnd() {

@@ -6,6 +6,22 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Notifications from one app fold into a stack, as on macOS: the newest
+  card, the next one's edge under it and "+2 more from Chrome", which
+  unfolds them under the app's name with "Show less".
+
+### Changed
+
+- A paused song keeps its cover in the closed island, with the music bars
+  resting and dimmed, until the player closes.
+- `isle-shelf` draws on the CPU (GTK's cairo renderer): about 28 MB instead
+  of 40. A renderer set with `GSK_RENDERER` is kept.
+- D-Bus names move to the project's own namespace,
+  `io.github.zickrian.isle.*` (`/io/github/zickrian/isle/…`).
+  `./install.sh` removes the activation files of the old names.
+
 ## [0.1.0] - 2026-10-20
 
 The first release.

@@ -45,9 +45,13 @@ if [ "$SHELF" = 1 ]; then
 fi
 
 step "Installing services"
-install_service io.github.isle.Daemon.service "$DATA/dbus-1/services"
-if [ "$SHELF" = 1 ]; then
-    install_service io.github.isle.ShelfWindow.service "$DATA/dbus-1/services"
+# The D-Bus names before 0.1.0.
+rm -f "$DATA/dbus-1/services/io.github.isle.Daemon.service" \
+      "$DATA/dbus-1/services/io.github.isle.ShelfWindow.service"
+install_service io.github.zickrian.isle.Daemon.service "$DATA/dbus-1/services"
+# Also for a helper from an earlier install, when it was not rebuilt now.
+if [ "$SHELF" = 1 ] || [ -x "$BINDIR/isle-shelf" ]; then
+    install_service io.github.zickrian.isle.ShelfWindow.service "$DATA/dbus-1/services"
 fi
 install_service isled.service "$CONFIG/systemd/user"
 install -Dm644 README.md "$DATA/doc/isle/README.md"

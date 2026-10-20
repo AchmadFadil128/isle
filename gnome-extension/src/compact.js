@@ -2,7 +2,7 @@
 
 // The resting island: the clock, flanked by live activities (a screen
 // recording or focus timer on the left, music on the right, privacy dots at
-// the far right).
+// the far right). A paused song keeps its cover, with the bars at rest.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -18,6 +18,8 @@ const SIZES = {
     hanging: {clock: 164, activities: 256, art: 24, artRadius: 6, ring: 20, bars: 16, moon: 13},
     inBar: {clock: 144, activities: 232, art: 22, artRadius: 6, ring: 18, bars: 14, moon: 12},
 };
+/** The music bars' opacity while the song is paused. */
+const PAUSED_OPACITY = 110;
 /** How often the focus ring is redrawn; it moves too slowly to need more. */
 const RING_REFRESH_S = 5;
 /** The focus timer's colour: white while focusing, green on a break. */
@@ -141,6 +143,8 @@ export const CompactView = GObject.registerClass({
     _refresh() {
         const {nowPlaying, pomodoro} = this._daemon.state;
         const playing = Playback.isPlaying(nowPlaying);
+        // A paused song stays, like NotchNook, until its player closes.
+        const hasTrack = Playback.hasTrack(nowPlaying);
         const timerActive = pomodoro && pomodoro.phase !== 'idle';
         const recording = this._privacy.recording;
         const widthBefore = this.preferredWidth;
@@ -153,7 +157,7 @@ export const CompactView = GObject.registerClass({
             left = this._recordingDot;
         else if (timerActive)
             left = this._ring;
-        else if (playing)
+        else if (hasTrack)
             left = this._art;
         else if (this._unseen)
             left = this._dot;
@@ -161,7 +165,9 @@ export const CompactView = GObject.registerClass({
             left = this._moon;
         if (this._left.child !== left)
             this._left.child = left;
-        this._right.child = playing ? this._bars : null;
+        this._right.child = hasTrack ? this._bars : null;
+        // Paused: the bars rest, dimmed.
+        this._bars.ease({opacity: playing ? 255 : PAUSED_OPACITY, duration: 200});
         this._syncBars();
         this._privacyDots.update(this._showingPrivacy() ? this._privacy : {});
         this._privacyBalance.visible = this._privacyDots.visible;
@@ -173,7 +179,7 @@ export const CompactView = GObject.registerClass({
         } else {
             this._cancel('ring');
         }
-        if (playing)
+        if (hasTrack)
             this._art.setPath(nowPlaying.art_path);
 
         if (recording) {

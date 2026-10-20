@@ -6,7 +6,7 @@ After=graphical-session.target
 
 [Service]
 Type=dbus
-BusName=io.github.isle.Daemon
+BusName=io.github.zickrian.isle.Daemon
 ExecStart=@BINDIR@/isled
 Restart=on-failure
 RestartSec=2

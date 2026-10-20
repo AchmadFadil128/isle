@@ -12,10 +12,10 @@ import GLib from 'gi://GLib';
 
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
-const BUS_NAME = 'io.github.isle.ShelfWindow';
-const OBJECT_PATH = '/io/github/isle/ShelfWindow';
+const BUS_NAME = 'io.github.zickrian.isle.ShelfWindow';
+const OBJECT_PATH = '/io/github/zickrian/isle/ShelfWindow';
 const ShelfWindowProxy = Gio.DBusProxy.makeProxyWrapper(`
-<node><interface name="io.github.isle.ShelfWindow1">
+<node><interface name="io.github.zickrian.isle.ShelfWindow1">
   <method name="Show">
     <arg name="x" type="i" direction="in"/><arg name="y" type="i" direction="in"/>
     <arg name="width" type="i" direction="in"/><arg name="height" type="i" direction="in"/>

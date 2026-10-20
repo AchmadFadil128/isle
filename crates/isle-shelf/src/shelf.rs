@@ -13,9 +13,9 @@ use serde::Deserialize;
 
 use crate::{tile, x11};
 
-const DAEMON: &str = "io.github.isle.Daemon";
-const DAEMON_PATH: &str = "/io/github/isle/Daemon";
-const SHELF_INTERFACE: &str = "io.github.isle.Shelf1";
+const DAEMON: &str = "io.github.zickrian.isle.Daemon";
+const DAEMON_PATH: &str = "/io/github/zickrian/isle/Daemon";
+const SHELF_INTERFACE: &str = "io.github.zickrian.isle.Shelf1";
 /// isled keeps this many files; a full shelf turns drops away.
 const CAPACITY: usize = 5;
 

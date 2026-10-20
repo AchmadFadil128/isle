@@ -57,7 +57,7 @@ impl PomodoroService {
     }
 }
 
-#[interface(name = "io.github.isle.Pomodoro1")]
+#[interface(name = "io.github.zickrian.isle.Pomodoro1")]
 impl PomodoroService {
     /// Starts a focus session, or resumes a paused phase.
     async fn start(

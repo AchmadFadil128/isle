@@ -35,7 +35,7 @@ impl ShelfService {
     }
 }
 
-#[interface(name = "io.github.isle.Shelf1")]
+#[interface(name = "io.github.zickrian.isle.Shelf1")]
 impl ShelfService {
     /// Adds local files by `file://` URI. Other URIs are rejected, but do not
     /// stop the rest: a drop mixing files with, say, a web link still shelves

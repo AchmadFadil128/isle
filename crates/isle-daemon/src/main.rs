@@ -3,7 +3,7 @@
 //! `isled`: the Isle background service.
 //!
 //! Everything the island shows that is not drawn by the desktop shell lives
-//! here, exposed on the session bus as `io.github.isle.Daemon`. See
+//! here, exposed on the session bus as `io.github.zickrian.isle.Daemon`. See
 //! `docs/dbus-api.md` for the interfaces.
 
 mod clipboard;
@@ -26,8 +26,8 @@ use crate::shelf::ShelfService;
 use crate::system::SystemService;
 use crate::todo::TodoService;
 
-const BUS_NAME: &str = "io.github.isle.Daemon";
-const OBJECT_PATH: &str = "/io/github/isle/Daemon";
+const BUS_NAME: &str = "io.github.zickrian.isle.Daemon";
+const OBJECT_PATH: &str = "/io/github/zickrian/isle/Daemon";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {

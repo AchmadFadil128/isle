@@ -78,7 +78,7 @@ impl MediaService {
     }
 }
 
-#[interface(name = "io.github.isle.Media1")]
+#[interface(name = "io.github.zickrian.isle.Media1")]
 impl MediaService {
     fn play_pause(&self) -> fdo::Result<()> {
         self.send(
