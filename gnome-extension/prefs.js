@@ -201,6 +201,8 @@ function fillIgnoredApps(group, settings) {
     const add = new Adw.ComboRow({
         title: 'Add an app',
         model: Gtk.StringList.new(['Choose…', ...apps.map(app => app.get_display_name())]),
+        // Search needs to know what text to match.
+        expression: new Gtk.PropertyExpression(Gtk.StringObject, null, 'string'),
         enable_search: true,
     });
     add.connect('notify::selected', () => {
@@ -232,6 +234,7 @@ function fillIgnoredApps(group, settings) {
         group.add(add);
     };
     group.add(add);
-    settings.connect(`changed::${key}`, refresh);
+    const changed = settings.connect(`changed::${key}`, refresh);
+    group.connect('destroy', () => settings.disconnect(changed));
     refresh();
 }

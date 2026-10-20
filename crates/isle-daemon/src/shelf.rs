@@ -8,7 +8,7 @@ use zbus::object_server::SignalEmitter;
 use zbus::{fdo, interface};
 
 use crate::clock::now_ms;
-use crate::store::Store;
+use crate::store::{Store, data_dir};
 
 pub struct ShelfService {
     shelf: Shelf,
@@ -22,6 +22,9 @@ impl ShelfService {
         // Files may have been moved or deleted while Isle was not running.
         if shelf.retain_existing(|item| file_exists(&item.uri)) {
             store.save(&shelf);
+        }
+        if !store.lost_track() {
+            remove_unlisted_copies(&shelf);
         }
         Self { shelf, store }
     }
@@ -92,6 +95,7 @@ impl ShelfService {
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> fdo::Result<()> {
         if self.shelf.remove(uri) {
+            forget(uri);
             self.changed(&emitter).await?;
         }
         Ok(())
@@ -101,6 +105,9 @@ impl ShelfService {
         &mut self,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> fdo::Result<()> {
+        for item in self.shelf.items() {
+            forget(&item.uri);
+        }
         self.shelf.clear();
         Ok(self.changed(&emitter).await?)
     }
@@ -121,6 +128,40 @@ impl ShelfService {
     fn items(&self) -> String {
         serde_json::to_string(self.shelf.items()).unwrap_or_default()
     }
+}
+
+/// Images sent from the clipboard history are copied into a folder of the
+/// shelf's own (so they outlive the history); taking one off the shelf
+/// deletes that copy. The user's own files are never touched.
+fn forget(uri: &str) {
+    let Some(path) = Url::parse(uri).ok().and_then(|url| url.to_file_path().ok()) else {
+        return;
+    };
+    if path.starts_with(owned_dir())
+        && let Err(err) = std::fs::remove_file(&path)
+    {
+        log::debug!("could not remove {}: {err}", path.display());
+    }
+}
+
+/// Deletes copies in the shelf's folder that are no longer on the shelf
+/// (taken off while isled was not running, or refused because it was full).
+fn remove_unlisted_copies(shelf: &Shelf) {
+    let Ok(entries) = std::fs::read_dir(owned_dir()) else {
+        return;
+    };
+    for path in entries.flatten().map(|entry| entry.path()) {
+        let listed = Url::from_file_path(&path)
+            .is_ok_and(|url| shelf.items().iter().any(|item| item.uri == url.as_str()));
+        if !listed && let Err(err) = std::fs::remove_file(&path) {
+            log::debug!("could not remove {}: {err}", path.display());
+        }
+    }
+}
+
+/// Where copies made for the shelf live: `~/.local/share/isle/shelf`.
+fn owned_dir() -> std::path::PathBuf {
+    data_dir().join("shelf")
 }
 
 fn file_exists(uri: &str) -> bool {

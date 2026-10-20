@@ -93,9 +93,14 @@ export class ShelfHelper extends Signals.EventEmitter {
             // A helper that cannot start (removed, broken install) or hangs
             // (no display to open) is not tried again; the page keeps its
             // own tiles until next login.
-            if (CANNOT_START.some(code => error.matches(Gio.DBusError, code)) ||
-                error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.TIMED_OUT))
+            if (error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.TIMED_OUT)) {
+                // It may still get to the Show later; a Hide queued behind
+                // it keeps the window from staying up for good.
+                this._proxy.HideRemote(() => {});
                 this._proxy = null;
+            } else if (CANNOT_START.some(code => error.matches(Gio.DBusError, code))) {
+                this._proxy = null;
+            }
             // Forget the placement so the next sync tries again.
             this._shownRect = null;
             this._page.helperActive = false;
@@ -150,6 +155,13 @@ export class ShelfHelper extends Signals.EventEmitter {
                             this.emit('drag-end');
                     });
                     this._signalProxy = proxy;
+                    // A helper that quits mid-drag never says the drag ended.
+                    this._ownerId = proxy.connect('notify::g-name-owner', () => {
+                        if (this._dragging && !proxy.g_name_owner) {
+                            this._dragging = false;
+                            this.emit('drag-end');
+                        }
+                    });
                     this.sync();
                 }, this._cancellable, Gio.DBusProxyFlags.DO_NOT_AUTO_START_AT_CONSTRUCTION);
             });
@@ -187,8 +199,10 @@ export class ShelfHelper extends Signals.EventEmitter {
         this._dnd.disconnect(this._dndPosition);
         this._dnd.disconnect(this._dndLeave);
         this._hide();
-        if (this._draggingId)
+        if (this._draggingId) {
             this._signalProxy.disconnectSignal(this._draggingId);
+            this._signalProxy.disconnect(this._ownerId);
+        }
         this._proxy = null;
     }
 }

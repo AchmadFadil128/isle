@@ -77,7 +77,10 @@ export const ShelfPage = GObject.registerClass({
         this.watch(['clipboard'], () => this._refresh('clips'));
         this.watch(['shelf'], () => this._refresh('files'));
         this._settingsChanged = settings.connect('changed::clipboard-history', () => this._refresh('clips'));
-        this.connect('destroy', () => settings.disconnect(this._settingsChanged));
+        this.connect('destroy', () => {
+            this._destroyed = true;
+            settings.disconnect(this._settingsChanged);
+        });
         this._updateClips();
         this._updateFilesHint();
         this.showTab('clipboard');
@@ -184,6 +187,10 @@ export const ShelfPage = GObject.registerClass({
         }
         this._clipboardControls.visible = name === 'clipboard';
         this._filesHint.visible = name === 'files';
+        // Files are dragged with the pointer, which apps (the drag-and-drop
+        // helper included) only get while the island lets go of the keyboard.
+        if (name === 'files')
+            this.emit('request-keyboard', false);
         if (focusSearch) {
             this._search.text = '';
             this._search.grab_key_focus();
@@ -285,7 +292,8 @@ export const ShelfPage = GObject.registerClass({
     }
 
     async _onActivated(item, paste) {
-        if (!await this._history.copy(item, {touch: paste}))
+        // The extension may have stopped while the item was fetched.
+        if (!await this._history.copy(item, {touch: paste}) || this._destroyed)
             return;
         if (paste) {
             this.emit('request-close');
@@ -326,7 +334,9 @@ export const ShelfPage = GObject.registerClass({
     }
 
     onDeactivate() {
-        for (const id of this._copied)
+        // Skipping any removed or cleared since.
+        const items = this.daemon.state.clipboard ?? [];
+        for (const id of this._copied.filter(copied => items.some(item => item.id === copied)))
             this.daemon.call('clipboard', 'Touch', id);
         this._copied = [];
         // Each visit starts with an empty search.

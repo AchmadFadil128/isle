@@ -16,13 +16,13 @@ use image::ImageFormat;
 use isle_core::clipboard::{
     Added, Clip, ClipError, ClipboardHistory, MAX_PINNED, PinError, content_hash,
 };
-use log::debug;
+use log::{debug, warn};
 use serde::Serialize;
 use zbus::object_server::SignalEmitter;
 use zbus::{fdo, interface};
 
 use crate::clock::now_ms;
-use crate::store::{Store, data_dir};
+use crate::store::{Store, create_private_dir, data_dir, write_private};
 
 /// Largest image accepted, in bytes of PNG.
 const MAX_IMAGE_BYTES: usize = 16 * 1024 * 1024;
@@ -55,8 +55,15 @@ impl ClipboardService {
         if history.items().len() != before {
             store.save(&history);
         }
-        // Without the real list, every image would look like an orphan.
-        if !store.is_read_only() {
+        // Folders made by older versions were readable by others.
+        if clips.dir.is_dir()
+            && let Err(err) = create_private_dir(&clips.dir)
+        {
+            warn!("could not make {} private: {err}", clips.dir.display());
+        }
+        // Without the real list (unreadable, or corrupt and set aside), every
+        // image would look like an orphan.
+        if !store.lost_track() {
             clips.remove_orphans(&history.image_hashes().collect());
         }
         Self {
@@ -310,7 +317,7 @@ impl ClipFiles {
 
         let io_error =
             |err: io::Error| fdo::Error::IOError(format!("could not store image: {err}"));
-        fs::create_dir_all(&self.dir).map_err(io_error)?;
+        create_private_dir(&self.dir).map_err(io_error)?;
         write_replacing(&self.image(hash), png).map_err(io_error)?;
         if width <= THUMB_WIDTH && height <= THUMB_HEIGHT {
             // Already small enough; scaling it up would only blur it.
@@ -365,7 +372,7 @@ impl ClipFiles {
 fn write_replacing(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut temp = path.as_os_str().to_owned();
     temp.push(".tmp");
-    fs::write(&temp, bytes)?;
+    write_private(Path::new(&temp), bytes)?;
     fs::rename(&temp, path)
 }
 

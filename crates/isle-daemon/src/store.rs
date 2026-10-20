@@ -3,8 +3,9 @@
 //! Small JSON files under the user's data directory, one per feature.
 
 use std::fs;
-use std::io::Write;
+use std::io::{self, Write};
 use std::marker::PhantomData;
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use log::{debug, warn};
@@ -16,6 +17,9 @@ pub struct Store<T> {
     /// Set when the file exists but could not be read (e.g. permission
     /// denied). Saving would replace data we never saw, so it is skipped.
     read_only: bool,
+    /// Set when the file was corrupt and moved aside: the loaded value is a
+    /// fresh default, not what the user had.
+    fell_back: bool,
     _value: PhantomData<T>,
 }
 
@@ -29,6 +33,7 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
         Self {
             path,
             read_only: false,
+            fell_back: false,
             _value: PhantomData,
         }
     }
@@ -53,6 +58,7 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
         };
         serde_json::from_slice(&bytes).unwrap_or_else(|err| {
             let backup = self.path.with_extension("json.corrupt");
+            self.fell_back = true;
             match fs::rename(&self.path, &backup) {
                 Ok(()) => warn!(
                     "{} is invalid ({err}); moved to {}",
@@ -72,10 +78,11 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
         })
     }
 
-    /// Whether saving is off because the stored file could not be read, so
-    /// the loaded value is a stand-in rather than what the user has.
-    pub fn is_read_only(&self) -> bool {
-        self.read_only
+    /// Whether the loaded value is a stand-in for data that could not be
+    /// read or was corrupt, so files it no longer mentions may still belong
+    /// to the user's real data (in the `.corrupt` copy).
+    pub fn lost_track(&self) -> bool {
+        self.read_only || self.fell_back
     }
 
     /// Saves atomically, so a crash mid-write never leaves a truncated file.
@@ -90,12 +97,37 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
     }
 }
 
+/// Creates `dir` (and its parents) readable by the user alone: the clipboard
+/// history can hold things worth keeping private.
+pub fn create_private_dir(dir: &Path) -> io::Result<()> {
+    fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)?;
+    // Created by an older version with the default mode.
+    fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
+}
+
+/// Writes a file only the user can read.
+pub fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    private_file(path)?.write_all(bytes)
+}
+
+fn private_file(path: &Path) -> io::Result<fs::File> {
+    fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+}
+
 fn write_atomic(path: &Path, value: &impl Serialize) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+        create_private_dir(parent)?;
     }
     let temp = path.with_extension("json.tmp");
-    let mut file = fs::File::create(&temp)?;
+    let mut file = private_file(&temp)?;
     serde_json::to_writer_pretty(&mut file, value)?;
     file.write_all(b"\n")?;
     file.sync_all()?;

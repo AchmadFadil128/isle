@@ -98,7 +98,10 @@ export class ClipboardHistory {
     }
 
     _addText(text, appId) {
-        if (!text?.trim() || text.length > MAX_TEXT_BYTES)
+        if (!text?.trim())
+            return;
+        // The limit is in bytes; only long texts need counting.
+        if (text.length * 3 > MAX_TEXT_BYTES && new TextEncoder().encode(text).length > MAX_TEXT_BYTES)
             return;
         this._daemon.call('clipboard', 'AddText', text, appId);
     }
@@ -128,7 +131,7 @@ export class ClipboardHistory {
         default: {
             const result = await this._daemon.call('clipboard', 'GetText', item.id);
             text = result?.[0];
-            if (text === undefined)
+            if (text === undefined || this._destroyed)
                 return false;
         }
         }
@@ -173,6 +176,8 @@ export class ClipboardHistory {
     }
 
     _later(ms, callback) {
+        if (this._destroyed)
+            return;
         const id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
             this._timeouts.delete(id);
             callback();
@@ -182,6 +187,7 @@ export class ClipboardHistory {
     }
 
     destroy() {
+        this._destroyed = true;
         this._selection.disconnect(this._ownerChanged);
         this._timeouts.forEach(id => GLib.source_remove(id));
         this._timeouts.clear();

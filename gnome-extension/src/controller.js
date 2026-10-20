@@ -294,8 +294,9 @@ export class Controller {
             this._daemon.call('media', 'PlayPause');
             return Clutter.EVENT_STOP;
         case Clutter.BUTTON_SECONDARY:
-            // Brings the music player to the front.
-            if (!Playback.hasTrack(this._daemon.state.nowPlaying))
+            // Brings the music player to the front, from the closed island
+            // (the open one has its own controls, cards and fields).
+            if (this._expandWanted || !Playback.hasTrack(this._daemon.state.nowPlaying))
                 return Clutter.EVENT_PROPAGATE;
             this.collapse();
             this._daemon.call('media', 'Raise');
@@ -371,7 +372,8 @@ export class Controller {
             this._keyboardGrab = grab;
             // Clicking anywhere else ends typing and closes the island.
             this._stageCapture = global.stage.connect('captured-event', (_stage, event) => {
-                if (event.type() === Clutter.EventType.BUTTON_PRESS &&
+                // The shelf helper's window lies over the island: inside too.
+                if (event.type() === Clutter.EventType.BUTTON_PRESS && !this._shelfHelper.containsPointer() &&
                     !this._island.contains(global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, ...event.get_coords()))) {
                     this.collapse();
                 }

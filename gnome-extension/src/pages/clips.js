@@ -204,9 +204,12 @@ export const ClipsView = GObject.registerClass({
             this._addCards(this._selected + 1 - this._cards.length);
         this._syncSelection();
         // Keep the selected card in view.
-        const card = this._cards[this._selected];
+        // Cards just drawn have no position yet; all are the same width.
+        const first = this._cards[0];
+        const spacing = this._strip.get_theme_node().get_length('spacing');
+        const width = first.width;
+        const x = this._selected * (width + spacing);
         const adjustment = this._scroll.hadjustment;
-        const [x, width] = [card.x, card.width];
         if (x < adjustment.value)
             adjustment.ease(x, {duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
         else if (x + width > adjustment.value + adjustment.page_size)
@@ -411,6 +414,27 @@ export const ClipsView = GObject.registerClass({
         }
     }
 
+    /**
+     * Puts a copy of a clipboard image on the shelf, under a readable name.
+     * The history's own file goes when the item is pruned; the copy stays
+     * until it is taken off the shelf (isled then deletes it).
+     */
+    _shelveImage(item) {
+        const dir = GLib.build_filenamev([GLib.get_user_data_dir(), 'isle', 'shelf']);
+        GLib.mkdir_with_parents(dir, 0o700);
+        const stamp = GLib.DateTime.new_now_local().format('%Y-%m-%d at %H.%M.%S');
+        const target = Gio.File.new_for_path(GLib.build_filenamev([dir, `Clipboard image ${stamp}.png`]));
+        Gio.File.new_for_path(item.image).copy_async(target, Gio.FileCopyFlags.OVERWRITE,
+            GLib.PRIORITY_DEFAULT, null, null, (source, result) => {
+                try {
+                    source.copy_finish(result);
+                    this._daemon.call('shelf', 'Add', [target.get_uri()]);
+                } catch (e) {
+                    console.warn(`Isle: could not put the image on the shelf: ${e.message}`);
+                }
+            });
+    }
+
     /** Pin, a hand-off and × in the top-right corner, shown on hover. */
     _actions(item, card) {
         const actions = new St.BoxLayout({
@@ -421,12 +445,10 @@ export const ClipsView = GObject.registerClass({
             y_align: Clutter.ActorAlign.START,
             opacity: 0,
         });
-        const button = (iconName, accessibleName, onClick) => {
-            const widget = iconButton(iconName, 'isle-clip-action', onClick, {size: 11, accessibleName});
-            // Keep a click on a button from also copying the card.
-            widget.connect('button-release-event', () => Clutter.EVENT_STOP);
-            return widget;
-        };
+        // St.Button stops the release it handles, so a click on one of these
+        // never also copies the card.
+        const button = (iconName, accessibleName, onClick) =>
+            iconButton(iconName, 'isle-clip-action', onClick, {size: 11, accessibleName});
 
         // Pinned items stay at the front and survive Clear all.
         actions.add_child(button(item.pinned ? 'isle-pin-fill' : 'isle-pin',
@@ -444,14 +466,18 @@ export const ClipsView = GObject.registerClass({
 
         if (item.kind === 'image' || item.kind === 'files') {
             actions.add_child(button('isle-shelf', 'Add to the Files tab', () => {
-                const uris = item.kind === 'image' ? [GLib.filename_to_uri(item.image, null)] : item.uris;
                 const shelf = this._daemon.state.shelf ?? [];
-                const fresh = uris.filter(uri => !shelf.some(file => file.uri === uri));
-                if (shelf.length + fresh.length > SHELF_CAPACITY) {
+                const fresh = item.kind === 'image'
+                    ? 1
+                    : item.uris.filter(uri => !shelf.some(file => file.uri === uri)).length;
+                if (shelf.length + fresh > SHELF_CAPACITY) {
                     this.flash(item, 'isle-shelf', 'Files is full');
                     return;
                 }
-                this._daemon.call('shelf', 'Add', uris);
+                if (item.kind === 'image')
+                    this._shelveImage(item);
+                else
+                    this._daemon.call('shelf', 'Add', item.uris);
                 this.flash(item, 'isle-shelf', 'Added to Files');
             }));
         } else {
@@ -465,9 +491,10 @@ export const ClipsView = GObject.registerClass({
         }
 
         actions.add_child(button('window-close-symbolic', 'Remove', () => {
-            card.ease({opacity: 0, scale_x: 0.9, scale_y: 0.9, duration: 150, onComplete: () => {
-                this._daemon.call('clipboard', 'Remove', item.id);
-            }});
+            // Removed at once; the card shrinks away until the list redraws.
+            this._daemon.call('clipboard', 'Remove', item.id);
+            card.reactive = false;
+            card.ease({opacity: 0, scale_x: 0.9, scale_y: 0.9, duration: 150});
         }));
         return actions;
     }
