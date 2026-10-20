@@ -29,7 +29,7 @@ import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
-import {Art, LevelBar, Ring, icon, pillButton} from './widgets.js';
+import {Art, LevelBar, Ring, icon, isSymbolic, pillButton} from './widgets.js';
 
 /** Narrowest and widest an alert gets; in between it fits its content. */
 const MIN_WIDTH = 220;
@@ -137,11 +137,13 @@ class PeekView extends St.Widget {
                 this._ring.progress = alert.ring;
             this._ringKey = ringKey;
         } else {
+            // An app's own colour icon stands alone; a symbolic one gets a badge.
+            const appIcon = alert.appIcon && !isSymbolic(gicon);
             this._icon.gicon = gicon;
-            this._icon.icon_size = alert.appIcon ? 34 : 18;
-            this._icon.style = alert.appIcon ? null : `color: ${color};`;
+            this._icon.icon_size = appIcon ? 34 : 18;
+            this._icon.style = appIcon ? null : `color: ${color};`;
             this._setChild(this._badge, this._icon);
-            this._badge.style_class = alert.appIcon ? '' : 'isle-peek-icon';
+            this._badge.style_class = appIcon ? '' : 'isle-peek-icon';
         }
         this._badge.style = this._badge.style_class
             ? badgeStyle(rgb, (alert.tone ?? 'neutral') === 'neutral')

@@ -11,8 +11,23 @@ import St from 'gi://St';
 
 import * as Format from '../format.js';
 import {notificationIcon, plainBody} from '../notifications.js';
-import {chipButton, iconButton, label, setChip} from '../widgets.js';
+import {chipButton, iconButton, isSymbolic, label, setChip} from '../widgets.js';
 import {Page} from './page.js';
+
+/**
+ * The app's icon: a colour app icon as it is, a symbolic one on a grey
+ * rounded square, the way macOS shows system notifications.
+ */
+function notificationBadge(gicon) {
+    gicon ??= new Gio.ThemedIcon({name: 'dialog-information-symbolic'});
+    if (!isSymbolic(gicon))
+        return new St.Icon({gicon, icon_size: 32, y_align: Clutter.ActorAlign.CENTER});
+    return new St.Bin({
+        style_class: 'isle-notification-glyph',
+        child: new St.Icon({gicon, icon_size: 18}),
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+}
 
 export const NotificationsPage = GObject.registerClass(
 class NotificationsPage extends Page {
@@ -59,7 +74,7 @@ class NotificationsPage extends Page {
         this._dndButton = chipButton('isle-bell', 'Do Not Disturb', () => {
             this._center.dnd = !this._center.dnd;
         }, 'isle-chip-dnd');
-        this._clearButton = chipButton('edit-clear-all-symbolic', 'Clear All', () => this._center.clearAll());
+        this._clearButton = chipButton('isle-trash', 'Clear All', () => this._center.clearAll());
         for (const button of [this._dndButton, this._clearButton]) {
             button.x_align = Clutter.ActorAlign.START;
             buttons.add_child(button);
@@ -112,25 +127,30 @@ class NotificationsPage extends Page {
         setChip(this._dndButton, {active: on, icon: on ? 'isle-moon' : 'isle-bell'});
     }
 
+    /**
+     * A card like macOS's: the app's icon, the title with its time on the
+     * right (a close button in its place under the pointer), the text below.
+     */
     _row(notification) {
         const content = new St.BoxLayout({style_class: 'isle-notification', x_expand: true});
-        content.add_child(new St.Icon({
-            gicon: notificationIcon(notification) ?? new Gio.ThemedIcon({name: 'dialog-information-symbolic'}),
-            icon_size: 26,
-            style_class: 'isle-notification-icon',
-            y_align: Clutter.ActorAlign.CENTER,
-        }));
+        content.add_child(notificationBadge(notificationIcon(notification)));
 
         const texts = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        const title = label(notification.title || notification.source?.title || '', 'isle-notification-title');
+        const header = new St.BoxLayout({style_class: 'isle-notification-header'});
+        const title = label(notification.title || notification.source?.title || '', 'isle-notification-title', {x_expand: true});
         const body = label(plainBody(notification).replace(/\s+/g, ' ').trim(), 'isle-notification-body');
-        for (const text of [title, body]) {
+        for (const text of [title, body])
             text.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-            texts.add_child(text);
-        }
         body.visible = body.text.length > 0;
+        // The time and the close button share one spot.
+        const corner = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
+        const time = label(Format.ago(notification.datetime), 'isle-notification-time', {x_align: Clutter.ActorAlign.END});
+        corner.add_child(time);
+        header.add_child(title);
+        header.add_child(corner);
+        texts.add_child(header);
+        texts.add_child(body);
         content.add_child(texts);
-        content.add_child(label(Format.ago(notification.datetime), 'isle-notification-time'));
 
         const row = new St.Button({style_class: 'isle-notification-row', child: content, x_expand: true, can_focus: true});
         row.connect('clicked', () => {
@@ -139,11 +159,17 @@ class NotificationsPage extends Page {
         });
 
         if (!notification.resident) {
-            const dismiss = iconButton('window-close-symbolic', 'isle-button-flat isle-task-remove',
-                () => notification.destroy(), {size: 11, accessibleName: 'Dismiss'});
+            const dismiss = iconButton('isle-close-symbolic', 'isle-button-flat isle-notification-dismiss',
+                () => notification.destroy(), {size: 10, accessibleName: 'Dismiss'});
+            dismiss.x_align = Clutter.ActorAlign.END;
             dismiss.opacity = 0;
-            row.connect('notify::hover', () => dismiss.ease({opacity: row.hover ? 255 : 0, duration: 120}));
-            content.add_child(dismiss);
+            dismiss.reactive = false;
+            corner.add_child(dismiss);
+            row.connect('notify::hover', () => {
+                dismiss.reactive = row.hover;
+                dismiss.ease({opacity: row.hover ? 255 : 0, duration: 120});
+                time.ease({opacity: row.hover ? 0 : 255, duration: 120});
+            });
         }
         return row;
     }

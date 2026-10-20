@@ -8,6 +8,15 @@ All notable changes to Isle are listed here. The format follows
 
 ### Added
 
+- One look across every page, as on macOS: Isle's own solid icons for
+  play, pause, skip, close, check, add and the folding arrows instead of
+  the theme's; controls are pills and cards share a 12 px corner; the
+  Clipboard / Files switch is a segmented control whose chosen segment is
+  raised.
+- Notification cards like macOS's: the app's icon (a system one on a grey
+  tile), the title with its time on the right, and a close button in the
+  time's place under the pointer. Lists fade out at an edge that scrolls
+  on instead of being cut.
 - Alerts look like iOS's: icon badges lit in the alert's colour with a soft
   gradient, and Caps Lock as its own icon with an "On" / "Off" pill.
 - Type like macOS: SF Pro where installed, else Inter, which the installer
@@ -15,7 +24,7 @@ All notable changes to Isle are listed here. The format follows
   tracking on large figures, medium-weight top bar text instead of the
   theme's bold, and the date without the year ("Tue 20 Oct").
 - Tabs in the open island's header, like NotchNook: one per page, the open
-  one named on a dark grey pill with a hairline edge, and a red dot while notifications are unseen.
+  one named on a dark grey pill, and a red dot while notifications are unseen.
   They replace the side arrows and page dots. The island
   reopens on the page picked last (for 5 minutes), and stays on the Shelf
   after a file was dragged onto it.

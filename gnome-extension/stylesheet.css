@@ -234,19 +234,16 @@
 .isle-tabs { spacing: 2px; }
 
 .isle-tab {
-  padding: 4px 9px;
-  border-radius: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
   color: #ffffff;
   transition-duration: 150ms;
 }
 
-/* The open tab sits on a dark grey with a hairline edge, like NotchNook's. */
-.isle-tab:hover { background-color: rgba(255, 255, 255, 0.05); }
-.isle-tab:checked {
-  background-color: rgba(255, 255, 255, 0.07);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-}
-.isle-tab:focus { box-shadow: inset 0 0 0 2px rgba(90, 171, 255, 0.8); }
+/* The open tab sits on a dark grey pill, like NotchNook's; no outlines. */
+.isle-tab:hover,
+.isle-tab:focus { background-color: rgba(255, 255, 255, 0.05); }
+.isle-tab:checked { background-color: rgba(255, 255, 255, 0.09); }
 .isle-tab-box { spacing: 6px; }
 .isle-tab-label { font-size: 13px; font-weight: 600; }
 
@@ -387,7 +384,8 @@
 .isle-tasks-column { spacing: 6px; }
 .isle-task-add { padding: 6px 12px; }
 .isle-task-add-icon { color: rgba(255, 255, 255, 0.5); padding-right: 8px; }
-.isle-task-scroll { padding: 6px 0; }
+/* Lists fade out at an edge that scrolls on, instead of being cut. */
+.isle-task-scroll { padding: 6px 0; -st-vfade-offset: 18px; }
 .isle-tasks-scroll { padding: 0 0 4px 0; -st-vfade-offset: 18px; }
 .isle-task-list { spacing: 4px; }
 
@@ -422,7 +420,7 @@
 
 .isle-task-section {
   padding: 5px 8px;
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.55);
@@ -445,8 +443,19 @@
 }
 
 .isle-notification-row:hover { background-color: #2c2c2e; }
-.isle-notification { spacing: 10px; padding: 7px 10px; }
-.isle-notification-title { font-size: 13px; font-weight: 700; }
+.isle-notification { spacing: 11px; padding: 9px 12px; }
+.isle-notification-header { spacing: 8px; }
+.isle-notification-title { font-size: 13px; font-weight: 600; }
+.isle-notification-dismiss { padding: 3px; color: rgba(255, 255, 255, 0.7); background-color: #3a3a3c; }
+
+/* A system notification's symbolic icon, on a tile the size of an app icon. */
+.isle-notification-glyph {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: #2c2c2e;
+  color: #ffffff;
+}
 .isle-notification-body { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
 .isle-notification-time { font-size: 12px; color: rgba(255, 255, 255, 0.4); }
 
@@ -459,7 +468,8 @@
 .isle-shelf-bar { spacing: 8px; }
 .isle-shelf-controls { spacing: 8px; }
 
-/* A macOS-style segmented control: the chosen segment is a raised pill. */
+/* A macOS-style segmented control: the chosen segment is a raised pill,
+ * lit from above with a soft shadow beneath (no outline). */
 .isle-segmented {
   padding: 3px;
   spacing: 2px;
@@ -476,8 +486,14 @@
   transition-duration: 120ms;
 }
 
-.isle-segment:hover { color: #ffffff; }
-.isle-segment:checked { background-color: #3a3a3c; color: #ffffff; }
+.isle-segment:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.05); }
+.isle-segment:checked {
+  color: #ffffff;
+  background-gradient-direction: vertical;
+  background-gradient-start: #4a4a4d;
+  background-gradient-end: #3a3a3c;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
 .isle-segmented-icons .isle-segment { padding: 4px 6px; }
 
 .isle-shelf-field { padding: 5px 12px; font-size: 12px; }
@@ -494,7 +510,7 @@
 .isle-clip {
   width: 136px;
   height: 96px;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 2px solid transparent;
   background-color: #1c1c1e;
   color: #ffffff;
@@ -539,7 +555,7 @@
 
 .isle-shelf-tile {
   width: 84px;
-  border-radius: 14px;
+  border-radius: 12px;
   color: #ffffff;
 }
 

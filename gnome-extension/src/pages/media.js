@@ -352,12 +352,12 @@ class MediaPage extends Page {
 
     _transport() {
         const row = new St.BoxLayout({style_class: 'isle-transport', y_align: Clutter.ActorAlign.CENTER});
-        const play = iconButton('media-playback-start-symbolic', 'isle-button-flat isle-play',
+        const play = iconButton('isle-play-symbolic', 'isle-button-flat isle-play',
             () => this.daemon.call('media', 'PlayPause'), {size: 22, accessibleName: 'Play or pause'});
-        row.add_child(iconButton('media-skip-backward-symbolic', 'isle-button-flat',
+        row.add_child(iconButton('isle-backward-symbolic', 'isle-button-flat',
             () => this.daemon.call('media', 'Previous'), {size: 18, accessibleName: 'Previous'}));
         row.add_child(play);
-        row.add_child(iconButton('media-skip-forward-symbolic', 'isle-button-flat',
+        row.add_child(iconButton('isle-forward-symbolic', 'isle-button-flat',
             () => this.daemon.call('media', 'Next'), {size: 18, accessibleName: 'Next'}));
         this._playButtons.push(play);
         return row;
@@ -490,7 +490,7 @@ class MediaPage extends Page {
             art.setPath(nowPlaying.art_path);
         this._updateTint(nowPlaying.art_path);
 
-        const playIcon = nowPlaying.status === 'Playing' ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic';
+        const playIcon = nowPlaying.status === 'Playing' ? 'isle-pause-symbolic' : 'isle-play-symbolic';
         for (const button of this._playButtons)
             setButtonIcon(button, playIcon);
 
@@ -523,7 +523,7 @@ class MediaPage extends Page {
                 texts.add_child(label(output.detail, 'isle-output-detail'));
             row.add_child(texts);
             // The current output is marked with a check, like macOS.
-            const check = new St.Icon({icon_name: 'object-select-symbolic', icon_size: 14, opacity: output.active ? 255 : 0, y_align: Clutter.ActorAlign.CENTER});
+            const check = new St.Icon({gicon: icon('isle-check-symbolic'), icon_size: 14, opacity: output.active ? 255 : 0, y_align: Clutter.ActorAlign.CENTER});
             row.add_child(check);
 
             const button = new St.Button({

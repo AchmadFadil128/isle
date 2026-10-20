@@ -254,6 +254,15 @@ class Bars extends St.BoxLayout {
     }
 });
 
+/** Whether `gicon` is a one-colour (symbolic) icon rather than an app's. */
+export function isSymbolic(gicon) {
+    if (gicon instanceof Gio.ThemedIcon)
+        return gicon.get_names().some(name => name.endsWith('-symbolic'));
+    if (gicon instanceof Gio.FileIcon)
+        return Boolean(gicon.get_file().get_basename()?.includes('-symbolic'));
+    return false;
+}
+
 /**
  * Whether the image at `path` looks like an icon rather than a cover: its
  * corners are see-through. Covers are opaque all the way to the edge.

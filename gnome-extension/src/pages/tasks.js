@@ -68,7 +68,7 @@ class TasksPage extends Page {
             can_focus: true,
             x_expand: true,
         });
-        this._entry.set_primary_icon(new St.Icon({gicon: icon('list-add-symbolic'), icon_size: 14, style_class: 'isle-task-add-icon'}));
+        this._entry.set_primary_icon(new St.Icon({gicon: icon('isle-plus-symbolic'), icon_size: 14, style_class: 'isle-task-add-icon'}));
         const text = this._entry.clutter_text;
         text.connect('activate', () => this._add());
         // Typing needs the keyboard, which the shell only gets on request.
@@ -175,7 +175,7 @@ class TasksPage extends Page {
 
         const check = new St.Button({
             style_class: 'isle-task-check',
-            child: new St.Icon({gicon: icon('object-select-symbolic'), icon_size: 11}),
+            child: new St.Icon({gicon: icon('isle-check-symbolic'), icon_size: 11}),
             checked: task.done,
             accessible_name: task.done ? 'Mark as not done' : 'Mark as done',
             y_align: Clutter.ActorAlign.CENTER,
@@ -193,7 +193,7 @@ class TasksPage extends Page {
         row.add_child(title);
 
         // × appears while the pointer is on the row.
-        const remove = iconButton('window-close-symbolic', 'isle-button-flat isle-task-remove',
+        const remove = iconButton('isle-close-symbolic', 'isle-button-flat isle-task-remove',
             () => this.daemon.call('todo', 'Remove', task.id), {size: 11, accessibleName: 'Remove task'});
         remove.opacity = 0;
         row.connect('notify::hover', () => remove.ease({opacity: row.hover ? 255 : 0, duration: 120}));
@@ -204,7 +204,7 @@ class TasksPage extends Page {
     /** "Completed · 3", folding the finished tasks in and out. */
     _doneHeader(count) {
         const box = new St.BoxLayout({style_class: 'isle-task-section-box'});
-        box.add_child(new St.Icon({gicon: icon(this._showDone ? 'pan-down-symbolic' : 'pan-end-symbolic'), icon_size: 12}));
+        box.add_child(new St.Icon({gicon: icon(this._showDone ? 'isle-chevron-down-symbolic' : 'isle-chevron-right-symbolic'), icon_size: 12}));
         box.add_child(label(`Completed · ${count}`, 'isle-task-section-label'));
         const header = new St.Button({
             style_class: 'isle-task-section',

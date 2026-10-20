@@ -54,7 +54,7 @@ class TimerPage extends Page {
         const buttons = new St.BoxLayout({x_align: Clutter.ActorAlign.CENTER, style_class: 'isle-timer-buttons'});
         this._shortBreak = chipButton('isle-coffee', 'Short Break',
             () => daemon.call('pomodoro', 'StartPhase', 'short_break'), 'isle-chip-break');
-        this._play = iconButton('media-playback-start-symbolic', 'isle-play-pill', () => this._toggle(),
+        this._play = iconButton('isle-play-symbolic', 'isle-play-pill', () => this._toggle(),
             {size: 16, accessibleName: 'Start or pause'});
         this._focus = chipButton('isle-target', 'Focus Time',
             () => daemon.call('pomodoro', 'StartPhase', 'focus'), 'isle-chip-focus');
@@ -94,7 +94,7 @@ class TimerPage extends Page {
         this._stats.visible = sessions > 0;
         this._stats.text = `Today · ${sessions} ${sessions === 1 ? 'session' : 'sessions'} · ${Format.hoursMinutes(state.today_focus_ms ?? 0)}`;
 
-        setButtonIcon(this._play, state.running ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic');
+        setButtonIcon(this._play, state.running ? 'isle-pause-symbolic' : 'isle-play-symbolic');
         // The stopwatch fills in while running; reset only acts once started.
         this._clock.gicon = icon(state.running ? 'isle-timer-fill' : 'isle-timer');
         setEnabled(this._reset, !idle);

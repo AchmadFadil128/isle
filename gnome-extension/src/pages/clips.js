@@ -490,7 +490,7 @@ export const ClipsView = GObject.registerClass({
             }));
         }
 
-        actions.add_child(button('window-close-symbolic', 'Remove', () => {
+        actions.add_child(button('isle-close-symbolic', 'Remove', () => {
             // Removed at once; the card shrinks away until the list redraws.
             this._daemon.call('clipboard', 'Remove', item.id);
             card.reactive = false;

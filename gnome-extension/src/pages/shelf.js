@@ -295,7 +295,7 @@ export const ShelfPage = GObject.registerClass({
             this.emit('request-close');
             this._history.paste();
         } else {
-            this._clips.flash(item, 'object-select-symbolic', 'Copied');
+            this._clips.flash(item, 'isle-check-symbolic', 'Copied');
             this._copied = [...this._copied.filter(id => id !== item.id), item.id];
         }
     }

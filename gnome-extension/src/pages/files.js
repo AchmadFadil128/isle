@@ -86,7 +86,7 @@ class FilesView extends St.Widget {
         });
 
         // × in the tile's corner while hovered, as in the helper's shelf.
-        const remove = iconButton('window-close-symbolic', 'isle-shelf-remove',
+        const remove = iconButton('isle-close-symbolic', 'isle-shelf-remove',
             () => this._daemon.call('shelf', 'Remove', item.uri), {size: 10, accessibleName: 'Remove from the shelf'});
         // BinLayout only honours the alignment of children that expand.
         remove.set({x_expand: true, y_expand: true, x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.START, opacity: 0});
