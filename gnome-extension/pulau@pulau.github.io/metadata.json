@@ -1,0 +1,10 @@
+{
+  "uuid": "pulau@pulau.github.io",
+  "name": "Pulau",
+  "description": "A dynamic island for the top bar: music with synced lyrics, a focus timer, tasks, a file shelf, charging and system alerts.",
+  "shell-version": [
+    "46"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.pulau",
+  "version-name": "0.1.0"
+}

@@ -1,0 +1,127 @@
+// The file shelf. GNOME Shell itself cannot take part in drag and drop with
+// apps, so when the `pulau-shelf` helper is installed it draws the shelf in a
+// small window placed exactly over this page. Without it, the page shows the
+// shelf read-only: click a file to open it.
+
+import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
+import GObject from 'gi://GObject';
+import Gio from 'gi://Gio';
+import Pango from 'gi://Pango';
+import St from 'gi://St';
+
+import {icon, label} from '../widgets.js';
+import {Page} from './page.js';
+
+const TILE_ICON_SIZE = 40;
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'];
+
+export const ShelfPage = GObject.registerClass({
+    Signals: {'helper-area-changed': {}},
+}, class ShelfPage extends Page {
+    _init(daemon, {height}) {
+        super._init(daemon, {
+            style_class: 'pulau-page pulau-shelf',
+            layout_manager: new Clutter.BinLayout(),
+            height,
+        });
+        this.name = 'shelf';
+        this.iconName = 'pulau-shelf';
+        this._helperActive = false;
+
+        this._tiles = new St.BoxLayout({style_class: 'pulau-shelf-tiles'});
+        this._scroll = new St.ScrollView({
+            hscrollbar_policy: St.PolicyType.EXTERNAL,
+            vscrollbar_policy: St.PolicyType.NEVER,
+            x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._scroll.set_child(this._tiles);
+        this.add_child(this._scroll);
+
+        this._empty = new St.BoxLayout({
+            vertical: true,
+            style_class: 'pulau-empty',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._empty.add_child(new St.Icon({gicon: icon('pulau-shelf'), icon_size: 28, style_class: 'pulau-empty-icon'}));
+        this._emptyTitle = label('Drop files here', 'pulau-empty-title', {x_align: Clutter.ActorAlign.CENTER});
+        this._emptyHint = label('', 'pulau-empty-hint', {x_align: Clutter.ActorAlign.CENTER});
+        this._empty.add_child(this._emptyTitle);
+        this._empty.add_child(this._emptyHint);
+        this.add_child(this._empty);
+
+        this.watch(['shelf'], () => this._update());
+        this._update();
+    }
+
+    get headerTitle() {
+        return 'Shelf';
+    }
+
+    /**
+     * While the helper window covers this page, the page draws nothing
+     * itself so the two never show through each other.
+     */
+    set helperActive(active) {
+        this._helperActive = active;
+        this._update();
+    }
+
+    _update() {
+        const items = this.daemon.state.shelf ?? [];
+        this._tiles.destroy_all_children();
+        if (this._helperActive) {
+            this._scroll.hide();
+            this._empty.hide();
+            return;
+        }
+        for (const item of items)
+            this._tiles.add_child(this._tile(item));
+        this._scroll.visible = items.length > 0;
+        this._empty.visible = items.length === 0;
+        this._emptyTitle.text = 'Your shelf is empty';
+        this._emptyHint.text = 'Install pulau-shelf to drag files in and out';
+    }
+
+    _tile(item) {
+        const file = Gio.File.new_for_uri(item.uri);
+        const tile = new St.Button({style_class: 'pulau-shelf-tile', can_focus: true, accessible_name: item.name});
+        const box = new St.BoxLayout({vertical: true});
+        const preview = new St.Bin({style_class: 'pulau-shelf-preview', width: TILE_ICON_SIZE, height: TILE_ICON_SIZE, x_align: Clutter.ActorAlign.CENTER});
+        const name = label(item.name, 'pulau-shelf-name', {x_align: Clutter.ActorAlign.CENTER});
+        name.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
+        box.add_child(preview);
+        box.add_child(name);
+        tile.set_child(box);
+
+        let destroyed = false;
+        tile.connect('destroy', () => (destroyed = true));
+        file.query_info_async('standard::content-type,standard::icon', Gio.FileQueryInfoFlags.NONE,
+            GLib.PRIORITY_LOW, null, (source, result) => {
+                let info;
+                try {
+                    info = source.query_info_finish(result);
+                } catch {
+                    return; // the file is gone; the daemon prunes it on refresh
+                }
+                if (destroyed)
+                    return;
+                if (IMAGE_TYPES.includes(info.get_content_type())) {
+                    preview.style = `background-image: url("${item.uri.replace(/"/g, '%22')}"); background-size: cover; border-radius: 8px;`;
+                } else {
+                    preview.child = new St.Icon({gicon: info.get_icon(), icon_size: TILE_ICON_SIZE});
+                }
+            });
+
+        tile.connect('clicked', () => {
+            Gio.AppInfo.launch_default_for_uri_async(item.uri, global.create_app_launch_context(0, -1), null, null);
+        });
+        return tile;
+    }
+
+    onActivate() {
+        this.daemon.call('shelf', 'Refresh');
+    }
+});

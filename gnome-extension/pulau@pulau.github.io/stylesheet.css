@@ -1,0 +1,341 @@
+/* Pulau. The island itself is drawn black by island.js; this styles what
+ * sits on it. Layout and sizes follow docs/product-spec.md.
+ *
+ * Palette (dark, iOS-like):
+ *   text      #ffffff · secondary rgba(255,255,255,0.55) · faint 0.35
+ *   surfaces  #1c1c1e · #2c2c2e · #3a3a3c (hover)
+ *   accents   green #34d67a · amber #ffb833 · red #ff5c5c (errors) · blue #5aabff
+ */
+
+/* ── Shared ───────────────────────────────────────────── */
+
+#pulauIsland {
+  color: #ffffff;
+  font-feature-settings: "tnum";
+}
+
+.pulau-button {
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 6px;
+  transition-duration: 120ms;
+}
+
+.pulau-button:hover { background-color: rgba(255, 255, 255, 0.12); }
+.pulau-button:active { background-color: rgba(255, 255, 255, 0.2); }
+.pulau-button:focus { box-shadow: inset 0 0 0 2px rgba(90, 171, 255, 0.8); }
+
+.pulau-button-flat { background-color: transparent; }
+
+.pulau-button-round { background-color: #2c2c2e; padding: 8px; }
+.pulau-button-round:hover { background-color: #3a3a3c; }
+.pulau-button-small { padding: 6px; }
+
+/* Pill button with text (alert actions). */
+.pulau-pill {
+  font-weight: 600;
+  border-radius: 999px;
+  transition-duration: 120ms;
+}
+
+.pulau-pill-small {
+  font-size: 12px;
+  padding: 6px 14px;
+  background-color: #ffffff;
+  color: #000000;
+}
+
+.pulau-pill-small:hover { background-color: #e6e6e6; }
+
+/* Pill with an icon and a label (Short Break, Add Task…). */
+.pulau-chip {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 7px 14px;
+  background-color: #1c1c1e;
+  transition-duration: 150ms;
+}
+
+.pulau-chip:hover { background-color: #2c2c2e; }
+.pulau-chip:checked { background-color: #2c2c2e; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28); }
+.pulau-chip:focus { box-shadow: inset 0 0 0 2px rgba(90, 171, 255, 0.8); }
+.pulau-chip-box { spacing: 7px; }
+
+.pulau-art { background-color: #2c2c2e; }
+.pulau-art-placeholder { color: rgba(255, 255, 255, 0.4); }
+
+.pulau-level {
+  height: 5px;
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+.pulau-level-fill { border-radius: 3px; background-color: #ffffff; }
+
+.pulau-bars { spacing: 2px; }
+.pulau-bar { width: 3px; border-radius: 2px; background-color: #ffffff; }
+
+.pulau-empty { spacing: 4px; }
+.pulau-empty-icon { color: rgba(255, 255, 255, 0.35); padding-bottom: 4px; }
+.pulau-empty-title { font-size: 15px; font-weight: 700; }
+.pulau-empty-hint { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
+
+.pulau-entry {
+  color: #ffffff;
+  font-size: 13px;
+  border-radius: 999px;
+  padding: 8px 14px;
+  border: none;
+  background-color: #1c1c1e;
+  caret-color: #5aabff;
+  selection-background-color: rgba(90, 171, 255, 0.5);
+  selected-color: #ffffff;
+}
+
+.pulau-entry:focus { background-color: #2c2c2e; box-shadow: inset 0 0 0 1px rgba(90, 171, 255, 0.7); }
+.pulau-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.4); }
+
+/* ── Compact ──────────────────────────────────────────── */
+
+.pulau-compact-row { padding: 0 14px; spacing: 8px; }
+
+/* Both slots keep their width when empty so the clock stays centred. */
+.pulau-compact-slot { width: 20px; }
+
+.pulau-compact-clock { font-size: 15px; font-weight: 700; }
+.pulau-compact-lyric { font-size: 13px; font-weight: 600; text-align: center; }
+
+.pulau-unseen-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background-color: #ffffff;
+}
+
+.pulau-eyes { spacing: 10px; }
+
+.pulau-eye {
+  width: 8px;
+  height: 12px;
+  border-radius: 4px;
+  background-color: #ffffff;
+  /* A soft blue glow; drawn once, not per frame. */
+  box-shadow: 0 0 6px 1px rgba(120, 190, 255, 0.6);
+}
+
+.pulau-zzz {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  margin-left: -4px;
+}
+
+/* ── Alerts (peek) ────────────────────────────────────── */
+
+.pulau-peek { padding: 0 20px 0 16px; spacing: 12px; }
+
+.pulau-peek-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 19px;
+  background-color: #1c1c1e;
+}
+
+.pulau-peek-glyph { font-size: 18px; font-weight: 700; }
+.pulau-peek-title { font-size: 15px; font-weight: 600; }
+.pulau-peek-subtitle { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-top: 1px; }
+.pulau-peek-value { font-size: 24px; font-weight: 600; }
+.pulau-peek-level-box { spacing: 10px; }
+.pulau-peek-level-text { font-size: 12px; font-weight: 600; min-width: 32px; text-align: right; }
+
+/* ── Expanded: frame ──────────────────────────────────── */
+
+.pulau-header { padding: 0 26px; }
+.pulau-header-title { font-size: 15px; font-weight: 700; }
+.pulau-header-clock { spacing: 8px; }
+.pulau-header-date { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
+.pulau-header-time { font-size: 13px; font-weight: 700; }
+
+/* Pages leave room at the sides for the arrows. */
+.pulau-page { padding: 4px 52px 0 52px; }
+
+.pulau-nav {
+  margin: 0 12px;
+  padding: 7px;
+  background-color: #2c2c2e;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.pulau-nav:hover { background-color: #3a3a3c; color: #ffffff; }
+
+.pulau-dots { spacing: 5px; }
+
+.pulau-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.3);
+  transition-duration: 200ms;
+}
+
+.pulau-dot:hover { background-color: rgba(255, 255, 255, 0.6); }
+.pulau-dot:checked { width: 18px; background-color: #ffffff; }
+
+/* ── Music ────────────────────────────────────────────── */
+
+.pulau-player-top { spacing: 14px; }
+.pulau-player-texts { spacing: 2px; }
+.pulau-track-title { font-size: 18px; font-weight: 700; }
+.pulau-track-subtitle { font-size: 13px; color: rgba(255, 255, 255, 0.55); }
+.pulau-app-icon { opacity: 0.9; }
+
+.pulau-player-progress { spacing: 12px; padding-top: 10px; }
+
+.pulau-time {
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 38px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.pulau-time-end { text-align: right; }
+
+.pulau-scrubber { height: 16px; }
+.pulau-scrubber-track { border-radius: 2px; background-color: rgba(255, 255, 255, 0.2); }
+.pulau-scrubber-fill { border-radius: 2px; background-color: #ffffff; }
+.pulau-scrubber-knob { border-radius: 6px; background-color: #ffffff; }
+
+.pulau-player-controls { padding-top: 2px; }
+.pulau-transport { spacing: 16px; }
+.pulau-play { padding: 6px; }
+.pulau-lyrics-toggle.on { background-color: rgba(255, 255, 255, 0.16); }
+
+/* Lyrics */
+
+.pulau-lyrics-layout { spacing: 20px; padding-bottom: 6px; }
+.pulau-lyrics-side { width: 250px; spacing: 6px; }
+.pulau-lyrics-controls { spacing: 6px; }
+.pulau-side-title { font-size: 15px; font-weight: 700; }
+.pulau-side-artist { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
+
+.pulau-divider {
+  width: 1px;
+  margin: 10px 0;
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.pulau-lyrics-message { font-size: 13px; color: rgba(255, 255, 255, 0.5); }
+
+/* Lines fade with distance from the current one (set in media.js). */
+.pulau-lyric-line {
+  font-size: 16px;
+  font-weight: 700;
+  padding: 3px 0;
+  color: #ffffff;
+}
+
+.pulau-lyric-line:hover { color: rgba(255, 255, 255, 0.85); }
+.pulau-lyric-line.plain { font-size: 14px; font-weight: 500; color: rgba(255, 255, 255, 0.8); }
+
+/* ── Focus ────────────────────────────────────────────── */
+
+.pulau-timer { spacing: 28px; }
+.pulau-focus-icon { color: #ffffff; }
+.pulau-timer-center { spacing: 2px; }
+.pulau-timer-row { spacing: 12px; }
+.pulau-timer-time { font-size: 40px; font-weight: 800; }
+.pulau-timer-caption { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
+.pulau-timer-buttons { spacing: 10px; padding-top: 12px; }
+
+.pulau-play-pill {
+  padding: 8px 24px;
+  color: #000000;
+  background-color: #ffffff;
+}
+
+.pulau-play-pill:hover { background-color: #e6e6e6; }
+
+/* ── Tasks ────────────────────────────────────────────── */
+
+.pulau-tasks { spacing: 22px; }
+.pulau-tasks-side { width: 196px; }
+.pulau-tasks-count { font-size: 38px; font-weight: 800; }
+.pulau-tasks-caption { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
+.pulau-tasks-buttons { spacing: 8px; padding-top: 12px; }
+.pulau-tasks-hint { font-size: 11px; color: rgba(255, 255, 255, 0.45); padding: 6px 4px 0 4px; }
+.pulau-tasks-empty { font-size: 13px; color: rgba(255, 255, 255, 0.45); }
+
+.pulau-task-scroll { padding: 6px 0; }
+.pulau-task-list { spacing: 6px; }
+
+.pulau-task {
+  spacing: 10px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background-color: #1c1c1e;
+}
+
+.pulau-task.done { background-color: rgba(52, 214, 122, 0.16); }
+
+.pulau-task-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  color: transparent;
+}
+
+.pulau-task-check:hover { border-color: #ffffff; }
+.pulau-task-check:checked { background-color: #34d67a; border-color: #34d67a; color: #000000; }
+
+.pulau-task-title { font-size: 14px; }
+.pulau-task.done .pulau-task-title { color: rgba(255, 255, 255, 0.55); text-decoration: line-through; }
+
+.pulau-task-due {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: #2c2c2e;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.pulau-task-due.overdue { background-color: rgba(255, 92, 92, 0.2); color: #ff8a8a; }
+.pulau-task-remove { padding: 3px; color: rgba(255, 255, 255, 0.7); }
+
+/* ── Notifications ────────────────────────────────────── */
+
+.pulau-notifications { spacing: 22px; }
+.pulau-notifications-side { width: 196px; }
+.pulau-notifications-buttons { spacing: 6px; padding-top: 10px; }
+.pulau-notification-list { spacing: 6px; }
+
+.pulau-notification-row {
+  border-radius: 12px;
+  background-color: #1c1c1e;
+  transition-duration: 120ms;
+}
+
+.pulau-notification-row:hover { background-color: #2c2c2e; }
+.pulau-notification { spacing: 10px; padding: 7px 10px; }
+.pulau-notification-title { font-size: 13px; font-weight: 700; }
+.pulau-notification-body { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
+.pulau-notification-time { font-size: 11px; color: rgba(255, 255, 255, 0.4); }
+
+.pulau-dnd-moon { color: rgba(255, 255, 255, 0.85); }
+
+/* ── Shelf ────────────────────────────────────────────── */
+
+.pulau-shelf-tiles { spacing: 10px; padding: 4px 0; }
+
+.pulau-shelf-tile {
+  width: 84px;
+  padding: 8px 4px;
+  border-radius: 14px;
+  color: #ffffff;
+}
+
+.pulau-shelf-tile:hover { background-color: #1c1c1e; }
+.pulau-shelf-name { font-size: 11px; padding-top: 6px; }

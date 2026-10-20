@@ -1,0 +1,30 @@
+[package]
+name = "pulau-island"
+description = "The Pulau island window (GTK4)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "pulau"
+path = "src/main.rs"
+
+[features]
+default = ["layer-shell", "x11"]
+# wlr-layer-shell: KDE Plasma, Hyprland, Sway, river, niri, COSMIC...
+layer-shell = ["dep:gtk4-layer-shell"]
+# X11 sessions, and GNOME on Wayland through XWayland.
+x11 = ["dep:gdk4-x11", "dep:x11rb"]
+
+[dependencies]
+pulau-core.workspace = true
+
+chrono.workspace = true
+env_logger.workspace = true
+gtk4.workspace = true
+log.workspace = true
+
+gdk4-x11 = { workspace = true, optional = true }
+gtk4-layer-shell = { workspace = true, optional = true }
+x11rb = { workspace = true, optional = true }
