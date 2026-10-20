@@ -63,6 +63,17 @@ impl TodoList {
             .is_some()
     }
 
+    /// Moves a task's due time (`None` clears it). The task alerts again
+    /// when the new time arrives.
+    pub fn set_due(&mut self, id: u64, due_at_ms: Option<i64>) -> bool {
+        self.find(id)
+            .map(|item| {
+                item.due_at_ms = due_at_ms;
+                item.alerted = false;
+            })
+            .is_some()
+    }
+
     /// Drops tasks finished before `day_start`, so each day starts with only
     /// what is still open. Returns whether anything was removed.
     pub fn drop_done_before(&mut self, day_start: i64) -> bool {
@@ -289,6 +300,20 @@ mod tests {
         assert!(list.drop_done_before(500));
         let titles: Vec<_> = list.items().iter().map(|i| i.title.as_str()).collect();
         assert_eq!(titles, ["Today", "Open"]);
+    }
+
+    #[test]
+    fn set_due_rearms_the_alert() {
+        let mut list = TodoList::default();
+        let id = list.add("A", Some(1_000));
+        assert_eq!(list.take_due(1_000).len(), 1);
+        assert!(list.set_due(id, Some(2_000)));
+        assert_eq!(list.deadline(), Some(2_000));
+        assert!(list.take_due(1_999).is_empty());
+        assert_eq!(list.take_due(2_000).len(), 1);
+        assert!(list.set_due(id, None));
+        assert_eq!(list.deadline(), None);
+        assert!(!list.set_due(id + 1, None));
     }
 
     #[test]

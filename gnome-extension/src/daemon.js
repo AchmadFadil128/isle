@@ -47,6 +47,7 @@ const INTERFACES = {
             <method name="Add"><arg name="text" type="s" direction="in"/><arg type="t" direction="out"/></method>
             <method name="SetDone"><arg name="id" type="t" direction="in"/><arg name="done" type="b" direction="in"/></method>
             <method name="Rename"><arg name="id" type="t" direction="in"/><arg name="title" type="s" direction="in"/></method>
+            <method name="SetDue"><arg name="id" type="t" direction="in"/><arg name="due_at_ms" type="x" direction="in"/></method>
             <method name="Remove"><arg name="id" type="t" direction="in"/></method>
             <method name="ClearDone"/>
             <signal name="Due"><arg name="id" type="t"/><arg name="title" type="s"/></signal>

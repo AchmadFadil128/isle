@@ -51,7 +51,7 @@ glance (and for colour-blind users):
 | Short Break | cup outline, grey chip | filled cup, green chip ("Long Break" during a long break) |
 | Focus stopwatch | outline | filled while running; reset dims until the timer starts |
 | Lyrics | speech bubble outline | filled bubble, lit button |
-| Edit Task | pencil, "Edit Task" | check mark, "Done" |
+| Completed tasks | arrow pointing right, folded | arrow pointing down, listed |
 | Play / pause | play | pause |
 | Task | empty circle | green circle with a check; title struck through |
 
@@ -82,7 +82,7 @@ place, dimmed, so the layout never jumps.
 | Middle-click | Play / pause | Play / pause |
 | Super+V (GNOME's calendar shortcut) | Open on Notifications, held open | Close |
 | Scroll / two-finger swipe | – | Previous / next page |
-| Esc | – | Stop typing a task; close when opened with Super+V |
+| Esc | – | Stop typing or renaming a task; close when opened with Super+V |
 
 **Default page on open**, first match wins: the page of the alert being
 shown → Notifications if some arrived unseen (during Do Not Disturb) → Music
@@ -159,13 +159,15 @@ trash to clear. Dragging a file near the island opens this page by itself.
 Without the helper: tiles that open on click, × on hover to remove, and an
 install hint when empty.
 
-**Tasks** (title "Todo**List**"). Left: done / total today (e.g. 4/5) and
-"Task Done Today", **Add Task** and **Edit Task**. Right: the list, open
-tasks first by due time, then finished ones as green struck-through pills.
-Add Task turns the left side into a text field (Enter adds and stays open,
-Esc closes). Edit Task shows × on each task, and a task's title can be
-clicked to rename it in place (Enter or clicking away saves, Esc cancels). Finished tasks are cleared at
-midnight.
+**Tasks** (title "Todo**List**"). Left: a progress ring with done / total
+inside (green when everything is done), "2 to go", "3 of 5 done today" and
+the next task with a due time. Right: an "Add a task" field (Enter adds and
+stays ready, Esc stops), then open tasks by due time. On a task: the circle
+ticks it off; clicking the title renames it in place (Enter or clicking away
+saves, Esc cancels); the due chip shows "+10 min" on hover and snoozes it by
+ten minutes (overdue chips are white, standing out by contrast); × appears
+on hover. Finished tasks fold under "Completed · N" and show as plain
+struck-through rows when unfolded. Finished tasks are cleared at midnight.
 
 ## 6. Alerts
 

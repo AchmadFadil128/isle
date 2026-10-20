@@ -87,6 +87,19 @@ impl TodoService {
         Ok(self.changed(&emitter).await?)
     }
 
+    /// Moves a task's due time, in ms since the epoch; 0 or less clears it.
+    async fn set_due(
+        &mut self,
+        id: u64,
+        due_at_ms: i64,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> fdo::Result<()> {
+        if !self.list.set_due(id, (due_at_ms > 0).then_some(due_at_ms)) {
+            return Err(not_found(id));
+        }
+        Ok(self.changed(&emitter).await?)
+    }
+
     async fn remove(
         &mut self,
         id: u64,

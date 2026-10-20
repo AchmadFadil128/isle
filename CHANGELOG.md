@@ -13,7 +13,10 @@ All notable changes to Isle are listed here. The format follows
 - Music with cover art, scrubber, controls and synced lyrics (LRCLIB).
 - GNOME notifications in the island, a Notifications page and Do Not Disturb.
 - Pomodoro focus timer with phase chips.
-- Tasks with quick-add, due reminders and a daily reset of finished tasks.
+- Tasks with quick-add, due reminders and a daily reset of finished tasks:
+  a progress ring, an always-ready add field, rename by clicking a title,
+  snooze by clicking a due time, and finished tasks folded under
+  "Completed".
 - File shelf with drag and drop through the `isle-shelf` helper.
 - Alerts for charging, battery, losing the connection, Bluetooth, volume,
   brightness and Caps Lock.

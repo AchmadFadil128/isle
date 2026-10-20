@@ -43,6 +43,7 @@ if the player then rejects the command, isled only logs it.
 |---|---|---|
 | `Add(s text) → t id` | | Quick-add: a trailing `@18:30`, `@7`, `@3pm` or `in 20m` / `in 2h` sets the due time. |
 | `SetDone(t id, b done)`, `Rename(t id, s title)`, `Remove(t id)`, `ClearDone()` | | Finished tasks are cleared at midnight. |
+| `SetDue(t id, x due_at_ms)` | | Move the reminder (ms since the epoch); `0` clears it. The task alerts again at the new time. |
 | `Items` | `s` | `[{id, title, due_at_ms, done, alerted, done_at_ms}]`; `done_at_ms` is when the task was ticked off, or null. |
 | `Due(t id, s title)` | signal | A task's due time arrived. |
 

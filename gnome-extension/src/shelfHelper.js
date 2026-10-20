@@ -81,9 +81,11 @@ export class ShelfHelper extends Signals.EventEmitter {
             if (!error || !this._proxy) // fine, or destroyed meanwhile
                 return;
             console.warn(`Isle: shelf helper failed to show: ${error.message}`);
-            // A helper that cannot even start (removed, broken install) is
-            // not tried again; the shelf stays read-only until next login.
-            if (CANNOT_START.some(code => error.matches(Gio.DBusError, code)))
+            // A helper that cannot start (removed, broken install) or hangs
+            // (no display to open) is not tried again; the page keeps its
+            // own tiles until next login.
+            if (CANNOT_START.some(code => error.matches(Gio.DBusError, code)) ||
+                error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.TIMED_OUT))
                 this._proxy = null;
             // Forget the placement so the next sync tries again.
             this._shownRect = null;
