@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Removes everything install.sh put in place. Your shelf, tasks and timer
-# settings in ~/.local/share/isle are kept; delete that folder to remove them.
+# Removes everything install.sh put in place. Your shelf, clipboard history,
+# tasks and timer settings in ~/.local/share/isle are kept; delete that
+# folder to remove them.
 set -uo pipefail
 
 UUID="isle@isle.github.io"
