@@ -52,7 +52,7 @@ Hover it to open it.
 ## Updating
 
 Run the same command again; it installs the newest release over the old one
-and keeps your tasks, clipboard history and settings.
+and keeps your tasks, calendar events, clipboard history and settings.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash
@@ -68,7 +68,7 @@ isle-uninstall
 ```
 
 This removes the extension, its programs, its service and its font. Your
-tasks, clipboard history and timer settings stay in `~/.local/share/isle`;
+tasks, calendar events, clipboard history and timer settings stay in `~/.local/share/isle`;
 delete that folder too to remove everything.
 
 ## Without internet on the computer

@@ -6,6 +6,8 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-21
+
 ### Added
 
 - A **Calendar** page, like macOS's Calendar widget: the month on the left
@@ -215,7 +217,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/zickrian/isle/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/zickrian/isle/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/zickrian/isle/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/zickrian/isle/releases/tag/v0.1.0

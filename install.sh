@@ -49,6 +49,8 @@ step "Installing binaries to $BINDIR"
 install -Dm755 "$BUILT/isled" "$BINDIR/isled"
 if [ "$SHELF" = 1 ]; then
     install -Dm755 "$BUILT/isle-shelf" "$BINDIR/isle-shelf"
+    # A running helper is the old version; it starts again, updated, when needed.
+    pkill -x isle-shelf 2>/dev/null || true
 fi
 
 step "Installing services"
