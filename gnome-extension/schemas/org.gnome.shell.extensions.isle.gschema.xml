@@ -6,6 +6,11 @@
       <summary>Black top bar</summary>
       <description>Paint the top bar black so the island blends into it.</description>
     </key>
+    <key name="compact-top-bar" type="b">
+      <default>true</default>
+      <summary>Compact top bar</summary>
+      <description>Make the top bar slimmer, so it frames the island like a thin bezel.</description>
+    </key>
     <key name="notch-depth" type="i">
       <range min="24" max="40"/>
       <default>30</default>

@@ -10,6 +10,8 @@ import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 import {getInputSourceManager} from 'resource:///org/gnome/shell/ui/status/keyboard.js';
 
 const BLACK_BAR_STYLE = 'background-color: #000000;';
+/** Style class making the top bar slimmer; see stylesheet.css. */
+const COMPACT_BAR_CLASS = 'isle-compact-bar';
 
 /**
  * Restyles the top bar around the island: paints it black so the island
@@ -25,7 +27,10 @@ export class TopBar extends Signals.EventEmitter {
         this._dateMenu.opacity = 0;
         this._dateMenu.reactive = false;
 
-        this._settingsChanged = settings.connect('changed::black-top-bar', () => this._applyStyle());
+        this._settingsChanged = [
+            settings.connect('changed::black-top-bar', () => this._applyStyle()),
+            settings.connect('changed::compact-top-bar', () => this._applyStyle()),
+        ];
         this._applyStyle();
 
         this._heightChanged = Main.panel.connect('notify::height', () => this.emit('height-changed'));
@@ -54,14 +59,20 @@ export class TopBar extends Signals.EventEmitter {
     _applyStyle() {
         const black = this._settings.get_boolean('black-top-bar');
         Main.panel.set_style(black ? BLACK_BAR_STYLE : this._originalPanelStyle);
+        // The bar's height changes with this; `height-changed` re-lays out the island.
+        if (this._settings.get_boolean('compact-top-bar'))
+            Main.panel.add_style_class_name(COMPACT_BAR_CLASS);
+        else
+            Main.panel.remove_style_class_name(COMPACT_BAR_CLASS);
     }
 
     destroy() {
-        this._settings.disconnect(this._settingsChanged);
+        this._settingsChanged.forEach(id => this._settings.disconnect(id));
         Main.panel.disconnect(this._heightChanged);
         this._dateMenu.menu.disconnect(this._menuChanged);
 
         Main.panel.set_style(this._originalPanelStyle);
+        Main.panel.remove_style_class_name(COMPACT_BAR_CLASS);
         this._dateMenu.set_width(-1);
         this._dateMenu.opacity = 255;
         this._dateMenu.reactive = true;

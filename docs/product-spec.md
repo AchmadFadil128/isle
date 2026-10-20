@@ -21,8 +21,9 @@ island, other desktops than GNOME 46 (the GTK frontend is experimental).
 
 ## 2. Presentations
 
-The island is always in exactly one presentation. `P` is the top bar height
-(32 px by default). All sizes are logical pixels.
+The island is always in exactly one presentation. `P` is the top bar height:
+26 px with the compact top bar (the default), GNOME's 32 px otherwise. All
+sizes are logical pixels.
 
 | Presentation | Size (w × h) | Corner | Shoulder | Content |
 |---|---|---|---|---|
@@ -30,8 +31,8 @@ The island is always in exactly one presentation. `P` is the top bar height
 | Peek (alert) | 380 × (P + 56) | 22 | 13 | Badge · title/subtitle · value, level bar or button |
 | Expanded | 600 × (P + 170); 720 for lyrics | 32 | 22 | Header row · page · dots |
 
-The top bar is painted black; the island hangs from it with concave
-shoulders, so bar and island read as one shape. The compact island and
+The top bar is painted black and slimmed to a thin bezel (status icons and
+the tray stay in it); the island hangs from it with concave shoulders, so bar and island read as one shape. The compact island and
 alerts hang fully below the bar with their content in the hanging part, so
 their corners and shoulders are always fully round; the open island's header
 row sits inside the bar itself.

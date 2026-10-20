@@ -103,6 +103,18 @@
 .isle-entry:focus { background-color: #2c2c2e; box-shadow: inset 0 0 0 1px rgba(90, 171, 255, 0.7); }
 .isle-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.4); }
 
+/* ── Top bar ──────────────────────────────────────────── */
+
+/* Compact top bar: slimmer than GNOME's 2.2em, so it reads as a thin bezel
+ * around the island. Status icons and the tray stay where they are. */
+#panel.isle-compact-bar { height: 26px; font-size: 13px; }
+
+#panel.isle-compact-bar .panel-button {
+  border-width: 2px;
+  -natural-hpadding: 10px;
+  -minimum-hpadding: 5px;
+}
+
 /* ── Compact ──────────────────────────────────────────── */
 
 .isle-compact-row { padding: 0 16px; spacing: 10px; }
