@@ -6,8 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Older items are dropped once the shelf holds more than this.
-pub const CAPACITY: usize = 24;
+/// The shelf holds this many files, all in view at once; to add another,
+/// one must be removed first.
+pub const CAPACITY: usize = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShelfItem {
@@ -29,10 +30,15 @@ impl Shelf {
     }
 
     /// Adds an item at the front, moving it there if already present.
-    pub fn add(&mut self, item: ShelfItem) {
+    /// Returns false, changing nothing, when a new item finds the shelf full.
+    pub fn add(&mut self, item: ShelfItem) -> bool {
+        let present = self.items.iter().any(|existing| existing.uri == item.uri);
+        if !present && self.items.len() >= CAPACITY {
+            return false;
+        }
         self.items.retain(|existing| existing.uri != item.uri);
         self.items.insert(0, item);
-        self.items.truncate(CAPACITY);
+        true
     }
 
     pub fn remove(&mut self, uri: &str) -> bool {
@@ -76,12 +82,17 @@ mod tests {
     }
 
     #[test]
-    fn capacity_drops_oldest() {
+    fn a_full_shelf_refuses_new_files() {
         let mut shelf = Shelf::default();
-        for n in 0..=CAPACITY {
-            shelf.add(item(&n.to_string()));
+        for n in 0..CAPACITY {
+            assert!(shelf.add(item(&n.to_string())));
         }
+        assert!(!shelf.add(item("new")));
         assert_eq!(shelf.items().len(), CAPACITY);
-        assert_eq!(shelf.items().last().unwrap().uri, "1");
+        // A file already there can still move to the front.
+        assert!(shelf.add(item("0")));
+        assert_eq!(shelf.items()[0].uri, "0");
+        assert!(shelf.remove("1"));
+        assert!(shelf.add(item("new")));
     }
 }

@@ -351,7 +351,7 @@
 }
 
 .isle-task-check:hover { border-color: #ffffff; }
-.isle-task-check:checked { background-color: #34d67a; border-color: #34d67a; color: #000000; }
+.isle-task-check:checked { background-color: #ffffff; border-color: #ffffff; color: #000000; }
 
 .isle-task-title { font-size: 14px; }
 .isle-task-entry { font-size: 14px; padding: 2px 10px; }
@@ -423,6 +423,9 @@
 .isle-shelf-field-icon { padding-right: 6px; }
 .isle-shelf-clear { padding: 6px; }
 .isle-shelf-confirm { padding: 5px 12px; }
+.isle-shelf-hint { font-size: 12px; color: rgba(255, 255, 255, 0.45); transition-duration: 180ms; }
+/* While a file is on its way in. */
+.isle-shelf-hint.active { color: #ffffff; font-weight: 600; }
 
 .isle-clips-scroll { -st-hfade-offset: 18px; }
 .isle-clips { spacing: 8px; }

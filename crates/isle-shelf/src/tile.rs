@@ -7,6 +7,7 @@ use gtk::{gdk, gio, glib, pango, prelude::*};
 use gtk4 as gtk;
 use log::warn;
 
+use crate::service;
 use crate::shelf::Item;
 
 const PREVIEW_SIZE: i32 = 44;
@@ -39,20 +40,24 @@ pub fn new(item: &Item, on_remove: impl Fn(String) + 'static) -> gtk::Widget {
     content.append(&preview);
     content.append(&name);
 
-    let remove = gtk::Button::builder()
+    // A small round × in the corner, shown on hover, as in the island.
+    let cross = gtk::Image::builder()
         .icon_name("window-close-symbolic")
-        .tooltip_text("Remove from the shelf")
+        .pixel_size(10)
+        .build();
+    let remove = gtk::Button::builder()
+        .child(&cross)
         .halign(gtk::Align::End)
         .valign(gtk::Align::Start)
         .css_classes(["remove"])
         .build();
+    remove.update_property(&[gtk::accessible::Property::Label("Remove from the shelf")]);
     let uri = item.uri.clone();
     remove.connect_clicked(move |_| on_remove(uri.clone()));
 
     let tile = gtk::Overlay::builder()
         .child(&content)
         .css_classes(["tile"])
-        .tooltip_text(&item.name)
         .build();
     tile.add_overlay(&remove);
 
@@ -68,7 +73,10 @@ pub fn new(item: &Item, on_remove: impl Fn(String) + 'static) -> gtk::Widget {
     source.connect_drag_begin(move |source, _| {
         let paintable = gtk::WidgetPaintable::new(Some(&drag_icon));
         source.set_icon(Some(&paintable), PREVIEW_SIZE / 2, PREVIEW_SIZE / 2);
+        service::announce_dragging(true);
     });
+    // Also after a cancelled drag.
+    source.connect_drag_end(|_, _, _| service::announce_dragging(false));
     tile.add_controller(source);
 
     let click = gtk::GestureClick::new();

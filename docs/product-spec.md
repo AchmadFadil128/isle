@@ -53,7 +53,7 @@ glance (and for colour-blind users):
 | Lyrics | speech bubble outline | filled bubble, lit button |
 | Completed tasks | arrow pointing right, folded | arrow pointing down, listed |
 | Play / pause | play | pause |
-| Task | empty circle | green circle with a check; title struck through |
+| Task | empty circle | white circle with a black check; title struck through |
 
 Controls that cannot act right now (Clear All with nothing to clear) stay in
 place, dimmed, so the layout never jumps.
@@ -155,41 +155,50 @@ is left alone. It stays on across the lock screen, and is turned off on the
 next start if the shell stopped mid-session. ("Do Not Disturb" in Focus
 Timer settings.)
 
-**Shelf** (title "Shelf"): things to keep close, in three tabs on a
-segmented control.
+**Shelf** (title "Shelf"): things to keep close, in two tabs on a
+segmented control (switching crossfades).
 
-- **Clipboard**: what was copied, newest first, as cards (136 × 96): text
+- **Clipboard**: what was copied, pinned items first, then newest first, as
+  cards (136 × 96): text
   (three lines; code in a monospace font), links (site and address), images
   (thumbnail with its size) and files (icon, name, "+2 more"). Each card shows
   the app it came from and how long ago. Click a card to copy it ("Copied"
-  flashes on it). On hover: pin (to Notes), a hand-off (text to Tasks; images
-  and files to the Files tab) and ×. The bar holds type filters (text, links,
+  flashes on it). On hover: pin (pinned items stay at the front and are
+  never cleared), a hand-off (text to Tasks; images and files to the Files
+  tab) and ×. The bar holds type filters (text, links,
   images, files; the chosen one lit, the others dimmed), a search field and
-  Clear all (asks once more; notes are kept). Opened with Super+V, the search
+  Clear all (asks once more; pinned items are kept). Opened with Super+V, the search
   field has the keyboard: ← → choose a card (white outline), Enter pastes it
   into the window in front (Ctrl+Shift+V in terminals).
-- **Notes**: pinned cards and notes written in the bar's field (Enter
-  saves). Click to copy, like any card; unpin or × on hover.
-- **Files**: with `isle-shelf` installed, a drop zone and file tiles drawn
-  by the helper over this tab; drag out to any app, double-click to open,
-  × to remove, trash to clear. Dragging a file near the island opens this
-  tab by itself. Without the helper: tiles that open on click, × on hover to
-  remove, and an install hint when empty.
+- **Files**: at most 5 files, all in view with no scrolling; a sixth is
+  refused until one is removed. The bar says what the tab is for ("Drop
+  files here, then drag them into any app"), how full it is ("3 of 5"), or
+  "Full · remove a file to add another". With `isle-shelf` installed, a drop
+  zone and file tiles drawn by the helper over this tab: drag a file out to
+  any app (a chat, an email, a folder), double-click to open, × on hover to
+  remove. Dragging copies; a drag that ends nowhere leaves the file on the
+  shelf, and the island stays open until the drag ends. Dragging a file near
+  the island opens this tab by itself, and the bar says "Drop to keep it on
+  the shelf" (or "Full · remove a file first", and the drop is refused); the
+  drop zone lights up softly while a file is over it. Without the helper: tiles that open on
+  click, × on hover to remove, and an install hint when empty.
 
 Clipboard history is event driven (GNOME tells the shell when the
-clipboard changes; nothing polls) and kept by `isled`: at most 200 items
-besides notes, images with a 320 × 200 thumbnail. Copies are never kept
+clipboard changes; nothing polls) and kept by `isled`: the 20 most recent
+items plus up to 10 pinned ones ("Pins full · unpin one" past that), images
+with a 320 × 200 thumbnail. The cards are only
+drawn while the page is open, so copying costs nothing on screen. Copies are never kept
 when a password manager marks them secret, from ignored apps (password
 managers by default; Settings → Clipboard), or while history is off.
 
-**Tasks** (title "Todo**List**"): a plain list, with no times or reminders.
-Left: a progress ring with done / total inside (green when everything is
-done), "2 to go" and "3 of 5 done today". Right: an "Add a task" field (Enter
-adds and stays ready, Esc stops), then open tasks in the order they were
-added. On a task: the circle ticks it off; clicking the title renames it in
-place (Enter or clicking away saves, Esc cancels); × appears on hover.
-Finished tasks fold under "Completed · N" and show as plain struck-through
-rows when unfolded. Finished tasks are cleared at midnight.
+**Tasks** (title "Tasks"): a plain list, with no times or reminders. Left: a
+white progress ring with done / total inside, "2 to go" and "3 of 5 done
+today". Right: an "Add a task" field (Enter adds and stays ready, Esc
+stops), then open tasks in the order they were added. On a task: the circle
+ticks it off; clicking the title renames it in place (Enter or clicking away
+saves, Esc cancels); × appears on hover. Finished tasks fold under
+"Completed · N" and show as plain struck-through rows when unfolded.
+Finished tasks are cleared at midnight.
 
 ## 6. Alerts
 

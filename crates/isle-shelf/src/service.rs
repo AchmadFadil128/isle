@@ -2,7 +2,7 @@
 
 //! The D-Bus interface the GNOME extension uses to place the window.
 
-use gtk::{gio, glib};
+use gtk::{gio, glib, prelude::*};
 use gtk4 as gtk;
 
 use crate::shelf::ShelfWindow;
@@ -17,15 +17,21 @@ const INTERFACE: &str = r#"
       <arg name="height" type="i" direction="in"/>
     </method>
     <method name="Hide"/>
+    <!-- A file is being dragged out: the island must stay open meanwhile,
+         or hiding this window would end the drag. -->
+    <signal name="Dragging">
+      <arg name="active" type="b"/>
+    </signal>
   </interface>
 </node>"#;
 
 const OBJECT_PATH: &str = "/io/github/isle/ShelfWindow";
+const INTERFACE_NAME: &str = "io.github.isle.ShelfWindow1";
 
 /// Exports the interface on `connection`.
 pub fn register(connection: &gio::DBusConnection, window: ShelfWindow) -> Result<(), glib::Error> {
     let info = gio::DBusNodeInfo::for_xml(INTERFACE)?
-        .lookup_interface("io.github.isle.ShelfWindow1")
+        .lookup_interface(INTERFACE_NAME)
         .expect("the interface is defined above");
 
     connection
@@ -48,4 +54,21 @@ pub fn register(connection: &gio::DBusConnection, window: ShelfWindow) -> Result
         })
         .build()?;
     Ok(())
+}
+
+/// Tells the extension whether a file is being dragged out of the shelf.
+pub fn announce_dragging(active: bool) {
+    let result =
+        gio::bus_get_sync(gio::BusType::Session, None::<&gio::Cancellable>).and_then(|bus| {
+            bus.emit_signal(
+                None,
+                OBJECT_PATH,
+                INTERFACE_NAME,
+                "Dragging",
+                Some(&(active,).to_variant()),
+            )
+        });
+    if let Err(err) = result {
+        log::warn!("could not announce the drag: {err}");
+    }
 }

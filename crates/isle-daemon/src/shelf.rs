@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use isle_core::shelf::{Shelf, ShelfItem};
+use isle_core::shelf::{CAPACITY, Shelf, ShelfItem};
 use url::Url;
 use zbus::object_server::SignalEmitter;
 use zbus::{fdo, interface};
@@ -43,6 +43,7 @@ impl ShelfService {
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> fdo::Result<()> {
         let mut rejected = Vec::new();
+        let mut full = Vec::new();
         let mut added = false;
         for uri in uris {
             let Some(path) = Url::parse(&uri)
@@ -55,15 +56,25 @@ impl ShelfService {
             let name = path
                 .file_name()
                 .map_or_else(|| uri.clone(), |name| name.to_string_lossy().into_owned());
-            self.shelf.add(ShelfItem {
-                uri,
+            let item = ShelfItem {
+                uri: uri.clone(),
                 name,
                 added_at_ms: now_ms(),
-            });
-            added = true;
+            };
+            if self.shelf.add(item) {
+                added = true;
+            } else {
+                full.push(uri);
+            }
         }
         if added {
             self.changed(&emitter).await?;
+        }
+        if !full.is_empty() {
+            return Err(fdo::Error::LimitsExceeded(format!(
+                "the shelf holds {CAPACITY} files; remove one to add {}",
+                full.join(" ")
+            )));
         }
         if rejected.is_empty() {
             Ok(())

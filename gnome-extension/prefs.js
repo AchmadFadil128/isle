@@ -36,7 +36,7 @@ export default class IslePreferences extends ExtensionPreferences {
         });
         history.add(switchRow(settings, 'clipboard-history', 'Keep clipboard history',
             'Text, links, images and files you copy. Passwords from password managers are never kept.'));
-        const clear = new Adw.ActionRow({title: 'Clear history', subtitle: 'Notes are kept'});
+        const clear = new Adw.ActionRow({title: 'Clear history', subtitle: 'Pinned items are kept'});
         const clearButton = new Gtk.Button({label: 'Clear…', valign: Gtk.Align.CENTER});
         clearButton.connect('clicked', () => confirmClear(window));
         clear.add_suffix(clearButton);
@@ -168,12 +168,12 @@ function spinRow(settings, key, title, subtitle, min, max) {
     return row;
 }
 
-/** Asks, then clears everything but notes from the clipboard history. */
+/** Asks, then clears everything but pinned items from the clipboard history. */
 function confirmClear(window) {
     const dialog = new Adw.MessageDialog({
         transient_for: window,
         heading: 'Clear clipboard history?',
-        body: 'Everything you copied is removed. Notes stay.',
+        body: 'Everything you copied is removed. Pinned items stay.',
     });
     dialog.add_response('cancel', 'Cancel');
     dialog.add_response('clear', 'Clear');

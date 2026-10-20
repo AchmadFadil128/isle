@@ -49,7 +49,7 @@ if the player then rejects the command, isled only logs it.
 
 | Member | Signature | |
 |---|---|---|
-| `Add(as uris)` | | Add local `file://` URIs (moved to the front if already there). Other URIs are skipped and reported with an `InvalidArgs` error once the rest are added. |
+| `Add(as uris)` | | Add local `file://` URIs (moved to the front if already there). The shelf holds 5 files: files that do not fit are refused with `LimitsExceeded`. Other URIs are skipped and reported with `InvalidArgs` once the rest are added. |
 | `Remove(s uri)`, `Clear()` | | |
 | `Refresh()` | | Drop items whose files no longer exist. |
 | `Items` | `s` | `[{uri, name, added_at_ms}]`, newest first. |
@@ -67,16 +67,16 @@ of the app copied from, or `""`.
 | `AddText(s text, s app_id) → t id` | | Copied text, at most 512 KiB and not blank. A lone `http://` or `https://` address is a `link`. |
 | `AddImage(ay png, s app_id) → t id` | | A copied PNG image, at most 16 MiB. |
 | `AddFiles(as uris, s app_id) → t id` | | Copied files; only `file://` URIs. |
-| `AddNote(s text) → t id` | | A note the user wrote: like `AddText`, but pinned. |
 | `GetText(t id) → s` | | The full content to copy back: the text, the URIs one per line, or the path of an image's PNG. |
 | `Touch(t id)` | | Move to the top, as copied again (e.g. from the history). |
-| `SetPinned(t id, b pinned)`, `Remove(t id)` | | |
+| `SetPinned(t id, b pinned)` | | At most 10 items are pinned; pinning an eleventh fails with `LimitsExceeded`. |
+| `Remove(t id)` | | |
 | `Clear()` | | Remove every item that is not pinned. |
 | `Items` | `s` | `[{id, kind, preview, uris, image, thumb, width, height, app_id, at_ms, pinned}]`, newest first. `kind` is `text`, `link`, `image` or `files`; `preview` is the first 400 characters of a text, or the file names one per line; `uris` is empty except for files; `image` and `thumb` (paths), `width` and `height` are null except for images; `at_ms` is when it was last copied. |
 
 Adding something already in the history (the same text, image or list of
 files) moves that item to the top and returns its id; it stays pinned if
-it was, and `AddNote` pins it. Beyond 200 unpinned items the oldest are
+it was. Beyond 20 unpinned items the oldest are
 dropped; pinned items are only removed by hand. Unknown ids and invalid
 content are rejected with `InvalidArgs`.
 

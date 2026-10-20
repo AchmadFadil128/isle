@@ -10,13 +10,16 @@ window.isle-shelf {
 .drop-area {
   border-radius: 18px;
   border: 1.5px dashed transparent;
-  transition: border-color 150ms, background-color 150ms;
+  transition: border-color 180ms ease-out, background-color 180ms ease-out;
 }
 
 .drop-area.dropping {
-  border-color: #5aabff;
-  background-color: alpha(#5aabff, 0.08);
+  border-color: alpha(#ffffff, 0.55);
+  background-color: alpha(#ffffff, 0.06);
 }
+
+/* Full: the drop is refused, and the area says so by staying dim. */
+.drop-area.full { border-color: alpha(#ffffff, 0.18); }
 
 .empty-icon { color: alpha(#ffffff, 0.35); }
 .empty-title { font-size: 15px; font-weight: 700; }
@@ -37,23 +40,18 @@ window.isle-shelf {
   min-width: 18px;
   min-height: 18px;
   padding: 0;
-  margin: 2px;
+  margin: 4px;
   border-radius: 9px;
-  background: #3a3a3c;
+  background: alpha(#ffffff, 0.2);
   color: #ffffff;
+  border: none;
+  box-shadow: none;
   opacity: 0;
-  transition: opacity 120ms;
+  transition: opacity 120ms, background-color 120ms;
 }
+
+.tile .remove:hover { background: alpha(#ffffff, 0.32); }
 
 .tile:hover .remove { opacity: 1; }
-
-.clear {
-  border-radius: 999px;
-  padding: 8px;
-  background: #2c2c2e;
-  color: #ffffff;
-}
-
-.clear:hover { background: #3a3a3c; }
 
 scrollbar { opacity: 0.4; }

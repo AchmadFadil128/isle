@@ -142,9 +142,11 @@ export class Controller {
         // A file dragged towards the island opens the shelf to drop it on.
         this._shelfHelper.connect('drag-near', () => {
             this._shelf.showTab('files');
+            this._shelf.dropping = true;
             this.expand('shelf');
         });
         this._shelfHelper.connect('drag-end', () => {
+            this._shelf.dropping = false;
             if (!this._island.hover)
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
         });

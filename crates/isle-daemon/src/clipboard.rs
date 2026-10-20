@@ -13,7 +13,9 @@ use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
 
 use image::ImageFormat;
-use isle_core::clipboard::{Added, Clip, ClipError, ClipboardHistory, content_hash};
+use isle_core::clipboard::{
+    Added, Clip, ClipError, ClipboardHistory, MAX_PINNED, PinError, content_hash,
+};
 use log::debug;
 use serde::Serialize;
 use zbus::object_server::SignalEmitter;
@@ -48,6 +50,8 @@ impl ClipboardService {
         // have deleted while isled was not running.
         let before = history.items().len();
         history.retain(|item| item.clip.image_hash().is_none_or(|hash| clips.has(hash)));
+        // Their files go with the orphans below.
+        history.prune();
         if history.items().len() != before {
             store.save(&history);
         }
@@ -198,17 +202,6 @@ impl ClipboardService {
         self.added(added, &emitter).await
     }
 
-    /// Adds a note the user wrote, pinned, and returns its id.
-    async fn add_note(
-        &mut self,
-        text: &str,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) -> fdo::Result<u64> {
-        let clip = Clip::from_text(text).map_err(invalid)?;
-        let added = self.history.add_note(clip, now_ms());
-        self.added(added, &emitter).await
-    }
-
     /// The full content to put back on the clipboard: the text, the file
     /// URIs one per line, or the path of an image's PNG file.
     async fn get_text(&self, id: u64) -> fdo::Result<String> {
@@ -238,8 +231,14 @@ impl ClipboardService {
         pinned: bool,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> fdo::Result<()> {
-        if !self.history.set_pinned(id, pinned) {
-            return Err(not_found(id));
+        match self.history.set_pinned(id, pinned) {
+            Ok(()) => {}
+            Err(PinError::NotFound) => return Err(not_found(id)),
+            Err(PinError::Full) => {
+                return Err(fdo::Error::LimitsExceeded(format!(
+                    "at most {MAX_PINNED} items can be pinned"
+                )));
+            }
         }
         Ok(self.changed(&emitter).await?)
     }

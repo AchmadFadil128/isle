@@ -21,6 +21,7 @@ const ShelfWindowProxy = Gio.DBusProxy.makeProxyWrapper(`
     <arg name="width" type="i" direction="in"/><arg name="height" type="i" direction="in"/>
   </method>
   <method name="Hide"/>
+  <signal name="Dragging"><arg name="active" type="b"/></signal>
 </interface></node>`);
 
 /** Errors meaning the helper cannot be started at all. */
@@ -38,7 +39,7 @@ const DRAG_PROXIMITY = 90;
 /**
  * Signals:
  * - `drag-near` (): a file drag came close to the island
- * - `drag-end` (): the drag finished
+ * - `drag-end` (): a drag into or out of the shelf finished
  */
 export class ShelfHelper extends Signals.EventEmitter {
     constructor(island, page) {
@@ -47,14 +48,22 @@ export class ShelfHelper extends Signals.EventEmitter {
         this._page = page;
         this._proxy = null;
         this._shownRect = null;
+        /** A file is being dragged out of the helper window. */
+        this._dragging = false;
         this._cancellable = new Gio.Cancellable();
 
         this._checkAvailable();
         this._watchDrags();
     }
 
-    /** Whether the pointer is over the helper window. */
+    /**
+     * Whether the pointer is over the helper window, or carrying a file out
+     * of it: either way the island must stay open, since hiding the window
+     * would end the drag.
+     */
     containsPointer() {
+        if (this._dragging)
+            return true;
         if (!this._shownRect)
             return false;
         const [x, y] = global.get_pointer();
@@ -98,7 +107,7 @@ export class ShelfHelper extends Signals.EventEmitter {
         const page = this._page;
         const area = page.helperArea;
         if (!area || !page.active || !page.visible || !area.mapped || !this._island.isSettled ||
-            page.translation_x !== 0 || page.opacity !== 255)
+            page.translation_x !== 0 || page.opacity !== 255 || area.opacity !== 255)
             return null;
         const [x, y] = area.get_transformed_position();
         const [width, height] = area.get_transformed_size();
@@ -134,6 +143,13 @@ export class ShelfHelper extends Signals.EventEmitter {
                     if (error)
                         return;
                     this._proxy = proxy;
+                    this._draggingId = proxy.connectSignal('Dragging', (_proxy, _sender, [active]) => {
+                        this._dragging = active;
+                        // Dropped somewhere, or nowhere: the island may close now.
+                        if (!active)
+                            this.emit('drag-end');
+                    });
+                    this._signalProxy = proxy;
                     this.sync();
                 }, this._cancellable, Gio.DBusProxyFlags.DO_NOT_AUTO_START_AT_CONSTRUCTION);
             });
@@ -144,7 +160,8 @@ export class ShelfHelper extends Signals.EventEmitter {
         this._dnd = global.backend.get_dnd();
         this._dragNear = false;
         this._dndPosition = this._dnd.connect('dnd-position-change', (_dnd, x, y) => {
-            if (this._dragNear || !this._proxy)
+            // Not for a file carried out of the shelf itself.
+            if (this._dragNear || this._dragging || !this._proxy)
                 return;
             const [left, top] = this._island.get_transformed_position();
             const [width, height] = this._island.get_transformed_size();
@@ -170,6 +187,8 @@ export class ShelfHelper extends Signals.EventEmitter {
         this._dnd.disconnect(this._dndPosition);
         this._dnd.disconnect(this._dndLeave);
         this._hide();
+        if (this._draggingId)
+            this._signalProxy.disconnectSignal(this._draggingId);
         this._proxy = null;
     }
 }

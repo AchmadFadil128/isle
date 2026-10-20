@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Cards for the Clipboard and Notes tabs of the Shelf page: one card per
-// copied item (or pinned note), newest first. Click a card to copy it; on
-// hover it offers pin, a hand-off (to Tasks for text, to the Files tab for
-// images and files) and ×. The keyboard can move a selection and paste it.
+// Cards for the Clipboard tab of the Shelf page: one card per copied item,
+// pinned ones first, then newest first. Click a card to copy it; on hover it
+// offers pin, a hand-off (to Tasks for text, to the Files tab for images and
+// files) and ×. The keyboard can move a selection and paste it.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -16,8 +16,17 @@ import St from 'gi://St';
 import * as Format from '../format.js';
 import {icon, iconButton, label} from '../widgets.js';
 
-/** Cards drawn at most; search reaches the rest. */
-const MAX_CARDS = 50;
+/** isled keeps 20 recent items and up to 10 pinned ones. */
+const MAX_CARDS = 30;
+const MAX_PINNED = 10;
+/** The Files tab holds this many files. */
+const SHELF_CAPACITY = 5;
+/**
+ * Cards drawn at once: about what fits on screen. The rest follow a few at a
+ * time between frames, so opening the island never stutters.
+ */
+const FIRST_CARDS = 6;
+const CARDS_PER_IDLE = 6;
 /** How long "Copied" and friends stay on a card. */
 const FEEDBACK_MS = 900;
 /** Looks like code: braces, semicolons at line ends, arrows, tags, indents. */
@@ -53,16 +62,12 @@ export const ClipsView = GObject.registerClass({
         'activated': {param_types: [GObject.TYPE_JSOBJECT, GObject.TYPE_BOOLEAN]},
     },
 }, class ClipsView extends St.Widget {
-    /**
-     * @param {object} daemon
-     * @param {object} options
-     * @param {boolean} options.notes - only pinned items (the Notes tab)
-     */
-    _init(daemon, {notes}) {
+    _init(daemon) {
         super._init({layout_manager: new Clutter.BinLayout(), x_expand: true, y_expand: true});
         this._daemon = daemon;
-        this._notes = notes;
         this._kind = null;
+        this._pending = 0;
+        this.connect('destroy', () => this._cancelPending());
         this._query = '';
         this._selected = 0;
         this._keyboard = false;
@@ -119,21 +124,49 @@ export const ClipsView = GObject.registerClass({
      */
     update({off = false} = {}) {
         this._off = off;
-        const items = (this._daemon.state.clipboard ?? [])
-            .filter(item => !this._notes || item.pinned)
+        // Pinned items stay at the front, the rest newest first (as isled
+        // sends them).
+        const all = this._daemon.state.clipboard ?? [];
+        const items = [...all.filter(item => item.pinned), ...all.filter(item => !item.pinned)]
             .filter(item => !this._kind || item.kind === this._kind)
             .filter(item => matches(item, this._query));
         this._shown = items.slice(0, MAX_CARDS);
         this._selected = Math.min(this._selected, Math.max(0, this._shown.length - 1));
 
+        this._cancelPending();
         this._strip.destroy_all_children();
-        this._cards = this._shown.map((item, index) => this._card(item, index));
-        this._cards.forEach(card => this._strip.add_child(card));
-        this._syncSelection();
+        this._cards = [];
+        this._addCards(FIRST_CARDS);
+        if (this._cards.length < this._shown.length) {
+            this._pending = GLib.idle_add(GLib.PRIORITY_LOW, () => {
+                this._addCards(CARDS_PER_IDLE);
+                if (this._cards.length < this._shown.length)
+                    return GLib.SOURCE_CONTINUE;
+                this._pending = 0;
+                return GLib.SOURCE_REMOVE;
+            });
+        }
 
         this._scroll.visible = this._shown.length > 0;
         this._empty.visible = this._shown.length === 0;
         this._updateEmpty();
+    }
+
+    /** Draws up to `count` more of the shown items. */
+    _addCards(count) {
+        const end = Math.min(this._shown.length, this._cards.length + count);
+        for (let index = this._cards.length; index < end; index++) {
+            const card = this._card(this._shown[index], index);
+            this._cards.push(card);
+            this._strip.add_child(card);
+        }
+        this._syncSelection();
+    }
+
+    _cancelPending() {
+        if (this._pending)
+            GLib.source_remove(this._pending);
+        this._pending = 0;
     }
 
     _updateEmpty() {
@@ -141,11 +174,7 @@ export const ClipsView = GObject.registerClass({
         if (searching) {
             this._emptyIcon.gicon = icon('isle-search');
             this._emptyTitle.text = 'Nothing found';
-            this._emptyHint.text = this._notes ? 'Try other words' : 'Try other words or another filter';
-        } else if (this._notes) {
-            this._emptyIcon.gicon = icon('isle-note');
-            this._emptyTitle.text = 'No notes yet';
-            this._emptyHint.text = 'Write one above, or pin anything you copied';
+            this._emptyHint.text = 'Try other words or another filter';
         } else if (this._off) {
             this._emptyIcon.gicon = icon('isle-clipboard');
             this._emptyTitle.text = 'Clipboard history is off';
@@ -170,6 +199,9 @@ export const ClipsView = GObject.registerClass({
         if (this._shown.length === 0)
             return;
         this._selected = Math.min(this._shown.length - 1, Math.max(0, this._selected + step));
+        // Arrowing faster than the cards are drawn.
+        if (this._selected >= this._cards.length)
+            this._addCards(this._selected + 1 - this._cards.length);
         this._syncSelection();
         // Keep the selected card in view.
         const card = this._cards[this._selected];
@@ -300,7 +332,7 @@ export const ClipsView = GObject.registerClass({
         });
     }
 
-    /** App icon and age in the top-left corner, or "Note" for notes. */
+    /** Pin, app icon and age in the top-left corner. */
     _header(item) {
         const header = new St.BoxLayout({
             style_class: 'isle-clip-header',
@@ -396,17 +428,29 @@ export const ClipsView = GObject.registerClass({
             return widget;
         };
 
+        // Pinned items stay at the front and survive Clear all.
         actions.add_child(button(item.pinned ? 'isle-pin-fill' : 'isle-pin',
-            item.pinned ? 'Unpin' : 'Pin to Notes',
+            item.pinned ? 'Unpin' : 'Pin',
             () => {
+                const pinned = (this._daemon.state.clipboard ?? []).filter(other => other.pinned).length;
+                if (!item.pinned && pinned >= MAX_PINNED) {
+                    this.flash(item, 'isle-pin', 'Pins full · unpin one');
+                    return;
+                }
                 this._daemon.call('clipboard', 'SetPinned', item.id, !item.pinned);
                 if (!item.pinned)
-                    this.flash(item, 'isle-pin-fill', 'Pinned to Notes');
+                    this.flash(item, 'isle-pin-fill', 'Pinned');
             }));
 
         if (item.kind === 'image' || item.kind === 'files') {
             actions.add_child(button('isle-shelf', 'Add to the Files tab', () => {
                 const uris = item.kind === 'image' ? [GLib.filename_to_uri(item.image, null)] : item.uris;
+                const shelf = this._daemon.state.shelf ?? [];
+                const fresh = uris.filter(uri => !shelf.some(file => file.uri === uri));
+                if (shelf.length + fresh.length > SHELF_CAPACITY) {
+                    this.flash(item, 'isle-shelf', 'Files is full');
+                    return;
+                }
                 this._daemon.call('shelf', 'Add', uris);
                 this.flash(item, 'isle-shelf', 'Added to Files');
             }));

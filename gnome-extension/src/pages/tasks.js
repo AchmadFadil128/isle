@@ -10,7 +10,6 @@ import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
-import {timerColor} from '../compact.js';
 import {Ring, icon, iconButton, label} from '../widgets.js';
 import {Page} from './page.js';
 
@@ -38,7 +37,7 @@ class TasksPage extends Page {
     }
 
     get headerTitle() {
-        return 'Todo<span foreground="#34d67a">List</span>';
+        return 'Tasks';
     }
 
     _tasks() {
@@ -153,7 +152,6 @@ class TasksPage extends Page {
         const total = open.length + done.length;
         this._count.text = `${done.length}/${total}`;
         const allDone = total > 0 && open.length === 0;
-        this._ring.color = allDone ? timerColor('short_break') : timerColor('focus');
         this._ring.remove_transition('progress');
         this._ring.ease_property('progress', total ? done.length / total : 0, {
             duration: 400,

@@ -5,8 +5,8 @@
 //! The desktop shell watches the clipboard and hands each copy to isled;
 //! this module decides what the history keeps. A copy that is already in
 //! the history moves to the top instead of appearing twice, pinned items
-//! (including notes the user wrote) are kept until removed by hand, and
-//! everything else is pruned to a fixed length.
+//! are kept until removed by hand, and everything else is pruned to a fixed
+//! length.
 //!
 //! Images are referred to by a hash of their content; storing the files is
 //! the daemon's job. Every operation that drops items therefore returns the
@@ -16,8 +16,21 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// Unpinned items beyond this many are dropped, oldest first.
-pub const MAX_UNPINNED: usize = 200;
+/// Unpinned items beyond this many are dropped, oldest first. Small on
+/// purpose: recent copies are what gets pasted again, and every card costs
+/// drawing time.
+pub const MAX_UNPINNED: usize = 20;
+
+/// At most this many items can be pinned; unpin one to pin another.
+pub const MAX_PINNED: usize = 10;
+
+/// Why an item could not be pinned or unpinned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PinError {
+    NotFound,
+    /// `MAX_PINNED` items are pinned already.
+    Full,
+}
 
 /// Longest text accepted, in bytes. Anything larger is more likely a file
 /// read into the clipboard by accident than something worth keeping, and
@@ -211,21 +224,10 @@ impl ClipboardHistory {
     /// and keeps its pin; it only takes `app_id` if it had none, so the
     /// app it first came from stays known when another app re-copies it.
     pub fn add(&mut self, clip: Clip, app_id: &str, now: i64) -> Added {
-        self.put(clip, app_id, now, false)
-    }
-
-    /// Records a note the user wrote. Notes are pinned, so they stay until
-    /// removed by hand; a note matching an existing item pins that item.
-    pub fn add_note(&mut self, clip: Clip, now: i64) -> Added {
-        self.put(clip, "", now, true)
-    }
-
-    fn put(&mut self, clip: Clip, app_id: &str, now: i64, pin: bool) -> Added {
         let item = match self.items.iter().position(|item| item.clip.same_as(&clip)) {
             Some(index) => {
                 let mut item = self.items.remove(index);
                 item.at_ms = now;
-                item.pinned |= pin;
                 if item.app_id.is_empty() {
                     item.app_id = app_id.to_owned();
                 }
@@ -238,7 +240,7 @@ impl ClipboardHistory {
                     clip,
                     app_id: app_id.to_owned(),
                     at_ms: now,
-                    pinned: pin,
+                    pinned: false,
                 }
             }
         };
@@ -261,12 +263,14 @@ impl ClipboardHistory {
         true
     }
 
-    pub fn set_pinned(&mut self, id: u64, pinned: bool) -> bool {
-        let Some(index) = self.index_of(id) else {
-            return false;
-        };
+    pub fn set_pinned(&mut self, id: u64, pinned: bool) -> Result<(), PinError> {
+        let index = self.index_of(id).ok_or(PinError::NotFound)?;
+        let count = self.items.iter().filter(|item| item.pinned).count();
+        if pinned && !self.items[index].pinned && count >= MAX_PINNED {
+            return Err(PinError::Full);
+        }
         self.items[index].pinned = pinned;
-        true
+        Ok(())
     }
 
     /// Removes an item. Returns `None` if there is no such item, else the
@@ -293,8 +297,10 @@ impl ClipboardHistory {
         self.items.iter().filter_map(|item| item.clip.image_hash())
     }
 
-    /// Drops the oldest unpinned items beyond `MAX_UNPINNED`.
-    fn prune(&mut self) -> Vec<String> {
+    /// Drops the oldest unpinned items beyond `MAX_UNPINNED` (a history
+    /// saved under a larger limit shrinks on load), and returns the image
+    /// hashes left without an item.
+    pub fn prune(&mut self) -> Vec<String> {
         let mut unpinned = 0;
         self.drop_where(|item| {
             if item.pinned {
@@ -454,7 +460,7 @@ mod tests {
         let mut history = ClipboardHistory::default();
         let a = history.add(text("a"), "", 1).id;
         let b = history.add(text("b"), "first.desktop", 2).id;
-        history.set_pinned(b, true);
+        history.set_pinned(b, true).unwrap();
         history.add(text("a"), "x.desktop", 3);
         assert_eq!(history.add(text("b"), "second.desktop", 4).id, b);
         assert_eq!(ids(&history), [b, a]);
@@ -493,27 +499,10 @@ mod tests {
     }
 
     #[test]
-    fn notes_are_pinned_and_pin_what_they_match() {
-        let mut history = ClipboardHistory::default();
-        let copied = history.add(text("remember"), "app.desktop", 1).id;
-        history.add(text("other"), "", 2);
-        assert_eq!(history.add_note(text("remember"), 3).id, copied);
-        let top = &history.items()[0];
-        assert_eq!((top.id, top.pinned, top.at_ms), (copied, true, 3));
-        assert_eq!(top.app_id, "app.desktop");
-
-        let note = history.add_note(text("https://example.org"), 4).id;
-        let item = history.get(note).unwrap();
-        assert!(item.pinned);
-        assert_eq!(item.clip.kind(), "link");
-        assert_eq!(item.app_id, "");
-    }
-
-    #[test]
     fn pruning_keeps_pinned_items_and_reports_images() {
         let mut history = ClipboardHistory::default();
         let pinned = history.add(text("keep"), "", 0).id;
-        history.set_pinned(pinned, true);
+        history.set_pinned(pinned, true).unwrap();
         let oldest = history.add(image("old"), "", 1).id;
         for n in 1..MAX_UNPINNED {
             let added = history.add(text(&n.to_string()), "", n as i64 + 1);
@@ -529,12 +518,31 @@ mod tests {
     }
 
     #[test]
+    fn pins_are_capped() {
+        let mut history = ClipboardHistory::default();
+        let ids: Vec<_> = (0..=MAX_PINNED)
+            .map(|n| history.add(text(&format!("pin {n}")), "", n as i64).id)
+            .collect();
+        for &id in &ids[..MAX_PINNED] {
+            history.set_pinned(id, true).unwrap();
+        }
+        assert_eq!(
+            history.set_pinned(ids[MAX_PINNED], true),
+            Err(PinError::Full)
+        );
+        // Re-pinning a pinned item and unpinning still work when full.
+        history.set_pinned(ids[0], true).unwrap();
+        history.set_pinned(ids[0], false).unwrap();
+        history.set_pinned(ids[MAX_PINNED], true).unwrap();
+    }
+
+    #[test]
     fn clear_keeps_pinned_items() {
         let mut history = ClipboardHistory::default();
         let kept = history.add(image("kept"), "", 1).id;
         history.add(image("gone"), "", 2);
         history.add(text("x"), "", 3);
-        history.set_pinned(kept, true);
+        history.set_pinned(kept, true).unwrap();
         assert_eq!(history.clear(), ["gone"]);
         assert_eq!(ids(&history), [kept]);
     }
@@ -548,7 +556,7 @@ mod tests {
         assert_eq!(ids(&history), [a, b]);
         assert_eq!(history.items()[0].at_ms, 3);
         assert!(!history.touch(99, 4));
-        assert!(!history.set_pinned(99, true));
+        assert_eq!(history.set_pinned(99, true), Err(PinError::NotFound));
         assert_eq!(history.remove(99), None);
         assert_eq!(history.remove(b), Some(vec![]));
         assert_eq!(history.remove(a), Some(vec!["aa".into()]));

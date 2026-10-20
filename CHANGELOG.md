@@ -24,10 +24,13 @@ All notable changes to Isle are listed here. The format follows
 - Volume and output device switching on the music page.
 - Daily focus totals and Do Not Disturb during focus sessions.
 - Rubber-band stretch when the volume is pressed past its limit.
-- Clipboard history and notes on the Shelf page (Clipboard · Notes · Files):
-  cards with search and type filters, click to copy, Super+V and Enter to
-  paste, pin to Notes, hand-offs to Tasks and Files; password managers and
-  chosen apps are ignored.
+- Clipboard history on the Shelf page (Clipboard · Files): the 20 latest
+  copies plus up to 10 pinned, as cards with search and type filters; click
+  to copy, Super+V and Enter to paste, hand-offs to Tasks and Files;
+  password managers and chosen apps are ignored.
+- The Files tab holds up to 5 files with no scrolling; dragging a file
+  towards the island opens it and says whether the file can land, and the
+  island stays open while a file is dragged out.
 - Right-click brings the music player to the front.
 - GNOME's calendar drop-down no longer appears alongside the island.
 - Shelf files can be removed with × even without the `isle-shelf` helper.

@@ -13,12 +13,13 @@ going on, and opens on hover:
   daily totals, and Do Not Disturb while you focus.
 - **Tasks**: a plain list to write things down and tick them off, with a
   daily reset of finished ones.
-- **Shelf** with three tabs:
+- **Shelf** with two tabs:
   - **Clipboard history**: text, links, images and files you copy, as cards.
-    Search, filter, click to copy, or press Super+V and Enter to paste.
-    Password managers are ignored, and nothing leaves your computer.
-  - **Notes**: pin what you paste often, or write it down.
-  - **Files**: drop files on the island, drag them out later.
+    Search, filter, click to copy, or press Super+V and Enter to paste. Pin
+    what you paste often. Password managers are ignored, and nothing leaves
+    your computer.
+  - **Files**: drop up to 5 files on the island, then drag them into any app (a
+    chat, an email, another folder).
 - **Privacy dots** when the camera, microphone or screen sharing is in use,
   and a timer with a stop button while the screen records.
 - **Volume and output** switching right from the music page.
