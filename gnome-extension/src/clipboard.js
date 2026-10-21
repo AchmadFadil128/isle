@@ -35,6 +35,11 @@ function parseUris(text, mimetype) {
     return uris.filter(uri => uri.startsWith('file://'));
 }
 
+/** Linux input key codes for Ctrl, Shift and V. */
+const KEY_LEFTCTRL = 29;
+const KEY_LEFTSHIFT = 42;
+const KEY_V = 47;
+
 export class ClipboardHistory {
     constructor(daemon, settings) {
         this._daemon = daemon;
@@ -43,6 +48,8 @@ export class ClipboardHistory {
         /** Set while we put something on the clipboard ourselves. */
         this._ownCopy = false;
         this._timeouts = new Set();
+        // Made now: a new virtual device joins the seat a moment later, and drops the first paste.
+        this._keyboard = clutterBackend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
 
         this._selection = global.display.get_selection();
         this._ownerChanged = this._selection.connect('owner-changed', (_selection, type) => {
@@ -151,15 +158,12 @@ export class ClipboardHistory {
                 return;
             const windowClass = global.display.focus_window?.get_wm_class()?.toLowerCase() ?? '';
             const terminal = TERMINALS.some(name => windowClass.includes(name));
-            const keys = terminal
-                ? [Clutter.KEY_Control_L, Clutter.KEY_Shift_L, Clutter.KEY_v]
-                : [Clutter.KEY_Control_L, Clutter.KEY_v];
-            this._keyboard ??= clutterBackend().get_default_seat()
-                .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+            // Key codes, the same on every layout, so Ctrl+V pastes with a Cyrillic or Greek one too.
+            const keys = terminal ? [KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_V] : [KEY_LEFTCTRL, KEY_V];
             // Virtual devices take monotonic microseconds.
             const time = GLib.get_monotonic_time();
-            keys.forEach(key => this._keyboard.notify_keyval(time, key, Clutter.KeyState.PRESSED));
-            [...keys].reverse().forEach(key => this._keyboard.notify_keyval(time, key, Clutter.KeyState.RELEASED));
+            keys.forEach(key => this._keyboard.notify_key(time, key, Clutter.KeyState.PRESSED));
+            [...keys].reverse().forEach(key => this._keyboard.notify_key(time, key, Clutter.KeyState.RELEASED));
         });
     }
 
