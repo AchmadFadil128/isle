@@ -220,10 +220,13 @@ export class CallMonitor extends Signals.EventEmitter {
             !window.is_skip_taskbar();
         // Most recently used first.
         const appWindows = app ? app.get_windows().filter(usable) : [];
-        // A browser's web app (Meet, WhatsApp Web) may run in a window the shell files under another app.
-        const inBrowser = !app || appWindows.some(window => BROWSERS.test(window.get_wm_class() ?? ''));
-        const browserWindows = inBrowser
-            ? global.display.list_all_windows().filter(window => usable(window) && BROWSERS.test(window.get_wm_class() ?? ''))
+        // A browser's web app (Meet, WhatsApp Web) may run in a window the shell files under another app,
+        // but always of the same browser: a Meet tab in Firefox is not a call in Chrome.
+        const family = app ? appWindows.map(window => (window.get_wm_class() ?? '').match(BROWSERS)?.[0]).find(Boolean) : null;
+        const browserWindows = !app || family
+            ? global.display.list_all_windows().filter(window => usable(window) &&
+                (family ? (window.get_wm_class() ?? '').toLowerCase().includes(family.toLowerCase())
+                    : BROWSERS.test(window.get_wm_class() ?? '')))
             : [];
         const candidates = [...new Set([...appWindows, ...browserWindows])];
         const current = candidates.includes(this.window) ? this.window : null;
