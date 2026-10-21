@@ -381,8 +381,10 @@ export const ExpandedView = GObject.registerClass({
         this._headerBars.visible = playing;
         this._headerBars.playing = this._active && playing;
 
-        const showPrivacy = this._settings.get_boolean('privacy-indicators');
-        this._privacyDots.update(showPrivacy ? this._privacy : {});
+        const privacy = this._settings.get_boolean('privacy-indicators') ? this._privacy : {};
+        // On a call the microphone is a given; the call's own button says so.
+        this._privacyDots.update({camera: privacy.camera, microphone: privacy.microphone && !this._call.active,
+            screenShare: privacy.screenShare});
         this._recordingButton.visible = this._privacy.recording;
         if (this._privacy.recording && this._active)
             this._tickRecording();

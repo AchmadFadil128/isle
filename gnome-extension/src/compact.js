@@ -106,10 +106,10 @@ export const CompactView = GObject.registerClass({
         return (this._left.child || this._right.child ? size.activities : size.clock) + privacy;
     }
 
-    /** Room for the privacy dots and their balance on the other side. */
+    /** Room for the privacy dots and their balance on the other side (none inside a slot). */
     _privacyWidth() {
         // Off the stage (as when Isle starts mid-call) nothing can be measured yet.
-        if (!this._privacyDots.visible || !this.get_stage())
+        if (!this._privacyDots.visible || this._privacyDots.get_parent() !== this._row || !this.get_stage())
             return 0;
         const [, dots] = this._privacyDots.get_preferred_width(-1);
         const spacing = this._row.get_theme_node().get_length('spacing');
@@ -185,15 +185,33 @@ export const CompactView = GObject.registerClass({
         let right = hasTrack ? this._bars : null;
         if (onCall && this._call.muted)
             right = this._micOff;
+        // On a call the green phone already says the microphone is on, as on an iPhone.
+        const privacy = this._showingPrivacy() ? this._privacy : {};
+        const dots = {camera: privacy.camera, microphone: privacy.microphone && !onCall, screenShare: privacy.screenShare};
+        this._privacyDots.update(dots);
+        // Beside an activity, up to two dots take the empty right slot, so the island grows no wider.
+        const shown = Object.values(dots).filter(Boolean).length;
+        const inSlot = shown > 0 && shown <= 2 && Boolean(left) && !right;
+        if (inSlot) {
+            right = this._privacyDots;
+            if (this._privacyDots.get_parent() === this._row)
+                this._row.remove_child(this._privacyDots);
+        }
         if (this._right.child !== right)
             this._right.child = right;
+        if (!inSlot && !this._privacyDots.get_parent())
+            this._row.add_child(this._privacyDots);
+        if (inSlot)
+            this._privacyDots.add_style_class_name('isle-privacy-dots-in-slot');
+        else
+            this._privacyDots.remove_style_class_name('isle-privacy-dots-in-slot');
         // Paused: the bars rest, dimmed.
         this._bars.ease({opacity: playing ? 255 : PAUSED_OPACITY, duration: 200});
         this._syncBars();
-        this._privacyDots.update(this._showingPrivacy() ? this._privacy : {});
-        this._privacyBalance.visible = this._privacyDots.visible;
+        const outside = this._privacyDots.visible && !inSlot;
+        this._privacyBalance.visible = outside;
         // Measured only when shown: hidden, it may not be on the stage yet.
-        this._privacyBalance.width = this._privacyDots.visible && this.get_stage() ? this._privacyDots.get_preferred_width(-1)[1] : 0;
+        this._privacyBalance.width = outside && this.get_stage() ? this._privacyDots.get_preferred_width(-1)[1] : 0;
 
         if (timerActive) {
             this._ring.color = timerColor(pomodoro.phase);

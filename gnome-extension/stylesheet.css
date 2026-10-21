@@ -171,6 +171,7 @@
 /* Live activities: privacy dots and screen recording */
 
 .isle-privacy-dots { spacing: 4px; padding-left: 4px; }
+.isle-privacy-dots-in-slot { padding-left: 0; }
 
 .isle-privacy-dot {
   width: 7px;
