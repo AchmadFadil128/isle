@@ -6,6 +6,39 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-22
+
+### Added
+
+- A **settings gear** in the open island's header, beside the clock.
+
+### Changed
+
+- **Focus and Reminders share one page**: the timer on the left, today's
+  reminders on the right, so what to work on sits beside the time to work
+  on it. The header has one tab fewer; this page is a little wider than the
+  others to fit both.
+- **Reminders** look closer to macOS's: an orange title with the number
+  still open, a thin ring per reminder that fills with an orange dot when
+  ticked, the title struck through at once, then the row folds away; a
+  last "New Reminder" row to add one. Four whole rows show before the list
+  scrolls.
+- **Alerts are slimmer**: as tall as their text (one line or two), with a
+  smaller badge and tighter type, so a short alert wastes no room.
+- The island opens when the pointer **rests** on it; passing over it on the
+  way to the clock or a menu leaves it closed.
+
+### Fixed
+
+- The island no longer flickers open and closed when the pointer passes
+  over the top bar, or when it shrinks under a still pointer after
+  switching to a narrower page.
+- Opening, closing and resizing settle cleanly, with no one-pixel wobble at
+  the end, and stop drawing sooner.
+- Closing the island right after ticking a reminder no longer leaves the
+  list frozen; the reminder stays done.
+- The volume alert no longer repeats "Volume" under its title.
+
 ## [0.3.0] - 2026-10-21
 
 ### Added
@@ -264,7 +297,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/zickrian/isle/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/zickrian/isle/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/zickrian/isle/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/zickrian/isle/compare/v0.1.1...v0.1.2
