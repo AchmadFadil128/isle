@@ -47,7 +47,7 @@ back in once. (On GNOME 46 to 48 with an X11 session you can instead press
 Alt+F2, type `r` and press Enter.)
 
 The island now sits in the middle of the top bar, in place of the clock.
-Hover it to open it.
+Rest the pointer on it to open it.
 
 ## Updating
 

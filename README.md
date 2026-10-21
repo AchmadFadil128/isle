@@ -4,8 +4,9 @@
 
 **A dynamic island for the GNOME desktop.**
 
-Music with synced lyrics, calls, notifications, a focus timer, reminders, a
-calendar and a clipboard shelf, living in a notch at the top of your screen.
+Music with synced lyrics, calls, notifications, a focus timer beside your
+reminders, a calendar and a clipboard shelf, living in a notch at the top of
+your screen.
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 ![GNOME Shell 46–51](https://img.shields.io/badge/GNOME%20Shell-46%E2%80%9351-4a86cf.svg)
@@ -17,8 +18,9 @@ calendar and a clipboard shelf, living in a notch at the top of your screen.
 
 Isle turns the centre of the top bar into a black notch, like a MacBook's.
 At rest it shows the time and what is going on (a song, a timer, a
-recording). Hover it and it opens with spring physics into a small panel with
-tabs for each page. Alerts for volume, charging, Caps Lock and notifications
+recording). Rest the pointer on it and it opens with spring physics into a
+small panel with tabs for each page; passing over it on the way elsewhere
+leaves it closed. Alerts for volume, charging, Caps Lock and notifications
 appear in the same place instead of in the middle of the screen.
 
 ## Contents
@@ -43,9 +45,8 @@ appear in the same place instead of in the middle of the screen.
 | <img src="docs/images/music.png" alt="Music page" width="420"> | **Music.** Spotify, YouTube in your browser, or any MPRIS player: cover art with the playing app's icon, a scrubber and controls. Volume and output switching are one click away. |
 | <img src="docs/images/lyrics.png" alt="Synced lyrics" width="420"> | **Synced lyrics** from [LRCLIB](https://lrclib.net), like Apple Music's: the line being sung large and bright, pauses as breathing dots. The island widens and takes the cover's colour; click a line to jump to it. |
 | <img src="docs/images/call.png" alt="A Google Meet call in the island: a live preview of the call, its length, mute and open" width="420"> | **Calls** in WhatsApp, Telegram, Meet or any app or browser: the closed island shows a green phone and how long the call has lasted. Open it to see the call live (you and whoever you call) while you work in other windows, mute your microphone, or jump back to the call. |
-| <img src="docs/images/focus.png" alt="Focus timer" width="420"> | **Focus timer** (Pomodoro) with breaks, daily totals and Do Not Disturb while you focus. Its ring stays visible in the closed island. |
+| <img src="docs/images/focus.png" alt="Focus page: the timer beside today's reminders" width="420"> | **Focus.** A Pomodoro timer with breaks, daily totals and Do Not Disturb while you focus, beside today's **Reminders**, so what to work on sits next to the time to work on it. Reminders are a plain list as macOS shows them: add, rename in place, tick one off and it is struck through, then goes. The timer's ring stays visible in the closed island. |
 | <img src="docs/images/clipboard.png" alt="Clipboard history" width="420"> | **Shelf.** A clipboard history of text, links, images and files (search, filter, pin; Super+V to paste), and a files tray: drop files on the island, then drag them into any app or click one to copy it, ready to paste into a chat. |
-| <img src="docs/images/tasks.png" alt="Reminders" width="420"> | **Reminders.** A plain list for today, as macOS shows it: add, rename in place, tick one off and it is struck through, then goes. |
 | <img src="docs/images/calendar.png" alt="Calendar" width="420"> | **Calendar.** The month beside the chosen day's events, like macOS's Calendar widget. Shows your desktop calendars (Google and others through Online Accounts) and events you add in a line: "Dinner 8:00 pm". |
 | <img src="docs/images/alerts.png" alt="Closed island and alerts" width="420"> | **Alerts** for volume, brightness, Caps Lock, charging, low battery, Bluetooth devices with their battery, going offline, and GNOME notifications, which also collect on a **Notifications** page with Do Not Disturb. |
 
@@ -117,7 +118,7 @@ cd isle
 
 | Do this | To |
 |---|---|
-| Hover the notch | Open the island |
+| Rest the pointer on the notch | Open the island |
 | Click a tab, or swipe sideways with two fingers | Switch pages |
 | Move the pointer away, or press Esc | Close it |
 | Click the notch | Open it now; on an alert, open what it is about |
