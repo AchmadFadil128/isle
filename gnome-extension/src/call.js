@@ -77,6 +77,8 @@ export class CallMonitor extends Signals.EventEmitter {
         this.since = 0;
         this.app = null;
         this.window = null;
+        /** The call service the call's window named, kept for the whole call. */
+        this._service = null;
         this._streamName = null;
         this._heldSince = 0;
         this._timeouts = {start: 0, end: 0};
@@ -109,9 +111,9 @@ export class CallMonitor extends Signals.EventEmitter {
         this._source?.change_is_muted(!this.muted);
     }
 
-    /** The call's service ("Google Meet") if its window names one, else its app's name. */
+    /** The call's service ("Google Meet") once its window named one, else its app's name. */
     get name() {
-        return serviceOf(this.window?.get_title()) ?? this.app?.get_name() ?? this._streamName ?? 'Call';
+        return this._service ?? this.app?.get_name() ?? this._streamName ?? 'Call';
     }
 
     get gicon() {
@@ -178,6 +180,7 @@ export class CallMonitor extends Signals.EventEmitter {
         this.app = null;
         this._streamName = null;
         this._setWindow(null);
+        this._service = null;
         this.emit('changed');
     }
 
@@ -186,24 +189,38 @@ export class CallMonitor extends Signals.EventEmitter {
         const keys = streamKeys(stream);
         const app = this._appSystem.get_running().find(candidate => appMatches(candidate, keys)) ?? null;
         this._streamName = stream.get_name() || null;
+        const service = this._service;
         const window = this._chooseWindow(app);
-        if (app === this.app && window === this.window)
+        if (app === this.app && window === this.window && service === this._service)
             return false;
         this.app = app;
         this._setWindow(window);
         return true;
     }
 
-    // A window titled after a call service wins, then the one shown already, then the app's latest.
-    // Without a known app only a browser's call tab will do (not an editor showing "signal.rs").
+    // The call keeps the window it was found in: one titled after a call service, else the app's window
+    // in front when it began. A guess gives way to a service's window; switching tabs moves nothing.
     _chooseWindow(app, leaving = null) {
-        const windows = (app ? app.get_windows() : global.display.list_all_windows())
-            .filter(window => window !== leaving && window.get_window_type() === Meta.WindowType.NORMAL &&
-                !window.is_skip_taskbar() && (app || BROWSERS.test(window.get_wm_class() ?? '')));
-        const current = windows.includes(this.window) ? this.window : null;
-        if (current && serviceOf(current.get_title()))
+        const usable = window => window !== leaving && window.get_window_type() === Meta.WindowType.NORMAL &&
+            !window.is_skip_taskbar();
+        // Most recently used first.
+        const appWindows = app ? app.get_windows().filter(usable) : [];
+        // A browser's web app (Meet, WhatsApp Web) may run in a window the shell files under another app.
+        const inBrowser = !app || appWindows.some(window => BROWSERS.test(window.get_wm_class() ?? ''));
+        const browserWindows = inBrowser
+            ? global.display.list_all_windows().filter(window => usable(window) && BROWSERS.test(window.get_wm_class() ?? ''))
+            : [];
+        const candidates = [...new Set([...appWindows, ...browserWindows])];
+        const current = candidates.includes(this.window) ? this.window : null;
+        if (current && this._service)
             return current;
-        return windows.find(window => serviceOf(window.get_title())) ?? current ?? (app ? windows[0] ?? null : null);
+        const named = candidates.find(window => serviceOf(window.get_title()));
+        if (named) {
+            this._service = serviceOf(named.get_title());
+            return named;
+        }
+        // Without a known app only a browser's call tab will do (not an editor showing "signal.rs").
+        return current ?? appWindows.find(window => window.has_focus()) ?? appWindows[0] ?? null;
     }
 
     _setWindow(window) {
@@ -216,10 +233,15 @@ export class CallMonitor extends Signals.EventEmitter {
             return;
         this._windowIds = [
             window.connect('unmanaged', () => {
+                this._service = null;
                 this._setWindow(this._chooseWindow(this.app, window));
                 this._changed();
             }),
-            window.connect('notify::title', () => this._changed()),
+            // The call's tab came to the front: now the window is known for sure.
+            window.connect('notify::title', () => {
+                this._service ??= serviceOf(window.get_title());
+                this._changed();
+            }),
             window.connect('notify::minimized', () => this._changed()),
         ];
     }
