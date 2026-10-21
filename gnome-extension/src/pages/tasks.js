@@ -12,9 +12,8 @@ import {VERTICAL} from '../compat.js';
 import {iconButton, label} from '../widgets.js';
 import {Page} from './page.js';
 
-/** How long the tick box takes to fill, and the line to strike the title through. */
+/** How long the tick box takes to fill. */
 const FILL_MS = 180;
-const STRIKE_MS = 320;
 /** A ticked reminder stays this long, struck through, so a second tap can undo it. */
 const LINGER_MS = 900;
 /** How long it takes to fade and fold away. */
@@ -169,7 +168,7 @@ class TasksPage extends Page {
                 this._startRenaming(titleBox, title, task);
             return Clutter.EVENT_STOP;
         });
-        // As wide as the box, it grows from the left to the text's width.
+        // As wide as the box, scaled from the left to the text's width when ticked.
         const strike = new St.Widget({style_class: 'isle-reminder-strike', scale_x: 0, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         strike.set_pivot_point(0, 0.5);
         titleBox.add_child(title);
@@ -188,8 +187,8 @@ class TasksPage extends Page {
         return row;
     }
 
-    // Ticks a reminder: the box fills, a line strikes the title through from the left, it lingers a
-    // moment (a second tap undoes it), then fades and folds away.
+    // Ticks a reminder: the box fills, the title is struck through, it lingers a moment (a second
+    // tap undoes it), then fades and folds away.
     _tick(task, {row, check, dot, title, strike}) {
         const name = `leave-${task.id}`;
         const ease = (actor, props, duration) => {
@@ -203,7 +202,7 @@ class TasksPage extends Page {
             check.accessible_name = 'Mark as done';
             row.remove_style_class_name('done');
             ease(dot, {scale_x: 0, scale_y: 0}, FILL_MS);
-            ease(strike, {scale_x: 0}, STRIKE_MS / 2);
+            strike.scale_x = 0;
             return;
         }
         // The text's own width, as laid out (cut short with … when long); measured before restyling.
@@ -214,7 +213,8 @@ class TasksPage extends Page {
         check.accessible_name = 'Not done';
         row.add_style_class_name('done');
         ease(dot, {scale_x: 1, scale_y: 1}, FILL_MS);
-        ease(strike, {scale_x: box > 0 ? Math.min(1, textWidth / box) : 1}, STRIKE_MS);
+        // Struck through at once, as on macOS.
+        strike.scale_x = box > 0 ? Math.min(1, textWidth / box) : 1;
         this.later(name, LINGER_MS, () => {
             // Folds away: the rows below slide up into its place.
             row.clip_to_allocation = true;
