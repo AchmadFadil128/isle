@@ -185,9 +185,10 @@ export const CompactView = GObject.registerClass({
         let right = hasTrack ? this._bars : null;
         if (onCall && this._call.muted)
             right = this._micOff;
-        // On a call the green phone already says the microphone is on, as on an iPhone.
+        // On a call the green phone already says the microphone is on, as on an iPhone, unless another app records too.
         const privacy = this._showingPrivacy() ? this._privacy : {};
-        const dots = {camera: privacy.camera, microphone: privacy.microphone && !onCall, screenShare: privacy.screenShare};
+        const microphone = privacy.microphone && (!onCall || this._call.othersRecording);
+        const dots = {camera: privacy.camera, microphone, screenShare: privacy.screenShare};
         this._privacyDots.update(dots);
         // Beside an activity, up to two dots take the empty right slot, so the island grows no wider.
         const shown = Object.values(dots).filter(Boolean).length;

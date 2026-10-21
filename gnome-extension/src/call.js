@@ -15,6 +15,8 @@ import {LEVEL_METERS} from './privacy.js';
 
 /** The microphone must be held this long to count: sites open it briefly to ask for permission. */
 const START_DELAY_MS = 2000;
+/** A tab named after a call service only names the call this early on (µs), while it is the call's tab. */
+const SERVICE_GRACE_US = 15 * 1000 * 1000;
 /** A call outlasts the microphone closing this long, as apps reopen it to switch devices. */
 const END_DELAY_MS = 4000;
 /** Apps that record rather than call, matched in their names. */
@@ -77,6 +79,8 @@ export class CallMonitor extends Signals.EventEmitter {
         this.since = 0;
         this.app = null;
         this.window = null;
+        /** The call's microphone stream. */
+        this._stream = null;
         /** The call service the call's window named, kept for the whole call. */
         this._service = null;
         this._streamName = null;
@@ -109,6 +113,15 @@ export class CallMonitor extends Signals.EventEmitter {
 
     toggleMuted() {
         this._source?.change_is_muted(!this.muted);
+    }
+
+    /** Whether an app besides the call's is using the microphone, which then still gets its dot. */
+    get othersRecording() {
+        if (!this.active)
+            return false;
+        return this._mixer.get_source_outputs().some(stream =>
+            !LEVEL_METERS.includes(stream.get_application_id()) && stream !== this._stream &&
+            !(this.app && appMatches(this.app, streamKeys(stream))));
     }
 
     /** The call's service ("Google Meet") once its window named one, else its app's name. */
@@ -146,11 +159,13 @@ export class CallMonitor extends Signals.EventEmitter {
 
     _sync() {
         const stream = this._callStream();
+        this._stream = stream;
         if (stream) {
             this._cancel('end');
             if (this.active) {
-                if (this._identify(stream))
-                    this.emit('changed');
+                // Another app may have started or stopped recording too.
+                this._identify(stream);
+                this.emit('changed');
             } else if (!this._timeouts.start) {
                 this._heldSince = GLib.get_monotonic_time();
                 this._later('start', START_DELAY_MS, () => this._begin());
@@ -239,7 +254,8 @@ export class CallMonitor extends Signals.EventEmitter {
             }),
             // The call's tab came to the front: now the window is known for sure.
             window.connect('notify::title', () => {
-                this._service ??= serviceOf(window.get_title());
+                if (GLib.get_monotonic_time() - this.since < SERVICE_GRACE_US)
+                    this._service ??= serviceOf(window.get_title());
                 this._changed();
             }),
             window.connect('notify::minimized', () => this._changed()),
