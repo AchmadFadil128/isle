@@ -15,6 +15,8 @@ import * as Playback from './playback.js';
 import {Bars, PrivacyDots, RecordingDot, Ring, icon, label} from './widgets.js';
 
 export const EXPANDED_WIDTH = 600;
+/** The least room between the tabs and the status on the right. */
+const HEADER_GAP = 16;
 export const PAGE_HEIGHT = 150;
 /** Room below the page, so its content clears the rounded corners. */
 export const BOTTOM_PADDING = 14;
@@ -71,7 +73,6 @@ export const ExpandedView = GObject.registerClass({
         /** Set once smooth scrolling is seen; its click-style copies are then ignored. */
         this._smoothScrolling = false;
         this._clockTimeout = 0;
-        this._callTimeout = 0;
 
         // Sideways scrolls always flip pages, so catch them before lists and lyrics do;
         // vertical scrolls those leave flip pages in `vfunc_scroll_event`.
@@ -108,11 +109,12 @@ export const ExpandedView = GObject.registerClass({
 
     _buildHeader() {
         const header = new St.Widget({layout_manager: new Clutter.BinLayout(), style_class: 'isle-header'});
-        header.add_child(this._buildTabs());
+        this._tabsBox = this._buildTabs();
+        header.add_child(this._tabsBox);
 
-        // Right: a running recording (click to stop), the call (click to see it),
-        // privacy dots, music, the focus ring and the clock.
-        const status = new St.BoxLayout({style_class: 'isle-header-status', x_expand: true, x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.CENTER});
+        // Right: a running recording (click to stop), privacy dots, music, the focus ring and the clock.
+        // A call has its own green tab on the left.
+        const status = this._status = new St.BoxLayout({style_class: 'isle-header-status', x_expand: true, x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.CENTER});
         const recordingBox = new St.BoxLayout({style_class: 'isle-recording-pill-box'});
         recordingBox.add_child(new RecordingDot());
         this._recordingTime = label('', 'isle-recording-time');
@@ -125,22 +127,9 @@ export const ExpandedView = GObject.registerClass({
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._recordingButton.connect('clicked', () => this._privacy.stopRecording());
-        const callBox = new St.BoxLayout({style_class: 'isle-call-pill-box'});
-        callBox.add_child(new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 11, style_class: 'isle-call-icon', y_align: Clutter.ActorAlign.CENTER}));
-        this._callTime = label('', 'isle-call-pill-time');
-        callBox.add_child(this._callTime);
-        this._callButton = new St.Button({
-            style_class: 'isle-call-pill',
-            child: callBox,
-            accessible_name: 'Show the call',
-            visible: false,
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._callButton.connect('clicked', () => this.showPage('call'));
         this._privacyDots = new PrivacyDots();
         this._headerBars = new Bars({height: 14});
         status.add_child(this._recordingButton);
-        status.add_child(this._callButton);
         status.add_child(this._privacyDots);
         status.add_child(this._headerBars);
 
@@ -207,6 +196,8 @@ export const ExpandedView = GObject.registerClass({
             tabIcon.opacity = TAB_OPACITY[open ? 'open' : tab.hover ? 'hover' : 'idle'];
             badge.visible = !open && Boolean(this._pages[index].hasNews);
         });
+        // The open tab's name may need more room.
+        this._syncWidth();
     }
 
     _buildPager() {
@@ -237,9 +228,19 @@ export const ExpandedView = GObject.registerClass({
         return this._pages[this._index];
     }
 
-    /** The width the island should have for the current page. */
+    /** The width the island should have: the current page's, and never less than the header needs. */
     get preferredWidth() {
-        return this.page.preferredWidth ?? EXPANDED_WIDTH;
+        return Math.max(this.page.preferredWidth ?? EXPANDED_WIDTH, this._headerWidth());
+    }
+
+    // The tabs and the status side by side with room between, so they never overlap,
+    // whatever is showing (a call, a recording, a long date).
+    _headerWidth() {
+        if (!this._header?.get_stage())
+            return 0;
+        const [, tabs] = this._tabsBox.get_preferred_width(-1);
+        const [, status] = this._status.get_preferred_width(-1);
+        return Math.ceil(tabs + status + this._header.get_theme_node().get_horizontal_padding() + HEADER_GAP);
     }
 
     /** RGB colour to wash the island with, or null. */
@@ -321,8 +322,7 @@ export const ExpandedView = GObject.registerClass({
         } else {
             this._stopClock();
             this._stopRecordingTick();
-            this._stopCallTick();
-        }
+            }
     }
 
     _syncPage() {
@@ -382,7 +382,7 @@ export const ExpandedView = GObject.registerClass({
         this._headerBars.playing = this._active && playing;
 
         const privacy = this._settings.get_boolean('privacy-indicators') ? this._privacy : {};
-        // On a call the microphone is a given (the call's own button says so), unless another app records too.
+        // On a call the microphone is a given (the green Call tab says so), unless another app records too.
         const microphone = privacy.microphone && (!this._call.active || this._call.othersRecording);
         this._privacyDots.update({camera: privacy.camera, microphone, screenShare: privacy.screenShare});
         this._recordingButton.visible = this._privacy.recording;
@@ -390,30 +390,7 @@ export const ExpandedView = GObject.registerClass({
             this._tickRecording();
         else
             this._stopRecordingTick();
-        // The Call page shows the call itself.
-        this._callButton.visible = this._call.active && this.page.name !== 'call';
-        if (this._callButton.visible && this._active)
-            this._tickCall();
-        else
-            this._stopCallTick();
-    }
-
-    _tickCall() {
-        const elapsedMs = (GLib.get_monotonic_time() - this._call.since) / 1000;
-        this._callTime.text = Format.duration(elapsedMs);
-        this._stopCallTick();
-        this._callTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000 - (elapsedMs % 1000) + 10, () => {
-            this._callTimeout = 0;
-            this._tickCall();
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
-    _stopCallTick() {
-        if (this._callTimeout) {
-            GLib.source_remove(this._callTimeout);
-            this._callTimeout = 0;
-        }
+        this._syncWidth();
     }
 
     _tickRecording() {
@@ -578,7 +555,6 @@ export const ExpandedView = GObject.registerClass({
     _onDestroy() {
         this._stopClock();
         this._stopRecordingTick();
-        this._stopCallTick();
         this._daemon.disconnect(this._daemonChanged);
         this._privacy.disconnect(this._privacyChanged);
         this._call.disconnect(this._callChanged);

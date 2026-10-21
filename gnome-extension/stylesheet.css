@@ -271,16 +271,6 @@
 .isle-recording-pill-box { spacing: 6px; }
 .isle-recording-time { font-size: 12px; font-weight: 700; color: #ff6961; }
 
-.isle-call-pill {
-  padding: 2px 9px;
-  border-radius: 999px;
-  background-color: rgba(48, 209, 88, 0.18);
-}
-
-.isle-call-pill:hover { background-color: rgba(48, 209, 88, 0.3); }
-.isle-call-pill-box { spacing: 5px; }
-.isle-call-pill-time { font-size: 12px; font-weight: 700; color: #30d158; }
-
 /* Pages line up with the header's edges. */
 .isle-page { padding: 6px 28px 0 28px; }
 
