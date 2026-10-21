@@ -495,7 +495,8 @@
   box-shadow: none !important;
 }
 
-.isle-reminder-field StLabel.hint-text { color: rgba(255, 255, 255, 0.35); }
+/* GNOME indents the placeholder (more since 49); here it lines up with the titles above. */
+#isleIsland .isle-reminder-field StLabel.hint-text { color: rgba(255, 255, 255, 0.35); margin-left: 0; padding-left: 0; }
 
 /* ── Calendar ─────────────────────────────────────────── */
 
