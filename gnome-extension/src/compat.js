@@ -22,6 +22,13 @@ export function clutterBackend() {
         : global.stage.context.get_backend();
 }
 
+/** Whether `grab` (from `Main.pushModal`) holds the keyboard; GNOME 50 dropped `get_seat_state`. */
+export function grabsKeyboard(grab) {
+    if (grab.get_seat_state)
+        return Boolean(grab.get_seat_state() & Clutter.GrabState.KEYBOARD);
+    return !grab.is_revoked();
+}
+
 /** Whether the shell runs on Wayland; GNOME 50 dropped X11 and the check. */
 export function isWayland() {
     return Meta.is_wayland_compositor?.() ?? true;

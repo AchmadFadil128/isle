@@ -13,6 +13,7 @@ import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as Alerts from './alerts.js';
 import {ClipboardHistory} from './clipboard.js';
 import {CompactView} from './compact.js';
+import {grabsKeyboard} from './compat.js';
 import {Daemon} from './daemon.js';
 import {BOTTOM_PADDING, ExpandedView, PAGE_HEIGHT} from './expanded.js';
 import {Island} from './island.js';
@@ -397,7 +398,7 @@ export class Controller {
         if (wanted && !this._keyboardGrab) {
             const grab = Main.pushModal(this._island, {actionMode: Shell.ActionMode.POPUP});
             // Another grab (a menu, a dialog) may hold the keyboard already.
-            if (!(grab.get_seat_state() & Clutter.GrabState.KEYBOARD)) {
+            if (!grabsKeyboard(grab)) {
                 Main.popModal(grab);
                 return;
             }
