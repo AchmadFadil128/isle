@@ -4,7 +4,7 @@
 
 **A dynamic island for the GNOME desktop.**
 
-Music with synced lyrics, calls, notifications, a focus timer, tasks, a
+Music with synced lyrics, calls, notifications, a focus timer, reminders, a
 calendar and a clipboard shelf, living in a notch at the top of your screen.
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)

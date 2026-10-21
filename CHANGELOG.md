@@ -6,6 +6,8 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-21
+
 ### Added
 
 - **Calls** in the island, from any app or browser (WhatsApp, Telegram,
@@ -19,8 +21,35 @@ All notable changes to Isle are listed here. The format follows
 - Right-clicking the closed island during a call brings the call to the
   front.
 
+### Changed
+
+- **Tasks are now Reminders**, laid out as macOS Reminders: an orange title
+  and count, a round tick box, plain rows under hairlines and a New
+  Reminder row last (Enter adds one and leaves the field ready for the
+  next). A ticked reminder is struck through and folds away a moment later;
+  tapping it again in that moment undoes it. Finished ones are no longer
+  listed, and the progress ring is gone.
+- The shelf holds six files, which still fit the open island's width.
+- A file on its way to the shelf lights the drop area with a dashed, tinted
+  outline, brighter under the pointer.
+- On-screen displays that come with only an icon (touchpad, airplane mode,
+  camera) get a title and an On/Off state in the alert.
+- During a call the closed island stays slim: the camera and screen-sharing
+  dots sit beside the activity, and the open island's header no longer
+  repeats the call.
+
 ### Fixed
 
+- Typing into the island (Super+V, a new reminder) works on GNOME Shell 50
+  and later.
+- The first paste from the clipboard history after logging in is no longer
+  lost, and pasting works on every keyboard layout (Dvorak, Colemak, a
+  Ctrl/Caps swap, Russian, Greek…) and in the Ptyxis terminal.
+- A call's preview and Open stay with the window the call is in, and never
+  pick another window of the same browser or an unrelated app.
+- The microphone dot still shows when another app records during a call.
+- The empty shelf shows the same icon in the island and in the shelf
+  helper, whatever the icon theme.
 - No more warnings in the log when Isle starts while the microphone is in
   use.
 
@@ -235,7 +264,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/zickrian/isle/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/zickrian/isle/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/zickrian/isle/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/zickrian/isle/compare/v0.1.0...v0.1.1
