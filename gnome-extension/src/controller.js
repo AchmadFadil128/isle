@@ -22,7 +22,7 @@ import {CallMonitor} from './call.js';
 import {FocusMode} from './focusMode.js';
 import {NotificationCenter} from './notifications.js';
 import {PrivacyMonitor} from './privacy.js';
-import {PEEK_HEIGHT, PeekView} from './peek.js';
+import {PeekView} from './peek.js';
 import * as Playback from './playback.js';
 import {KeyboardWatcher, OsdHook, SF_PRO_CLASS, TopBar, hasSfPro} from './shell.js';
 import {ShelfHelper} from './shelfHelper.js';
@@ -259,7 +259,7 @@ export class Controller {
             break;
         case 'peek': {
             const inset = this._topBar.blendsIn ? top : PEEK_TOP_GLASS;
-            size = {width: this._peek.preferredWidth, height: inset + PEEK_HEIGHT, radius: PEEK_RADIUS, shoulder: PEEK_SHOULDER};
+            size = {width: this._peek.preferredWidth, height: inset + this._peek.preferredHeight, radius: PEEK_RADIUS, shoulder: PEEK_SHOULDER};
             view = this._peek;
             view.style = `padding-top: ${inset}px;`;
             break;

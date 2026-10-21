@@ -4,6 +4,7 @@
 // and controls. See docs/product-spec.md.
 
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
@@ -19,7 +20,9 @@ const CAPTIONS = {
     short_break: 'Short break',
     long_break: 'Long break',
 };
-const RING_SIZE = 104;
+const RING_SIZE = 96;
+/** Focus sessions until a long break: the dots by the caption fill up to it. */
+const CYCLE = 4;
 /** Shown until isled reports the timer: a fresh 25-minute focus session. */
 const DEFAULT_STATE = {phase: 'idle', running: false, remaining_ms: 25 * 60000, duration_ms: 25 * 60000, today_sessions: 0};
 
@@ -36,15 +39,22 @@ class TimerPage extends Page {
 
         // A ring that fills clockwise as the phase runs, the time inside.
         this._time = label('25:00', 'isle-timer-time');
-        this._ring = new Ring({size: RING_SIZE, lineWidth: 5, trackOpacity: 0.14, child: this._time});
+        this._ring = new Ring({size: RING_SIZE, lineWidth: 5.5, trackOpacity: 0.14, child: this._time});
         this._ring.y_align = Clutter.ActorAlign.CENTER;
         this.add_child(this._ring);
 
         const side = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-timer-side'});
+        // The phase, and a dot per session of the cycle, filled as they are done today.
+        const head = new St.BoxLayout({style_class: 'isle-timer-head'});
         this._caption = label('', 'isle-timer-caption');
-        // Today's focus, or how to begin.
+        head.add_child(this._caption);
+        this._dots = new St.BoxLayout({style_class: 'isle-timer-dots', y_align: Clutter.ActorAlign.CENTER});
+        for (let i = 0; i < CYCLE; i++)
+            this._dots.add_child(new St.Widget({style_class: 'isle-timer-dot'}));
+        head.add_child(this._dots);
+        side.add_child(head);
+        // When it ends and today's focus, or how to begin.
         this._stats = label('', 'isle-timer-stats');
-        side.add_child(this._caption);
         side.add_child(this._stats);
 
         const buttons = new St.BoxLayout({style_class: 'isle-timer-buttons'});
@@ -88,10 +98,22 @@ class TimerPage extends Page {
         const sessions = state.today_sessions ?? 0;
         const length = Format.hoursMinutes(state.duration_ms);
         const onBreak = state.phase === 'short_break' || state.phase === 'long_break';
+        const parts = [];
+        if (state.running)
+            parts.push(`Ends ${Format.clockTime(GLib.DateTime.new_from_unix_local(Math.floor(state.ends_at_ms / 1000)))}`);
         if (sessions > 0)
-            this._stats.text = `Today · ${sessions} ${sessions === 1 ? 'session' : 'sessions'} · ${Format.hoursMinutes(state.today_focus_ms ?? 0)}`;
-        else
-            this._stats.text = onBreak ? `${length} break, then back to focus` : `${length} of focus, then a break`;
+            parts.push(`${sessions} ${sessions === 1 ? 'session' : 'sessions'} today`, Format.hoursMinutes(state.today_focus_ms ?? 0));
+        else if (!state.running)
+            parts.push(onBreak ? `${length} break, then back to focus` : `${length} of focus, then a break`);
+        this._stats.text = parts.join(' · ');
+        // A full cycle shows as all done, not none.
+        const done = sessions > 0 && sessions % CYCLE === 0 ? CYCLE : sessions % CYCLE;
+        this._dots.get_children().forEach((dot, i) => {
+            if (i < done)
+                dot.add_style_class_name('filled');
+            else
+                dot.remove_style_class_name('filled');
+        });
 
         setButtonIcon(this._play, state.running ? 'isle-pause-symbolic' : 'isle-play-symbolic');
         // Reset only acts once started.

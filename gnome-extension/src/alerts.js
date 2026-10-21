@@ -60,7 +60,7 @@ export function osd(gicon, text, level, maxLevel) {
         gicon,
         // Toggles (touchpad, airplane mode...) send only an icon; never show it alone.
         title: kind ?? (text || iconTitle(iconName)),
-        subtitle: kind && text ? text : '',
+        subtitle: kind && text && text !== kind ? text : '',
         status: hasLevel ? null : state,
         level: hasLevel ? Math.min(fraction, 1) : null,
         levelText: hasLevel ? percentText(level * 100) : null,

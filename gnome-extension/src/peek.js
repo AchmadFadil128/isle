@@ -14,8 +14,8 @@ import {Art, LevelBar, Ring, icon, isSymbolic, pillButton} from './widgets.js';
 /** Narrowest and widest an alert gets; in between it fits its content. */
 const MIN_WIDTH = 220;
 const MAX_WIDTH = 380;
-/** Height of the part that hangs below the top bar. */
-export const PEEK_HEIGHT = 56;
+/** Height of the part that hangs below the top bar: a line of text, or two. */
+const HEIGHT = {one: 44, two: 52};
 
 /** The ring starts sweeping once the island has made room. */
 const RING_DELAY = 350;
@@ -56,10 +56,10 @@ class PeekView extends St.Widget {
 
         // Leading: one of these sits in the badge bin.
         this._badge = new St.Bin({y_align: Clutter.ActorAlign.CENTER});
-        this._icon = new St.Icon({icon_size: 18});
+        this._icon = new St.Icon({icon_size: 16});
         // Cover art, with the playing app's icon on its corner.
-        this._art = new Art({size: 38, radius: 10});
-        this._artBadgeIcon = new St.Icon({icon_size: 14});
+        this._art = new Art({size: 32, radius: 8});
+        this._artBadgeIcon = new St.Icon({icon_size: 12});
         this._artBadge = new St.Bin({
             style_class: 'isle-app-badge',
             child: this._artBadgeIcon,
@@ -75,9 +75,9 @@ class PeekView extends St.Widget {
         this._artBox.add_child(this._art);
         this._artBox.add_child(this._artBadge);
         // A level as a ring around a lit badge, like the other alerts' badges.
-        this._ringIcon = new St.Icon({icon_size: 14});
+        this._ringIcon = new St.Icon({icon_size: 12});
         this._ringBadge = new St.Bin({style_class: 'isle-peek-ring-badge', child: this._ringIcon});
-        this._ring = new Ring({size: 38, lineWidth: 3.5, child: this._ringBadge});
+        this._ring = new Ring({size: 32, lineWidth: 3, child: this._ringBadge});
         this._row.add_child(this._badge);
 
         const texts = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
@@ -93,7 +93,7 @@ class PeekView extends St.Widget {
         this._accessory = new St.Bin({y_align: Clutter.ActorAlign.CENTER});
         this._value = new St.Label({style_class: 'isle-peek-value', y_align: Clutter.ActorAlign.CENTER});
         this._status = new St.Label({style_class: 'isle-peek-status', y_align: Clutter.ActorAlign.CENTER});
-        this._level = new LevelBar({width: 84});
+        this._level = new LevelBar({width: 72});
         this._levelText = new St.Label({style_class: 'isle-peek-level-text', y_align: Clutter.ActorAlign.CENTER});
         this._levelBox = new St.BoxLayout({style_class: 'isle-peek-level-box'});
         this._levelBox.add_child(this._level);
@@ -136,7 +136,7 @@ class PeekView extends St.Widget {
             // An app's own colour icon stands alone; a symbolic one gets a badge.
             const appIcon = alert.appIcon && !isSymbolic(gicon);
             this._icon.gicon = gicon;
-            this._icon.icon_size = appIcon ? 34 : 18;
+            this._icon.icon_size = appIcon ? 28 : 16;
             this._icon.style = appIcon ? null : `color: ${color};`;
             this._setChild(this._badge, this._icon);
             this._badge.style_class = appIcon ? '' : 'isle-peek-icon';
@@ -175,6 +175,11 @@ class PeekView extends St.Widget {
         } else {
             this._setChild(this._accessory, null);
         }
+    }
+
+    /** The height below the top bar this alert needs: less with a title alone. */
+    get preferredHeight() {
+        return this._subtitle.visible ? HEIGHT.two : HEIGHT.one;
     }
 
     /** The width the island should have for this alert. */
