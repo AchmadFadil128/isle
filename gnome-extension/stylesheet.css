@@ -189,6 +189,11 @@
   background-color: #ff453a;
 }
 
+/* A call, in green as on iPhone; a red microphone while muted. */
+.isle-call-icon { color: #30d158; }
+.isle-call-muted { color: #ff453a; }
+.isle-compact-call-time { color: #30d158; }
+
 /* ── Alerts (peek) ────────────────────────────────────── */
 
 .isle-peek-row { padding: 0 20px 0 16px; spacing: 12px; }
@@ -264,6 +269,16 @@
 .isle-recording-pill:hover { background-color: rgba(255, 69, 58, 0.32); }
 .isle-recording-pill-box { spacing: 6px; }
 .isle-recording-time { font-size: 12px; font-weight: 700; color: #ff6961; }
+
+.isle-call-pill {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background-color: rgba(48, 209, 88, 0.18);
+}
+
+.isle-call-pill:hover { background-color: rgba(48, 209, 88, 0.3); }
+.isle-call-pill-box { spacing: 5px; }
+.isle-call-pill-time { font-size: 12px; font-weight: 700; color: #30d158; }
 
 /* Pages line up with the header's edges. */
 .isle-page { padding: 6px 28px 0 28px; }
@@ -372,6 +387,52 @@
 .isle-lyrics-state-dots .isle-lyric-dot { background-color: rgba(255, 255, 255, 0.6); }
 .isle-lyrics-state-title { font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.85); }
 .isle-lyrics-state-hint { font-size: 12px; color: rgba(255, 255, 255, 0.45); }
+
+/* ── Call ─────────────────────────────────────────────── */
+
+/* The call's window; call.js rounds its corners and draws a hairline edge. */
+.isle-call-preview { background-color: #1c1c1e; border-radius: 14px; }
+.isle-call-preview-button { border-radius: 14px; }
+.isle-call-preview-button:focus { box-shadow: 0 0 0 2px rgba(90, 171, 255, 0.8); }
+.isle-call-placeholder { spacing: 8px; }
+.isle-call-hint { font-size: 11px; font-weight: 500; color: rgba(255, 255, 255, 0.5); }
+
+/* Over the preview under the pointer: where a click goes. */
+.isle-call-preview-hover {
+  padding: 9px;
+  border-radius: 999px;
+  color: #ffffff;
+  background-color: rgba(0, 0, 0, 0.55);
+}
+
+.isle-call-side { spacing: 2px; }
+.isle-call-head { spacing: 8px; }
+.isle-call-name { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+.isle-call-status { spacing: 5px; padding-left: 1px; }
+.isle-call-kind { font-size: 13px; color: rgba(255, 255, 255, 0.55); }
+.isle-call-duration { font-size: 13px; font-weight: 600; color: #30d158; }
+
+/* Round buttons with captions, like FaceTime's; mute turns white while on. */
+.isle-call-controls { spacing: 18px; padding-top: 14px; }
+.isle-call-control-box { spacing: 5px; }
+
+.isle-call-control {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  color: #ffffff;
+  background-color: #2c2c2e;
+  transition-duration: 120ms;
+}
+
+.isle-call-control:hover { background-color: #3a3a3c; }
+.isle-call-control:focus { box-shadow: inset 0 0 0 2px rgba(90, 171, 255, 0.8); }
+.isle-call-control:checked { color: #000000; background-color: #ffffff; }
+.isle-call-control:checked:hover { background-color: #e6e6e6; }
+.isle-call-control-label { font-size: 11px; font-weight: 500; color: rgba(255, 255, 255, 0.6); }
+
+/* The Call tab's phone is green, like the call itself. */
+.isle-tab-call StIcon { color: #30d158; }
 
 /* ── Focus ────────────────────────────────────────────── */
 

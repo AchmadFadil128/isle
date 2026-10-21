@@ -21,6 +21,7 @@ export const BOTTOM_PADDING = 14;
 
 /** Each page's tab: its icon, and the label shown while it is open. */
 const TABS = {
+    call: {icon: 'isle-phone-symbolic', label: 'Call'},
     music: {icon: 'isle-music', label: 'Music'},
     notifications: {icon: 'isle-bell', label: 'Notifications'},
     focus: {icon: 'isle-timer', label: 'Focus'},
@@ -53,13 +54,15 @@ export const ExpandedView = GObject.registerClass({
         'tint-changed': {},
     },
 }, class ExpandedView extends St.BoxLayout {
-    _init(daemon, privacy, settings, pages) {
+    _init(daemon, privacy, call, settings, pages) {
         super._init({...VERTICAL, style_class: 'isle-expanded', width: EXPANDED_WIDTH});
         this._daemon = daemon;
         this._privacy = privacy;
+        this._call = call;
         this._settings = settings;
         this._pages = pages;
-        this._index = 0;
+        // Some pages (Call) have no tab until there is something on them.
+        this._index = Math.max(0, pages.findIndex(page => page.available));
         this._active = false;
         this._width = EXPANDED_WIDTH;
         this._lastFlip = 0;
@@ -68,6 +71,7 @@ export const ExpandedView = GObject.registerClass({
         /** Set once smooth scrolling is seen; its click-style copies are then ignored. */
         this._smoothScrolling = false;
         this._clockTimeout = 0;
+        this._callTimeout = 0;
 
         // Sideways scrolls always flip pages, so catch them before lists and lyrics do;
         // vertical scrolls those leave flip pages in `vfunc_scroll_event`.
@@ -88,6 +92,7 @@ export const ExpandedView = GObject.registerClass({
                     this.emit('tint-changed');
             });
             page.connect('news-changed', () => this._syncTabs());
+            page.connect('availability-changed', () => this._onAvailabilityChanged(page));
         }
 
         this._daemonChanged = daemon.connect('changed', (_daemon, key) => {
@@ -95,6 +100,7 @@ export const ExpandedView = GObject.registerClass({
                 this._updateHeader();
         });
         this._privacyChanged = privacy.connect('changed', () => this._updateHeader());
+        this._callChanged = call.connect('changed', () => this._updateHeader());
         this._syncPage();
         this._syncWidth();
         this.connect('destroy', () => this._onDestroy());
@@ -104,8 +110,8 @@ export const ExpandedView = GObject.registerClass({
         const header = new St.Widget({layout_manager: new Clutter.BinLayout(), style_class: 'isle-header'});
         header.add_child(this._buildTabs());
 
-        // Right: a running recording (click to stop), privacy dots, music,
-        // the focus ring and the clock.
+        // Right: a running recording (click to stop), the call (click to see it),
+        // privacy dots, music, the focus ring and the clock.
         const status = new St.BoxLayout({style_class: 'isle-header-status', x_expand: true, x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.CENTER});
         const recordingBox = new St.BoxLayout({style_class: 'isle-recording-pill-box'});
         recordingBox.add_child(new RecordingDot());
@@ -119,9 +125,22 @@ export const ExpandedView = GObject.registerClass({
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._recordingButton.connect('clicked', () => this._privacy.stopRecording());
+        const callBox = new St.BoxLayout({style_class: 'isle-call-pill-box'});
+        callBox.add_child(new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 11, style_class: 'isle-call-icon', y_align: Clutter.ActorAlign.CENTER}));
+        this._callTime = label('', 'isle-call-pill-time');
+        callBox.add_child(this._callTime);
+        this._callButton = new St.Button({
+            style_class: 'isle-call-pill',
+            child: callBox,
+            accessible_name: 'Show the call',
+            visible: false,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._callButton.connect('clicked', () => this.showPage('call'));
         this._privacyDots = new PrivacyDots();
         this._headerBars = new Bars({height: 14});
         status.add_child(this._recordingButton);
+        status.add_child(this._callButton);
         status.add_child(this._privacyDots);
         status.add_child(this._headerBars);
 
@@ -160,7 +179,7 @@ export const ExpandedView = GObject.registerClass({
             box.add_child(glyph);
             box.add_child(name);
             const tab = new St.Button({
-                style_class: 'isle-tab',
+                style_class: `isle-tab isle-tab-${page.name}`,
                 child: box,
                 can_focus: true,
                 track_hover: true,
@@ -184,6 +203,7 @@ export const ExpandedView = GObject.registerClass({
             else
                 tab.remove_style_pseudo_class('checked');
             name.visible = open;
+            tab.visible = this._pages[index].available;
             tabIcon.opacity = TAB_OPACITY[open ? 'open' : tab.hover ? 'hover' : 'idle'];
             badge.visible = !open && Boolean(this._pages[index].hasNews);
         });
@@ -203,7 +223,7 @@ export const ExpandedView = GObject.registerClass({
             page.hide();
             this._pager.add_child(page);
         }
-        this._pages[0].show();
+        this.page.show();
         area.add_child(this._pager);
         return area;
     }
@@ -241,7 +261,7 @@ export const ExpandedView = GObject.registerClass({
         const index = typeof target === 'string'
             ? this._pages.findIndex(page => page.name === target)
             : target;
-        if (index < 0 || index >= this._pages.length || index === this._index)
+        if (index < 0 || index >= this._pages.length || index === this._index || !this._pages[index].available)
             return;
 
         const previous = this.page;
@@ -301,11 +321,32 @@ export const ExpandedView = GObject.registerClass({
         } else {
             this._stopClock();
             this._stopRecordingTick();
+            this._stopCallTick();
         }
     }
 
     _syncPage() {
         this._syncTabs();
+        this._updateHeader();
+    }
+
+    /** A page lost its tab: leave it for the next page that has one. */
+    _onAvailabilityChanged(page) {
+        this._syncTabs();
+        if (page !== this.page || page.available)
+            return;
+        const index = this._nearestAvailable(this._index, 1) ?? this._nearestAvailable(this._index, -1);
+        if (index !== null)
+            this.showPage(index, {animate: this._active});
+    }
+
+    /** The first page from `index` on in `direction` (±1) that has a tab, or null. */
+    _nearestAvailable(index, direction) {
+        for (let i = index + direction; i >= 0 && i < this._pages.length; i += direction) {
+            if (this._pages[i].available)
+                return i;
+        }
+        return null;
     }
 
     _syncWidth() {
@@ -339,6 +380,30 @@ export const ExpandedView = GObject.registerClass({
             this._tickRecording();
         else
             this._stopRecordingTick();
+        // The Call page shows the call itself.
+        this._callButton.visible = this._call.active && this.page.name !== 'call';
+        if (this._callButton.visible && this._active)
+            this._tickCall();
+        else
+            this._stopCallTick();
+    }
+
+    _tickCall() {
+        const elapsedMs = (GLib.get_monotonic_time() - this._call.since) / 1000;
+        this._callTime.text = Format.duration(elapsedMs);
+        this._stopCallTick();
+        this._callTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000 - (elapsedMs % 1000) + 10, () => {
+            this._callTimeout = 0;
+            this._tickCall();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _stopCallTick() {
+        if (this._callTimeout) {
+            GLib.source_remove(this._callTimeout);
+            this._callTimeout = 0;
+        }
     }
 
     _tickRecording() {
@@ -493,15 +558,19 @@ export const ExpandedView = GObject.registerClass({
         if (!gesture.flipped && now - this._lastFlip < WHEEL_REPEAT_MS)
             return Clutter.EVENT_STOP;
         this._lastFlip = now;
-        const index = Math.min(this._pages.length - 1, Math.max(0, this._index + step));
-        this.showPage(index);
+        // Pages without a tab are skipped.
+        const index = this._nearestAvailable(this._index, step);
+        if (index !== null)
+            this.showPage(index);
         return Clutter.EVENT_STOP;
     }
 
     _onDestroy() {
         this._stopClock();
         this._stopRecordingTick();
+        this._stopCallTick();
         this._daemon.disconnect(this._daemonChanged);
         this._privacy.disconnect(this._privacyChanged);
+        this._call.disconnect(this._callChanged);
     }
 });

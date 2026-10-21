@@ -4,8 +4,8 @@
 
 **A dynamic island for the GNOME desktop.**
 
-Music with synced lyrics, notifications, a focus timer, tasks, a calendar
-and a clipboard shelf, living in a notch at the top of your screen.
+Music with synced lyrics, calls, notifications, a focus timer, tasks, a
+calendar and a clipboard shelf, living in a notch at the top of your screen.
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 ![GNOME Shell 46–51](https://img.shields.io/badge/GNOME%20Shell-46%E2%80%9351-4a86cf.svg)
@@ -45,6 +45,7 @@ appear in the same place instead of in the middle of the screen.
 |---|---|
 | <img src="docs/images/music.png" alt="Music page" width="420"> | **Music.** Spotify, YouTube in your browser, or any MPRIS player: cover art with the playing app's icon, a scrubber and controls. Volume and output switching are one click away. |
 | <img src="docs/images/lyrics.png" alt="Synced lyrics" width="420"> | **Synced lyrics** from [LRCLIB](https://lrclib.net), like Apple Music's: the line being sung large and bright, pauses as breathing dots. The island widens and takes the cover's colour; click a line to jump to it. |
+| <img src="docs/images/call.png" alt="A Google Meet call in the island: a live preview of the call, its length, mute and open" width="420"> | **Calls** in WhatsApp, Telegram, Meet or any app or browser: the closed island shows a green phone and how long the call has lasted. Open it to see the call live (you and whoever you call) while you work in other windows, mute your microphone, or jump back to the call. |
 | <img src="docs/images/focus.png" alt="Focus timer" width="420"> | **Focus timer** (Pomodoro) with breaks, daily totals and Do Not Disturb while you focus. Its ring stays visible in the closed island. |
 | <img src="docs/images/clipboard.png" alt="Clipboard history" width="420"> | **Shelf.** A clipboard history of text, links, images and files (search, filter, pin; Super+V to paste), and a files tray: drop files on the island, then drag them into any app or click one to copy it, ready to paste into a chat. |
 | <img src="docs/images/tasks.png" alt="Tasks" width="420"> | **Tasks.** A plain list for today: add, tick off, rename in place. Finished tasks fold away and clear at midnight. |
@@ -124,12 +125,12 @@ cd isle
 | Move the pointer away, or press Esc | Close it |
 | Click the notch | Open it now; on an alert, open what it is about |
 | Middle-click the notch | Play or pause |
-| Right-click the notch | Bring the music player to the front |
+| Right-click the notch | Bring the call, or else the music player, to the front |
 | Super+V | Open the clipboard history with search ready; Enter pastes |
 | Drag a file towards the notch | Open the files tray to drop it |
 
 The island reopens on the page you picked last (for five minutes), or on
-what is live: unseen notifications, music, a running timer.
+what is live: a call, unseen notifications, music, a running timer.
 
 ## Settings
 
@@ -139,6 +140,7 @@ Open the **Extensions** app and click the gear next to Isle:
   island inside the bar or hanging below it.
 - **Alerts:** volume and brightness, battery and network, privacy dots, new
   songs, timer sounds.
+- **Calls:** show calls in the island, and the live preview of the call.
 - **Clipboard:** turn the history on or off, clear it, and choose apps whose
   copies are never kept (password managers are on the list from the start).
 - **Focus timer:** session and break lengths, Do Not Disturb while focusing.
@@ -163,13 +165,19 @@ GNOME 46:
 
 Animations run on the display's frame clock only while a spring moves and
 stop when it settles. The clock wakes once a minute, lyrics exactly when the
-next line starts, and pages only tick while they are open.
+next line starts, and pages only tick while they are open. The call preview
+reuses the window's picture already on the graphics card, so it costs about
+nothing, and only exists while the Call page is open; Isle never opens the
+camera or the microphone itself.
 
 ## Privacy
 
 Isle runs locally. The clipboard history, tasks, calendar events and timer stay in
 `~/.local/share/isle` and never leave your computer; copies from password
-managers are never kept. The only network requests are a lyrics lookup on
+managers are never kept. The call preview is drawn by GNOME Shell from the
+call's window as it already is on screen: nothing is recorded or saved, it
+exists only while the Call page is open, and it hides while you share your
+screen. The only network requests are a lyrics lookup on
 [LRCLIB](https://lrclib.net) and the cover art the player points to, once
 per song, both then cached.
 

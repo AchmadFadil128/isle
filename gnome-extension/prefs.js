@@ -77,6 +77,17 @@ export default class IslePreferences extends ExtensionPreferences {
         alerts.add(switchRow(settings, 'track-peek', 'New song', 'Briefly show the song when the track changes'));
         alerts.add(switchRow(settings, 'chimes', 'Sounds', 'Chime when a focus session or break ends'));
         page.add(alerts);
+
+        const calls = new Adw.PreferencesGroup({
+            title: 'Calls',
+            description: 'WhatsApp, Telegram, Meet and other calls, in any app or browser.',
+        });
+        calls.add(switchRow(settings, 'call-activity', 'Calls in the island', 'The call’s length, mute and a way back to it'));
+        const preview = switchRow(settings, 'call-preview', 'Live preview',
+            'See yourself and whoever you call, live in the open island');
+        settings.bind('call-activity', preview, 'sensitive', Gio.SettingsBindFlags.GET);
+        calls.add(preview);
+        page.add(calls);
         return page;
     }
 

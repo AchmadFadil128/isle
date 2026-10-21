@@ -43,6 +43,16 @@
       <default>true</default>
       <summary>Show when the camera, microphone or screen sharing is in use</summary>
     </key>
+    <key name="call-activity" type="b">
+      <default>true</default>
+      <summary>Show calls in the island</summary>
+      <description>While an app uses the microphone for a call (WhatsApp, Telegram, Meet in a browser…), the island shows it, with mute and a way back to the call.</description>
+    </key>
+    <key name="call-preview" type="b">
+      <default>true</default>
+      <summary>Live preview of the call</summary>
+      <description>The open island shows the call's window as it is on screen, so you see yourself and whoever you call. The shell draws it from the window; nothing is recorded, and it is hidden while you share your screen.</description>
+    </key>
     <key name="focus-dnd" type="b">
       <default>true</default>
       <summary>Turn on Do Not Disturb during focus sessions</summary>

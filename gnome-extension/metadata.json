@@ -1,7 +1,7 @@
 {
   "uuid": "isle@zickrian.github.io",
   "name": "Isle",
-  "description": "A dynamic island for the top bar: music with synced lyrics, a focus timer, tasks, a calendar, a file shelf, charging and system alerts.",
+  "description": "A dynamic island for the top bar: music with synced lyrics, calls, a focus timer, tasks, a calendar, a file shelf, charging and system alerts.",
   "shell-version": [
     "46",
     "47",

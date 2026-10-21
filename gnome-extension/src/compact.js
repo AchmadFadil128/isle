@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The resting island: the clock flanked by live activities (recording or timer
+// The resting island: the clock flanked by live activities (recording, call or timer
 // left, music right, privacy dots far right). A paused song keeps its cover.
 
 import Clutter from 'gi://Clutter';
@@ -14,8 +14,8 @@ import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon} from './widgets.js';
 
 /** Sizes hanging below the top bar, and inside it with smaller text. */
 const SIZES = {
-    hanging: {clock: 164, activities: 256, art: 24, artRadius: 6, ring: 20, bars: 16, moon: 13},
-    inBar: {clock: 144, activities: 232, art: 22, artRadius: 6, ring: 18, bars: 14, moon: 12},
+    hanging: {clock: 164, activities: 256, art: 24, artRadius: 6, ring: 20, bars: 16, moon: 13, call: 15},
+    inBar: {clock: 144, activities: 232, art: 22, artRadius: 6, ring: 18, bars: 14, moon: 12, call: 14},
 };
 /** The music bars' opacity while the song is paused. */
 const PAUSED_OPACITY = 110;
@@ -29,7 +29,7 @@ export function timerColor(phase) {
 export const CompactView = GObject.registerClass({
     Signals: {'width-changed': {}},
 }, class CompactView extends St.Widget {
-    _init(daemon, settings, privacy) {
+    _init(daemon, settings, privacy, call) {
         super._init({
             style_class: 'isle-compact',
             layout_manager: new Clutter.BinLayout(),
@@ -37,6 +37,7 @@ export const CompactView = GObject.registerClass({
         this._daemon = daemon;
         this._settings = settings;
         this._privacy = privacy;
+        this._call = call;
         this._idle = false;
         this._inBar = false;
         this._timeouts = {};
@@ -51,13 +52,19 @@ export const CompactView = GObject.registerClass({
         this._dot = new St.Widget({style_class: 'isle-unseen-dot', y_align: Clutter.ActorAlign.CENTER});
         this._moon = new St.Icon({gicon: icon('isle-moon'), icon_size: 13, style_class: 'isle-dnd-moon', y_align: Clutter.ActorAlign.CENTER});
         this._recordingDot = new RecordingDot();
+        // A call: a green phone, and on the right a red microphone while it is muted.
+        this._phone = new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 15, style_class: 'isle-call-icon', y_align: Clutter.ActorAlign.CENTER});
+        this._micOff = new St.Icon({gicon: icon('isle-mic-off-symbolic'), icon_size: 15, style_class: 'isle-call-muted', y_align: Clutter.ActorAlign.CENTER});
 
         const center = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true});
         this._clock = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         // How long the screen has been recording, in place of the clock.
         this._elapsed = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, visible: false});
+        // How long the call has lasted, in green like an iPhone's.
+        this._callTime = new St.Label({style_class: 'isle-compact-clock isle-compact-call-time', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, visible: false});
         center.add_child(this._clock);
         center.add_child(this._elapsed);
+        center.add_child(this._callTime);
 
         this._right = new St.Bin({style_class: 'isle-compact-slot', y_align: Clutter.ActorAlign.CENTER});
         this._bars = new Bars({height: 16});
@@ -78,8 +85,15 @@ export const CompactView = GObject.registerClass({
         });
         this._settingsChanged = settings.connect('changed::privacy-indicators', () => this._refresh());
         this._privacyChanged = privacy.connect('changed', () => this._refresh());
-        // Music bars only dance while this view is on screen.
-        this.connect('notify::mapped', () => this._syncBars());
+        this._callChanged = call.connect('changed', () => this._refresh());
+        // Music bars only dance, and the call's time only ticks, while this view is on screen.
+        this.connect('notify::mapped', () => {
+            this._syncBars();
+            this._tickCall();
+            // Measure the privacy dots' balance now that they can be.
+            if (this.mapped && this._privacyBalance.visible && !this._privacyBalance.width)
+                this._refresh();
+        });
         this._tickClock();
         this._refresh();
         this.connect('destroy', () => this._onDestroy());
@@ -94,7 +108,8 @@ export const CompactView = GObject.registerClass({
 
     /** Room for the privacy dots and their balance on the other side. */
     _privacyWidth() {
-        if (!this._privacyDots.visible)
+        // Off the stage (as when Isle starts mid-call) nothing can be measured yet.
+        if (!this._privacyDots.visible || !this.get_stage())
             return 0;
         const [, dots] = this._privacyDots.get_preferred_width(-1);
         const spacing = this._row.get_theme_node().get_length('spacing');
@@ -127,6 +142,7 @@ export const CompactView = GObject.registerClass({
         this._ring.set_size(size.ring, size.ring);
         this._bars.maxHeight = size.bars;
         this._moon.icon_size = size.moon;
+        this._phone.icon_size = this._micOff.icon_size = size.call;
         if (inBar)
             this.add_style_class_name('isle-compact-in-bar');
         else
@@ -146,13 +162,16 @@ export const CompactView = GObject.registerClass({
         const hasTrack = Playback.hasTrack(nowPlaying);
         const timerActive = pomodoro && pomodoro.phase !== 'idle';
         const recording = this._privacy.recording;
+        const onCall = this._call.active;
         const widthBefore = this.preferredWidth;
 
-        // Left, first that applies: recording, focus timer, cover, unread dot, DND.
+        // Left, first that applies: recording, call, focus timer, cover, unread dot, DND.
         // Both slots keep their width when empty, so the centre stays centred.
         let left = null;
         if (recording)
             left = this._recordingDot;
+        else if (onCall)
+            left = this._phone;
         else if (timerActive)
             left = this._ring;
         else if (hasTrack)
@@ -163,14 +182,18 @@ export const CompactView = GObject.registerClass({
             left = this._moon;
         if (this._left.child !== left)
             this._left.child = left;
-        this._right.child = hasTrack ? this._bars : null;
+        let right = hasTrack ? this._bars : null;
+        if (onCall && this._call.muted)
+            right = this._micOff;
+        if (this._right.child !== right)
+            this._right.child = right;
         // Paused: the bars rest, dimmed.
         this._bars.ease({opacity: playing ? 255 : PAUSED_OPACITY, duration: 200});
         this._syncBars();
         this._privacyDots.update(this._showingPrivacy() ? this._privacy : {});
         this._privacyBalance.visible = this._privacyDots.visible;
         // Measured only when shown: hidden, it may not be on the stage yet.
-        this._privacyBalance.width = this._privacyDots.visible ? this._privacyDots.get_preferred_width(-1)[1] : 0;
+        this._privacyBalance.width = this._privacyDots.visible && this.get_stage() ? this._privacyDots.get_preferred_width(-1)[1] : 0;
 
         if (timerActive) {
             this._ring.color = timerColor(pomodoro.phase);
@@ -186,8 +209,9 @@ export const CompactView = GObject.registerClass({
             this._tickRecording();
         } else {
             this._cancel('recording');
-            this._crossfade(this._clock);
+            this._crossfade(onCall ? this._callTime : this._clock);
         }
+        this._tickCall();
 
         if (this.preferredWidth !== widthBefore)
             this.emit('width-changed');
@@ -195,7 +219,7 @@ export const CompactView = GObject.registerClass({
 
     /** Fades `actor` in and the other centre actors out. */
     _crossfade(actor) {
-        for (const other of [this._clock, this._elapsed]) {
+        for (const other of [this._clock, this._elapsed, this._callTime]) {
             if (other === actor) {
                 if (!other.visible) {
                     other.opacity = 0;
@@ -231,6 +255,17 @@ export const CompactView = GObject.registerClass({
         this._later('recording', 1000 - (elapsedMs % 1000) + 10, () => this._tickRecording());
     }
 
+    /** Shows how long the call has lasted, once a second while on screen. */
+    _tickCall() {
+        if (!this._call.active || !this.mapped) {
+            this._cancel('call');
+            return;
+        }
+        const elapsedMs = (GLib.get_monotonic_time() - this._call.since) / 1000;
+        this._callTime.text = Format.duration(elapsedMs);
+        this._later('call', 1000 - (elapsedMs % 1000) + 10, () => this._tickCall());
+    }
+
     /** Updates the clock, then sleeps until the minute changes. */
     _tickClock() {
         const now = GLib.DateTime.new_now_local();
@@ -261,8 +296,9 @@ export const CompactView = GObject.registerClass({
         this._daemon.disconnect(this._daemonChanged);
         this._settings.disconnect(this._settingsChanged);
         this._privacy.disconnect(this._privacyChanged);
+        this._call.disconnect(this._callChanged);
         // Slots may hold actors that are not currently children.
-        for (const actor of [this._ring, this._art, this._dot, this._moon, this._recordingDot, this._bars]) {
+        for (const actor of [this._ring, this._art, this._dot, this._moon, this._recordingDot, this._bars, this._phone, this._micOff]) {
             if (!actor.get_parent())
                 actor.destroy();
         }

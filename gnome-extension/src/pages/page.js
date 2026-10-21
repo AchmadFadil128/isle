@@ -18,6 +18,8 @@ export const Page = GObject.registerClass({
         'request-close': {},
         // `hasNews` changed.
         'news-changed': {},
+        // `available` changed.
+        'availability-changed': {},
     },
 }, class Page extends St.Widget {
     _init(daemon, params) {
@@ -44,6 +46,11 @@ export const Page = GObject.registerClass({
 
     get active() {
         return this._active;
+    }
+
+    /** Whether the page has a tab now; the Call page only has one during a call. */
+    get available() {
+        return true;
     }
 
     /** Whether the page has something to show; used to pick a default page. */

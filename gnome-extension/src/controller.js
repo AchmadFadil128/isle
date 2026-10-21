@@ -17,6 +17,7 @@ import {Daemon} from './daemon.js';
 import {BOTTOM_PADDING, ExpandedView, PAGE_HEIGHT} from './expanded.js';
 import {Island} from './island.js';
 import {AudioOutputs} from './audio.js';
+import {CallMonitor} from './call.js';
 import {FocusMode} from './focusMode.js';
 import {NotificationCenter} from './notifications.js';
 import {PrivacyMonitor} from './privacy.js';
@@ -24,6 +25,7 @@ import {PEEK_HEIGHT, PeekView} from './peek.js';
 import * as Playback from './playback.js';
 import {KeyboardWatcher, OsdHook, SF_PRO_CLASS, TopBar, hasSfPro} from './shell.js';
 import {ShelfHelper} from './shelfHelper.js';
+import {CallPage} from './pages/call.js';
 import {CalendarPage} from './pages/calendar.js';
 import {MediaPage} from './pages/media.js';
 import {NotificationsPage} from './pages/notifications.js';
@@ -60,7 +62,7 @@ const EXPANDED_SHOULDER = 22;
 
 // Pages that open by default when they have something to show, best first, unless one was picked
 // by hand lately. Notifications count only when some arrived unseen (others were shown as alerts).
-const DEFAULT_PAGE_ORDER = ['notifications', 'music', 'focus'];
+const DEFAULT_PAGE_ORDER = ['call', 'notifications', 'music', 'focus'];
 
 export class Controller {
     constructor(extension) {
@@ -80,13 +82,14 @@ export class Controller {
         this._topBar = new TopBar(this._settings);
         this._notifications = new NotificationCenter();
         this._privacy = new PrivacyMonitor(this._daemon);
+        this._call = new CallMonitor(this._privacy, this._settings);
         this._audio = new AudioOutputs();
         this._focusMode = new FocusMode(this._daemon, this._notifications, this._settings);
         this._clipboard = new ClipboardHistory(this._daemon, this._settings);
         this._island = new Island();
         if (hasSfPro())
             this._island.add_style_class_name(SF_PRO_CLASS);
-        this._compact = new CompactView(this._daemon, this._settings, this._privacy);
+        this._compact = new CompactView(this._daemon, this._settings, this._privacy, this._call);
         this._peek = new PeekView();
         this._expanded = this._buildExpanded();
         this._shelf = this._expanded.pageNamed('shelf');
@@ -108,6 +111,7 @@ export class Controller {
     _buildExpanded() {
         const size = {height: PAGE_HEIGHT};
         const pages = [
+            new CallPage(this._daemon, this._call, this._privacy, this._settings, size),
             new MediaPage(this._daemon, this._audio, size),
             new NotificationsPage(this._daemon, this._notifications, size),
             new TimerPage(this._daemon, size),
@@ -119,7 +123,7 @@ export class Controller {
             page.connect('request-keyboard', (_page, wanted) => this._setKeyboard(wanted));
             page.connect('request-close', () => this.collapse());
         }
-        const expanded = new ExpandedView(this._daemon, this._privacy, this._settings, pages);
+        const expanded = new ExpandedView(this._daemon, this._privacy, this._call, this._settings, pages);
         expanded.connect('page-changed', () => {
             // Picked by hand (a tab, a swipe) while open; not when opening.
             if (this._expandWanted)
@@ -198,6 +202,8 @@ export class Controller {
 
         this._privacy.connect('recording-started', () =>
             this._post(Alerts.recordingStarted(() => this._privacy.stopRecording())));
+        // A new call is what the island opens on next, whatever was picked before.
+        this._call.connect('started', () => (this._pagePickedAt = 0));
 
         // GNOME's notifications appear in the island instead of as banners.
         const notifications = this._notifications;
@@ -323,9 +329,15 @@ export class Controller {
             this._daemon.call('media', 'PlayPause');
             return Clutter.EVENT_STOP;
         case Clutter.BUTTON_SECONDARY:
-            // Brings the music player to the front, from the closed island
+            // Brings the call, or else the music player, to the front from the closed island
             // (the open one has its own controls, cards and fields).
-            if (this._expandWanted || !Playback.hasTrack(this._daemon.state.nowPlaying))
+            if (this._expandWanted)
+                return Clutter.EVENT_PROPAGATE;
+            if (this._call.active) {
+                this._call.raise();
+                return Clutter.EVENT_STOP;
+            }
+            if (!Playback.hasTrack(this._daemon.state.nowPlaying))
                 return Clutter.EVENT_PROPAGATE;
             this.collapse();
             this._daemon.call('media', 'Raise');
@@ -565,6 +577,7 @@ export class Controller {
         // The views listen to the services below, so they go first.
         this._island.destroy();
         this._clipboard.destroy();
+        this._call.destroy();
         this._privacy.destroy();
         this._audio.destroy();
         this._notifications.destroy();

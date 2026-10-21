@@ -9,6 +9,7 @@ disagrees with this document is a bug in one or the other; fix both together.
 |---|---|
 | see the time and what is running at a glance | show the clock in the closed island, with live activities beside it (timer ring, music) |
 | control music without switching windows | open on hover with cover, scrubber, controls; sing along with synced lyrics |
+| keep an eye on a call while I work in another window | show calls from any app or browser: their length in the closed island, a live preview of the call, mute and a way back |
 | focus in blocks | run a Pomodoro timer that stays visible while closed and chimes at the end |
 | not forget small tasks | write them down in one line, tick them off; tasks survive reboots and power cuts |
 | move files between apps | park files on the island and drag them out later |
@@ -75,6 +76,7 @@ glance (and for colour-blind users):
 | Completed tasks | arrow pointing right, folded | arrow pointing down, listed |
 | Play / pause | play | pause |
 | Task | empty circle | white circle with a black check; title struck through |
+| Mute (call) | microphone, grey round button, "Mute" | crossed-out microphone, white button, "Muted"; a red crossed-out microphone in the closed island |
 
 Controls that cannot act right now (Clear All with nothing to clear) stay in
 place, dimmed, so the layout never jumps.
@@ -101,7 +103,7 @@ place, dimmed, so the layout never jumps.
 | Pointer leaves | – | Close after 300 ms (not while typing or dragging a file) |
 | Click | Open now (an alert opens on its page) | Normal button clicks |
 | Middle-click | Play / pause | Play / pause |
-| Right-click | Bring the music player to the front | Bring the music player to the front |
+| Right-click | Bring the call, or else the music player, to the front | Bring the music player to the front |
 | Super+V (GNOME's calendar shortcut) | Open the clipboard history, search ready, held open | Close |
 | Click a tab | – | Go to that page |
 | Two-finger swipe sideways | – | Previous / next page, one page a swipe |
@@ -111,22 +113,25 @@ place, dimmed, so the layout never jumps.
 
 **Default page on open**, first match wins: the page of the alert being
 shown → the page picked by hand (a tab, a swipe, or the Shelf after a file
-was dragged onto the island), remembered for 5 minutes → Notifications if
-some arrived unseen (during Do Not Disturb) → Music if something plays →
-Focus if the timer runs → Music.
+was dragged onto the island), remembered for 5 minutes and forgotten when a
+call starts → Call during a call → Notifications if some arrived unseen
+(during Do Not Disturb) → Music if something plays → Focus if the timer
+runs → Music.
 
-Pages, in order: **Music · Notifications · Focus · Shelf · Tasks**, one tab
-each in the header. Lists scroll with the wheel or touchpad and never show
+Pages, in order: **Call** (only during a call) **· Music · Notifications ·
+Focus · Shelf · Tasks · Calendar**, one tab each in the header. Lists scroll with the wheel or touchpad and never show
 a scrollbar.
 
 ## 4. Closed island
 
 - Left slot, first that applies: breathing red dot (screen recording) →
-  focus timer ring → cover art (a song playing or paused) → white dot (unseen
+  green phone (a call) → focus timer ring → cover art (a song playing or paused) → white dot (unseen
   notifications) → moon (Do Not Disturb on).
 - While the screen records, the centre shows how long it has been recording
-  instead of the clock.
-- Right slot: music bars while a song is loaded. They dance only while it
+  instead of the clock; during a call (and no recording), how long the call
+  has lasted, in green, as on iPhone.
+- Right slot: a red crossed-out microphone while a call is muted, else music
+  bars while a song is loaded. They dance only while it
   plays and the closed island is on screen, and rest after a minute without
   input. Paused, they rest and dim, and the cover stays until the player
   closes, as in NotchNook.
@@ -139,8 +144,35 @@ a scrollbar.
 Every page shares the header row inside the top bar, like NotchNook's. On
 the left, a tab per page: icons, the open page's in a lit pill with its
 name, and a red dot on Notifications while some are unseen. On the right a
-red "● 0:42" pill while the screen records (click to stop), the privacy
-dots, the music bars and `[timer ring] Tue 20 Oct 12:26`.
+red "● 0:42" pill while the screen records (click to stop), a green "📞 1:15"
+pill during a call on any page but Call (click: the Call page), the privacy
+dots, the music bars and `[timer ring] Tue 20 Oct 12:26`. The Call tab, its
+phone in green, only shows during a call.
+
+**Call**, laid out like FaceTime's controls. A call is an app holding the
+microphone for over 2 s (sites open it briefly to ask for permission), in
+any app or browser: WhatsApp, Telegram, Meet, Zoom, Discord… Level meters
+and recorders (OBS, Audacity, Sound Recorder…) do not count. The app is
+found from the microphone stream ("Google Chrome", "firefox", an app id),
+then its window: one titled after a call service first ("Meet - …",
+"WhatsApp"), else the app's latest. The call ends 4 s after the microphone
+closes, so an app reopening it (switching devices) keeps the same call.
+
+On the left, a live preview of the call's window (rounded 14 px, 128 px
+high, as wide as the window's shape allows between 168 and 228 px, cropped
+to fill): you and whoever you call, still moving while the window is
+covered, minimised or on another workspace. GNOME Shell draws it from the
+window's picture already on the graphics card (a `Clutter.Clone`): nothing
+is captured, and it only exists while this page is open. Under the pointer
+an ↗ shows; click it to go to the call. It shows the app's icon instead
+while the preview is off (Settings → Calls) or no window is known, and
+"Hidden while sharing" while the screen is shared. On the right: the app's
+icon and the service or app name ("Google Meet", "WhatsApp"), "Voice call"
+or "Video call" (while the camera is on) with the length in green, and two
+round buttons with captions: **Mute** (GNOME's default microphone, for
+every app; white and "Muted" while on) and **Open** (brings the call's
+window to the front, switching workspace if needed, and closes the island).
+When the call ends the tab goes and an open island moves to the next page.
 
 **Music**, laid out like macOS's Now Playing. On the left a 104 px cover
 (click: bring the player forward) with the playing app's icon on its corner
@@ -330,6 +362,10 @@ hovering opens the Notifications page.
 - Idle, nothing playing: one wake-up per minute (the clock). No polling.
 - Animations run on the display's frame clock only while a spring moves.
 - The open island ticks only the visible page (scrubber 4×/s, timer 1×/s).
+- Calls are found from the shell's own audio events, never polled. The
+  call's length ticks once a second only while it is on screen; the call
+  preview reuses the window's picture and exists only while the Call page
+  is open. Isle never opens the camera or the microphone itself.
 - `isled` sleeps until a D-Bus signal arrives. The camera is watched with
   inotify, so the kernel reports opens and closes; nothing is polled.
 - Moving parts that loop (music bars, the recording dot) run only while on

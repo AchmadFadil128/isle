@@ -12,7 +12,7 @@ import {getMixerControl} from 'resource:///org/gnome/shell/ui/status/volume.js';
 import {isWayland} from './compat.js';
 
 /** Apps that open the microphone only to show its level. */
-const LEVEL_METERS = ['org.gnome.VolumeControl', 'org.PulseAudio.pavucontrol'];
+export const LEVEL_METERS = ['org.gnome.VolumeControl', 'org.PulseAudio.pavucontrol'];
 
 /** Signals: `changed` (any state), `recording-started` (GNOME's screen recorder). */
 export class PrivacyMonitor extends Signals.EventEmitter {

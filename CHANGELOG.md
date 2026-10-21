@@ -6,6 +6,24 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Calls** in the island, from any app or browser (WhatsApp, Telegram,
+  Meet, Zoom, Discord…): the closed island shows a green phone and how long
+  the call has lasted, and a **Call** page appears for as long as the call
+  lasts. It shows the call live, so you see yourself and whoever you call
+  while you work in other windows, with **Mute** and **Open** to go back to
+  the call. The preview is drawn by GNOME Shell from the window already on
+  screen, so it costs about nothing and records nothing; it hides while you
+  share your screen. Both can be turned off in Settings → Calls.
+- Right-clicking the closed island during a call brings the call to the
+  front.
+
+### Fixed
+
+- No more warnings in the log when Isle starts while the microphone is in
+  use.
+
 ## [0.2.0] - 2026-10-21
 
 ### Added
