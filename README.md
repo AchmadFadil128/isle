@@ -11,10 +11,7 @@ calendar and a clipboard shelf, living in a notch at the top of your screen.
 ![GNOME Shell 46–51](https://img.shields.io/badge/GNOME%20Shell-46%E2%80%9351-4a86cf.svg)
 ![Rust 1.85+](https://img.shields.io/badge/Rust-1.85%2B-orange.svg)
 
-<img src="docs/images/demo.gif" alt="Isle on a GNOME desktop: music with lyrics, notifications, focus timer, clipboard, tasks and alerts" width="800">
-
-▶ Watch the full demo in [1080p, 60 fps](https://github.com/zickrian/isle/releases/download/v0.1.1/isle-demo-1080p.mp4)
-or [close up](https://github.com/zickrian/isle/releases/download/v0.1.1/isle-demo-closeup.mp4).
+<a href="docs/images/demo.mp4"><img src="docs/images/demo-preview.jpg" alt="Isle demo on a GNOME desktop: music with lyrics, notifications, calendar, focus timer and clipboard shelf. Click to play" width="800"></a>
 
 </div>
 
@@ -261,3 +258,8 @@ the [SIL Open Font License 1.1](data/fonts/Inter-LICENSE.txt). Lyrics come
 from [LRCLIB](https://lrclib.net). Isle is inspired by the iPhone's Dynamic
 Island and by [NotchNook](https://lo.cafe/notchnook) and
 [Boring Notch](https://github.com/TheBoredTeam/boring.notch) on the Mac.
+
+The demo video shows "Clouds" by Tibor Mokanszki from the Ubuntu 24.04
+wallpapers, under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/);
+the video is shared under the same licence. Its songs, lyrics, notifications
+and events are made up.
