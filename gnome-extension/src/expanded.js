@@ -12,7 +12,7 @@ import {timerColor} from './compact.js';
 import {VERTICAL} from './compat.js';
 import * as Format from './format.js';
 import * as Playback from './playback.js';
-import {Bars, PrivacyDots, RecordingDot, Ring, icon, label} from './widgets.js';
+import {Bars, PrivacyDots, RecordingDot, Ring, icon, iconButton, label} from './widgets.js';
 
 export const EXPANDED_WIDTH = 600;
 /** The least room between the tabs and the status on the right. */
@@ -54,6 +54,8 @@ export const ExpandedView = GObject.registerClass({
         'width-changed': {},
         // The current page's tint colour changed; see `tint`.
         'tint-changed': {},
+        // The gear by the clock: Isle's settings.
+        'settings-requested': {},
     },
 }, class ExpandedView extends St.BoxLayout {
     _init(daemon, privacy, call, settings, pages) {
@@ -141,6 +143,8 @@ export const ExpandedView = GObject.registerClass({
         clock.add_child(this._date);
         clock.add_child(this._time);
         status.add_child(clock);
+        status.add_child(iconButton('isle-settings', 'isle-button-flat isle-header-settings',
+            () => this.emit('settings-requested'), {size: 14, accessibleName: 'Settings'}));
         header.add_child(status);
         return header;
     }

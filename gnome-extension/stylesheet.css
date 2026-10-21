@@ -259,6 +259,8 @@
 }
 .isle-header-date { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
 .isle-header-time { font-size: 13px; font-weight: 600; }
+.isle-header-settings { padding: 4px; color: rgba(255, 255, 255, 0.6); }
+.isle-header-settings:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
 .isle-header-status { spacing: 10px; }
 
 .isle-recording-pill {

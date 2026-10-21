@@ -67,6 +67,7 @@ const DEFAULT_PAGE_ORDER = ['call', 'notifications', 'music', 'focus'];
 
 export class Controller {
     constructor(extension) {
+        this._extension = extension;
         this._settings = extension.getSettings();
         this._daemon = new Daemon();
         this._timeouts = new Map();
@@ -142,6 +143,11 @@ export class Controller {
                 this._render();
         });
         expanded.connect('tint-changed', () => this._syncTint());
+        // Settings open in their own window; the island gets out of its way.
+        expanded.connect('settings-requested', () => {
+            this.collapse();
+            this._extension.openPreferences();
+        });
         return expanded;
     }
 
