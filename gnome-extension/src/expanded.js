@@ -28,7 +28,7 @@ const TABS = {
     notifications: {icon: 'isle-bell', label: 'Notifications'},
     focus: {icon: 'isle-timer', label: 'Focus'},
     shelf: {icon: 'isle-shelf', label: 'Shelf'},
-    tasks: {icon: 'isle-tasks', label: 'Tasks'},
+    tasks: {icon: 'isle-tasks', label: 'Reminders'},
     calendar: {icon: 'isle-calendar', label: 'Calendar'},
 };
 /** How bright a tab's icon is: open, under the pointer, otherwise. */

@@ -441,32 +441,26 @@
 
 .isle-play-pill:hover { background-color: #e6e6e6; }
 
-/* ── Tasks ────────────────────────────────────────────── */
+/* ── Reminders ────────────────────────────────────────── */
 
-.isle-tasks-side { width: 150px; spacing: 10px; }
-.isle-tasks-ring-count { font-size: 15px; font-weight: 700; }
-.isle-tasks-headline { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
-.isle-tasks-caption { font-size: 12px; color: rgba(255, 255, 255, 0.55); padding-top: 1px; }
-
+/* As macOS Reminders: an add row, then a card per reminder with a round tick box. */
 .isle-tasks-column { spacing: 6px; }
-.isle-task-add { padding: 6px 12px; }
-.isle-task-add-icon { color: rgba(255, 255, 255, 0.5); padding-right: 8px; }
+#isleIsland .isle-task-add { border-radius: 12px; padding: 9px 12px; }
+.isle-task-add-icon { padding-right: 10px; }
 /* Lists fade out at an edge that scrolls on, instead of being cut. */
 .isle-task-scroll { padding: 6px 0; -st-vfade-offset: 18px; }
 .isle-tasks-scroll { padding: 0 0 4px 0; -st-vfade-offset: 18px; }
-.isle-task-list { spacing: 4px; }
+.isle-task-list { spacing: 6px; }
+.isle-tasks-empty { font-size: 13px; color: rgba(255, 255, 255, 0.4); }
 
 .isle-task {
-  spacing: 10px;
-  padding: 5px 8px 5px 10px;
+  spacing: 12px;
+  padding: 9px 10px 9px 12px;
   border-radius: 12px;
   background-color: #1c1c1e;
 }
 
 .isle-task:hover { background-color: #242426; }
-/* Finished tasks recede: no card, a ticked circle and a struck-through title. */
-.isle-task.done { background-color: transparent; }
-.isle-task.done:hover { background-color: #1c1c1e; }
 
 .isle-task-check {
   width: 18px;
@@ -476,25 +470,16 @@
   color: transparent;
 }
 
-.isle-task-check:hover { border-color: #ffffff; }
-.isle-task-check:checked { background-color: #ffffff; border-color: #ffffff; color: #000000; }
+.isle-task-check:hover { border-color: rgba(255, 255, 255, 0.8); }
+.isle-task-check:checked { background-color: #ff9f0a; border-color: #ff9f0a; color: #ffffff; }
 
 .isle-task-title { font-size: 14px; }
 .isle-task-entry { font-size: 14px; padding: 2px 10px; }
-.isle-task.done .isle-task-title { color: rgba(255, 255, 255, 0.45); text-decoration: line-through; }
+/* Ticked: the title dims as a line strikes it through (see tasks.js). */
+.isle-task.done .isle-task-title { color: rgba(255, 255, 255, 0.45); }
+.isle-task-strike { height: 1.5px; background-color: rgba(255, 255, 255, 0.55); }
 
 .isle-task-remove { padding: 3px; color: rgba(255, 255, 255, 0.7); }
-
-.isle-task-section {
-  padding: 5px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.isle-task-section:hover { color: #ffffff; background-color: #1c1c1e; }
-.isle-task-section-box { spacing: 6px; }
 
 /* ── Calendar ─────────────────────────────────────────── */
 

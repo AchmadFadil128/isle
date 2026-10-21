@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Tasks: a plain to-do list; today's progress on the left, the add field and
-// list on the right. See docs/product-spec.md, section 5.
+// Reminders: the to-do list as macOS shows it. A ticked one is struck through, then goes; finished
+// ones are not listed (isled clears them at midnight). See docs/product-spec.md, section 5.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -9,30 +9,52 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {VERTICAL} from '../compat.js';
-import {Ring, icon, iconButton, label} from '../widgets.js';
+import {icon, iconButton, label} from '../widgets.js';
 import {Page} from './page.js';
 
-const RING_SIZE = 70;
-/** Unfolded finished tasks scroll into view once laid out. */
-const REVEAL_DELAY_MS = 60;
+/** How long the line takes to strike a ticked reminder through. */
+const STRIKE_MS = 280;
+/** A ticked reminder stays this long, struck through, so a second tap can undo it. */
+const LINGER_MS = 900;
+/** How long it takes to fade and fold away. */
+const LEAVE_MS = 260;
 
 export const TasksPage = GObject.registerClass(
 class TasksPage extends Page {
     _init(daemon, {height}) {
         super._init(daemon, {
             style_class: 'isle-page isle-tasks',
-            // St's `spacing` only reaches St.BoxLayout, so it is set here.
-            layout_manager: new Clutter.BoxLayout({spacing: 22}),
+            layout_manager: new Clutter.BinLayout(),
             height,
         });
         this.name = 'tasks';
-        /** Whether the finished tasks are unfolded. */
-        this._showDone = false;
-        /** The task being renamed, if any; the list holds still meanwhile. */
+        /** The reminder being renamed, if any; the list holds still meanwhile. */
         this._renaming = null;
+        /** Reminders ticked a moment ago, on their way out; the list holds still meanwhile. */
+        this._leaving = new Set();
+        /** Ticked and gone, until isled reports them done. */
+        this._gone = new Set();
 
-        this.add_child(this._buildSummary());
-        this.add_child(this._buildList());
+        const column = new St.BoxLayout({...VERTICAL, style_class: 'isle-tasks-column', x_expand: true, y_expand: true});
+        column.add_child(this._buildAdd());
+        this._list = new St.BoxLayout({...VERTICAL, style_class: 'isle-task-list'});
+        this._scroll = new St.ScrollView({
+            style_class: 'isle-task-scroll isle-tasks-scroll',
+            hscrollbar_policy: St.PolicyType.NEVER,
+            // Scrolls with the wheel or touchpad; no scrollbar over the cards.
+            vscrollbar_policy: St.PolicyType.EXTERNAL,
+            x_expand: true,
+            y_expand: true,
+        });
+        this._scroll.set_child(this._list);
+        column.add_child(this._scroll);
+        this._empty = label('No reminders', 'isle-tasks-empty', {
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+            y_expand: true,
+        });
+        column.add_child(this._empty);
+        this.add_child(column);
 
         this.watch(['tasks'], () => this._update());
         this._update();
@@ -42,36 +64,16 @@ class TasksPage extends Page {
         return this.daemon.state.tasks ?? [];
     }
 
-    // Building
+    // Adding
 
-    _buildSummary() {
-        const side = new St.BoxLayout({...VERTICAL, style_class: 'isle-tasks-side', y_align: Clutter.ActorAlign.CENTER});
-        this._count = label('0/0', 'isle-tasks-ring-count');
-        this._ring = new Ring({size: RING_SIZE, lineWidth: 5, child: this._count});
-        side.add_child(this._ring);
-
-        this._ring.x_align = Clutter.ActorAlign.CENTER;
-        const info = new St.BoxLayout({...VERTICAL, x_align: Clutter.ActorAlign.CENTER});
-        this._headline = label('', 'isle-tasks-headline', {x_align: Clutter.ActorAlign.CENTER});
-        this._caption = label('', 'isle-tasks-caption', {x_align: Clutter.ActorAlign.CENTER});
-        for (const line of [this._headline, this._caption]) {
-            line.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-            info.add_child(line);
-        }
-        side.add_child(info);
-        return side;
-    }
-
-    _buildList() {
-        const column = new St.BoxLayout({...VERTICAL, style_class: 'isle-tasks-column', x_expand: true, y_expand: true});
-
+    _buildAdd() {
         this._entry = new St.Entry({
             style_class: 'isle-entry isle-task-add',
-            hint_text: 'Add a task',
+            hint_text: 'Add a reminder…',
             can_focus: true,
             x_expand: true,
         });
-        this._entry.set_primary_icon(new St.Icon({gicon: icon('isle-plus-symbolic'), icon_size: 14, style_class: 'isle-task-add-icon'}));
+        this._entry.set_primary_icon(new St.Icon({gicon: icon('isle-plus-circle-fill'), icon_size: 16, style_class: 'isle-task-add-icon'}));
         const text = this._entry.clutter_text;
         text.connect('activate', () => this._add());
         // The shell only gets keys on request: ask before the field takes focus, as
@@ -86,23 +88,8 @@ class TasksPage extends Page {
             this._stopAdding();
             return Clutter.EVENT_STOP;
         });
-        column.add_child(this._entry);
-
-        this._list = new St.BoxLayout({...VERTICAL, style_class: 'isle-task-list'});
-        this._scroll = new St.ScrollView({
-            style_class: 'isle-task-scroll isle-tasks-scroll',
-            hscrollbar_policy: St.PolicyType.NEVER,
-            // Scrolls with the wheel or touchpad; no scrollbar over the cards.
-            vscrollbar_policy: St.PolicyType.EXTERNAL,
-            x_expand: true,
-            y_expand: true,
-        });
-        this._scroll.set_child(this._list);
-        column.add_child(this._scroll);
-        return column;
+        return this._entry;
     }
-
-    // Adding
 
     async _add() {
         const text = this._entry.text.trim();
@@ -121,122 +108,103 @@ class TasksPage extends Page {
     // Showing
 
     _update() {
-        if (this._renaming)
+        if (this._renaming !== null || this._leaving.size > 0)
             return;
-        // Open tasks in the order they were added; finished ones last, newest first.
-        const open = this._tasks().filter(task => !task.done)
-            .sort((a, b) => a.id - b.id);
-        const done = this._tasks().filter(task => task.done)
-            .sort((a, b) => (b.done_at_ms ?? 0) - (a.done_at_ms ?? 0));
-
-        this._updateSummary(open, done);
+        const open = this._tasks().filter(task => !task.done);
+        // Forgotten once isled has them done, or gone for another reason.
+        this._gone = new Set(open.filter(task => this._gone.has(task.id)).map(task => task.id));
+        const shown = open.filter(task => !this._gone.has(task.id)).sort((a, b) => a.id - b.id);
 
         this._list.destroy_all_children();
-        for (const task of open)
+        for (const task of shown)
             this._list.add_child(this._row(task));
-        if (done.length > 0) {
-            this._list.add_child(this._doneHeader(done.length));
-            if (this._showDone) {
-                for (const task of done)
-                    this._list.add_child(this._row(task));
-            }
-        }
-    }
-
-    /** Scrolls the unfolded finished tasks into view. */
-    _revealDone() {
-        this.later('reveal', REVEAL_DELAY_MS, () => {
-            const adjustment = this._scroll.vadjustment;
-            adjustment.ease(adjustment.upper - adjustment.page_size, {
-                duration: 250,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            });
-        });
-    }
-
-    _updateSummary(open, done) {
-        // Finished tasks are cleared at midnight, so every done task is today's.
-        const total = open.length + done.length;
-        this._count.text = `${done.length}/${total}`;
-        const allDone = total > 0 && open.length === 0;
-        this._ring.remove_transition('progress');
-        this._ring.ease_property('progress', total ? done.length / total : 0, {
-            duration: 400,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-        });
-
-        if (total === 0) {
-            this._headline.text = 'No tasks yet';
-            this._caption.text = 'Plan your day';
-        } else if (allDone) {
-            this._headline.text = 'All done';
-            this._caption.text = `${total} ${total === 1 ? 'task' : 'tasks'} finished today`;
-        } else {
-            this._headline.text = `${open.length} to go`;
-            this._caption.text = `${done.length} of ${total} done today`;
-        }
+        this._scroll.visible = shown.length > 0;
+        this._empty.visible = shown.length === 0;
     }
 
     _row(task) {
-        const row = new St.BoxLayout({
-            style_class: `isle-task${task.done ? ' done' : ''}`,
-            reactive: true,
-            track_hover: true,
-        });
+        const row = new St.BoxLayout({style_class: 'isle-task', reactive: true, track_hover: true});
 
         const check = new St.Button({
             style_class: 'isle-task-check',
             child: new St.Icon({gicon: icon('isle-check-symbolic'), icon_size: 11}),
-            checked: task.done,
-            accessible_name: task.done ? 'Mark as not done' : 'Mark as done',
+            accessible_name: 'Mark as done',
             y_align: Clutter.ActorAlign.CENTER,
         });
-        check.connect('clicked', () => this.daemon.call('todo', 'SetDone', task.id, !task.done));
         row.add_child(check);
 
-        // Click the title to rename the task in place.
-        const title = label(task.title, 'isle-task-title', {x_expand: true, reactive: !task.done});
+        // The title, and the line that strikes it through once ticked.
+        const titleBox = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const title = label(task.title, 'isle-task-title', {reactive: true, x_expand: true});
         title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        // Click the title to rename it in place.
         title.connect('button-release-event', () => {
-            this._startRenaming(row, title, task);
+            if (!this._leaving.has(task.id))
+                this._startRenaming(titleBox, title, task);
             return Clutter.EVENT_STOP;
         });
-        row.add_child(title);
+        // As wide as the box, it grows from the left to the text's width.
+        const strike = new St.Widget({style_class: 'isle-task-strike', scale_x: 0, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        strike.set_pivot_point(0, 0.5);
+        titleBox.add_child(title);
+        titleBox.add_child(strike);
+        row.add_child(titleBox);
+        check.connect('clicked', () => this._tick(task, {row, check, title, strike}));
 
         // × appears while the pointer is on the row.
         const remove = iconButton('isle-close-symbolic', 'isle-button-flat isle-task-remove',
-            () => this.daemon.call('todo', 'Remove', task.id), {size: 11, accessibleName: 'Remove task'});
+            () => this.daemon.call('todo', 'Remove', task.id), {size: 11, accessibleName: 'Delete reminder'});
         remove.opacity = 0;
         row.connect('notify::hover', () => remove.ease({opacity: row.hover ? 255 : 0, duration: 120}));
         row.add_child(remove);
         return row;
     }
 
-    /** "Completed · 3", folding the finished tasks in and out. */
-    _doneHeader(count) {
-        const box = new St.BoxLayout({style_class: 'isle-task-section-box'});
-        box.add_child(new St.Icon({gicon: icon(this._showDone ? 'isle-chevron-down-symbolic' : 'isle-chevron-right-symbolic'), icon_size: 12}));
-        box.add_child(label(`Completed · ${count}`, 'isle-task-section-label'));
-        const header = new St.Button({
-            style_class: 'isle-task-section',
-            child: box,
-            x_align: Clutter.ActorAlign.START,
-            accessible_name: this._showDone ? 'Hide completed tasks' : 'Show completed tasks',
+    // Ticks a reminder: it is struck through, lingers a moment (a second tap undoes it), then goes.
+    _tick(task, {row, check, title, strike}) {
+        const name = `leave-${task.id}`;
+        if (this._leaving.has(task.id)) {
+            this.cancel(name);
+            this._leaving.delete(task.id);
+            check.checked = false;
+            check.accessible_name = 'Mark as done';
+            row.remove_style_class_name('done');
+            strike.remove_all_transitions();
+            strike.ease({scale_x: 0, duration: STRIKE_MS / 2, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            return;
+        }
+        // The text's own width, as laid out (cut short with … when long); measured before restyling.
+        const box = title.get_parent().width;
+        const [textWidth] = title.clutter_text.get_layout().get_pixel_size();
+        const scale = box > 0 ? Math.min(1, textWidth / box) : 1;
+        this._leaving.add(task.id);
+        check.checked = true;
+        check.accessible_name = 'Not done';
+        row.add_style_class_name('done');
+        strike.ease({scale_x: scale, duration: STRIKE_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        this.later(name, LINGER_MS, () => {
+            // Folds away: the cards below slide up into its place.
+            row.clip_to_allocation = true;
+            row.ease({
+                opacity: 0,
+                height: 0,
+                duration: LEAVE_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                onStopped: () => {
+                    this._leaving.delete(task.id);
+                    this._gone.add(task.id);
+                    this.daemon.call('todo', 'SetDone', task.id, true);
+                    this._update();
+                },
+            });
         });
-        header.connect('clicked', () => {
-            this._showDone = !this._showDone;
-            this._update();
-            if (this._showDone)
-                this._revealDone();
-        });
-        return header;
     }
 
     // Renaming
 
-    _startRenaming(row, title, task) {
+    _startRenaming(titleBox, title, task) {
         const entry = new St.Entry({style_class: 'isle-entry isle-task-entry', text: task.title, x_expand: true, can_focus: true});
-        row.replace_child(title, entry);
+        titleBox.replace_child(title, entry);
         this._renaming = task.id;
         this.emit('request-keyboard', true);
         entry.grab_key_focus();
@@ -267,6 +235,5 @@ class TasksPage extends Page {
 
     onDeactivate() {
         this._stopAdding();
-        this._showDone = false;
     }
 });
