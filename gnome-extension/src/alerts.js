@@ -22,16 +22,35 @@ function percentText(value) {
     return `${Math.round(value)}%`;
 }
 
+// GNOME's OSD icons by prefix (first match wins): a title, and the state an icon-only toggle shows.
+const OSD_KINDS = [
+    ['audio-volume', 'Volume'],
+    ['microphone-sensitivity-muted', 'Microphone', 'Muted'],
+    ['microphone', 'Microphone'],
+    ['keyboard-brightness', 'Keyboard light'],
+    ['display-brightness', 'Brightness'],
+    ['touchpad-disabled', 'Touchpad', 'Off'],
+    ['input-touchpad', 'Touchpad', 'On'],
+    ['airplane-mode-disabled', 'Airplane mode', 'Off'],
+    ['airplane-mode', 'Airplane mode', 'On'],
+    ['camera-disabled', 'Camera', 'Off'],
+    ['camera', 'Camera', 'On'],
+    ['bluetooth-disabled', 'Bluetooth', 'Off'],
+    ['bluetooth', 'Bluetooth', 'On'],
+    ['network-wireless-disabled', 'Wi-Fi', 'Off'],
+    ['video-display', 'Display'],
+];
+
+/** "touchpad-disabled-symbolic" → "Touchpad disabled", for OSDs not listed above. */
+function iconTitle(iconName) {
+    const words = iconName.replace(/-symbolic$/, '').replace(/-/g, ' ').trim();
+    return words ? words[0].toUpperCase() + words.slice(1) : '';
+}
+
 /** Volume, brightness and similar on-screen displays from GNOME. */
 export function osd(gicon, text, level, maxLevel) {
     const iconName = gicon?.get_names?.()[0] ?? '';
-    const kinds = [
-        ['audio-volume', 'Volume'],
-        ['microphone', 'Microphone'],
-        ['keyboard-brightness', 'Keyboard light'],
-        ['display-brightness', 'Brightness'],
-    ];
-    const kind = kinds.find(([prefix]) => iconName.startsWith(prefix))?.[1];
+    const [, kind, state] = OSD_KINDS.find(([prefix]) => iconName.startsWith(prefix)) ?? [];
     const hasLevel = typeof level === 'number';
     const fraction = hasLevel ? level / (maxLevel || 1) : null;
     return {
@@ -39,8 +58,10 @@ export function osd(gicon, text, level, maxLevel) {
         priority: 'instant',
         transient: true,
         gicon,
-        title: kind ?? text ?? '',
+        // Toggles (touchpad, airplane mode...) send only an icon; never show it alone.
+        title: kind ?? (text || iconTitle(iconName)),
         subtitle: kind && text ? text : '',
+        status: hasLevel ? null : state,
         level: hasLevel ? Math.min(fraction, 1) : null,
         levelText: hasLevel ? percentText(level * 100) : null,
         tone: hasLevel && level > 1 ? 'warn' : 'neutral',
