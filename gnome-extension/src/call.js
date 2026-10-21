@@ -38,6 +38,9 @@ const SERVICES = [
     [/webex/i, 'Webex'],
 ];
 
+/** Browsers, whose tabs hold web calls (Meet, Zoom, Teams on the web...). */
+const BROWSERS = /chrom|firefox|brave|edge|vivaldi|opera|epiphany|librewolf|zen/i;
+
 /** The call service a window title names, or null. */
 function serviceOf(title) {
     return SERVICES.find(([pattern]) => pattern.test(title ?? ''))?.[1] ?? null;
@@ -191,12 +194,12 @@ export class CallMonitor extends Signals.EventEmitter {
         return true;
     }
 
-    // A window titled after a call service wins, then the one shown already, then the app's
-    // latest. Without a known app only a service's window will do.
+    // A window titled after a call service wins, then the one shown already, then the app's latest.
+    // Without a known app only a browser's call tab will do (not an editor showing "signal.rs").
     _chooseWindow(app, leaving = null) {
         const windows = (app ? app.get_windows() : global.display.list_all_windows())
             .filter(window => window !== leaving && window.get_window_type() === Meta.WindowType.NORMAL &&
-                !window.is_skip_taskbar());
+                !window.is_skip_taskbar() && (app || BROWSERS.test(window.get_wm_class() ?? '')));
         const current = windows.includes(this.window) ? this.window : null;
         if (current && serviceOf(current.get_title()))
             return current;

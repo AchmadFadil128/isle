@@ -125,8 +125,9 @@ export class Controller {
         }
         const expanded = new ExpandedView(this._daemon, this._privacy, this._call, this._settings, pages);
         expanded.connect('page-changed', () => {
-            // Picked by hand (a tab, a swipe) while open; not when opening.
-            if (this._expandWanted)
+            // Picked by hand (a tab, a swipe) while open; not when opening, nor when a page
+            // (the call's) goes away by itself.
+            if (this._expandWanted && expanded.pickedByHand)
                 this._pagePickedAt = Date.now();
             if (expanded.page === this._shelf)
                 this._shelfHelper?.prepare();

@@ -336,8 +336,16 @@ export const ExpandedView = GObject.registerClass({
         if (page !== this.page || page.available)
             return;
         const index = this._nearestAvailable(this._index, 1) ?? this._nearestAvailable(this._index, -1);
-        if (index !== null)
-            this.showPage(index, {animate: this._active});
+        if (index === null)
+            return;
+        this._automatic = true;
+        this.showPage(index, {animate: this._active});
+        this._automatic = false;
+    }
+
+    /** Whether the page just shown was picked by the user, not left for another on its own. */
+    get pickedByHand() {
+        return !this._automatic;
     }
 
     /** The first page from `index` on in `direction` (±1) that has a tab, or null. */

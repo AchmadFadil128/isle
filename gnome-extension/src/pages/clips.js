@@ -14,12 +14,11 @@ import St from 'gi://St';
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import {icon, iconButton, label} from '../widgets.js';
+import {SHELF_CAPACITY} from './files.js';
 
 /** isled keeps 20 recent items and up to 10 pinned ones. */
 const MAX_CARDS = 30;
 const MAX_PINNED = 10;
-/** The Files tab holds this many files. */
-const SHELF_CAPACITY = 6;
 /** Cards drawn at once (about a screenful); the rest follow a few per frame so opening never stutters. */
 const FIRST_CARDS = 6;
 const CARDS_PER_IDLE = 6;
