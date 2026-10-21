@@ -691,8 +691,8 @@
 }
 
 .isle-shelf-files:drop {
-  border-color: rgba(255, 255, 255, 0.18);
-  background-color: rgba(255, 255, 255, 0.03);
+  border-color: rgba(90, 171, 255, 0.45);
+  background-color: rgba(90, 171, 255, 0.07);
 }
 
 .isle-shelf-tiles { spacing: 6px; }

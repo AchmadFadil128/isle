@@ -11,25 +11,28 @@ window.isle-shelf {
   font-feature-settings: "tnum";
 }
 
-/* The whole window takes drops. While a file is on its way it lights up as
- * one rounded area; brighter with the pointer over it; red-edged if full. */
+/* The whole window takes drops. While a file is on its way it lights up as one rounded,
+ * dashed area tinted blue; brighter with the pointer over it; red if full. */
 .drop-area {
   border-radius: 16px;
-  border: 1px solid transparent;
+  border: 1.5px dashed transparent;
   transition: border-color 160ms ease-out, background-color 160ms ease-out;
 }
 
 .drop-area.dropping {
-  border-color: alpha(#ffffff, 0.18);
-  background-color: alpha(#ffffff, 0.03);
+  border-color: alpha(#5aabff, 0.45);
+  background-color: alpha(#5aabff, 0.07);
 }
 
 .drop-area.over {
-  border-color: alpha(#ffffff, 0.55);
-  background-color: alpha(#ffffff, 0.07);
+  border-color: alpha(#5aabff, 0.85);
+  background-color: alpha(#5aabff, 0.15);
 }
 
-.drop-area.full { border-color: alpha(#ff5c5c, 0.6); }
+.drop-area.full {
+  border-color: alpha(#ff5c5c, 0.6);
+  background-color: alpha(#ff5c5c, 0.06);
+}
 
 .empty-icon { color: alpha(#ffffff, 0.35); margin-bottom: 2px; }
 .empty-title { font-size: 15px; font-weight: 600; }
@@ -59,8 +62,8 @@ window.isle-shelf {
 
 /* The landing slot for a file dragged in. */
 .tile .preview.slot {
-  border: 1px solid alpha(#ffffff, 0.4);
-  background-color: alpha(#ffffff, 0.06);
+  border: 1.5px dashed alpha(#5aabff, 0.7);
+  background-color: alpha(#5aabff, 0.12);
   color: alpha(#ffffff, 0.8);
 }
 
