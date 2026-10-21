@@ -6,7 +6,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use gtk::{gdk, gio, glib, prelude::*};
+use gtk::{gdk, gdk_pixbuf, gio, glib, prelude::*};
 use gtk4 as gtk;
 use log::warn;
 use serde::Deserialize;
@@ -16,6 +16,8 @@ use crate::{tile, x11};
 const DAEMON: &str = "io.github.zickrian.isle.Daemon";
 const DAEMON_PATH: &str = "/io/github/zickrian/isle/Daemon";
 const SHELF_INTERFACE: &str = "io.github.zickrian.isle.Shelf1";
+/// The island's own shelf icon, so the empty shelf looks the same in both, whatever the icon theme.
+const SHELF_ICON: &[u8] = include_bytes!("../../../gnome-extension/icons/isle-shelf.svg");
 /// isled keeps this many files; a full shelf turns drops away.
 const CAPACITY: usize = 6;
 
@@ -360,6 +362,29 @@ fn items(proxy: &gio::DBusProxy) -> Vec<Item> {
         .unwrap_or_default()
 }
 
+/// [`SHELF_ICON`] at `size` px, drawn at twice that so it stays sharp on a HiDPI screen.
+fn shelf_icon(size: i32) -> gtk::Image {
+    let image = gtk::Image::builder()
+        .pixel_size(size)
+        .css_classes(["empty-icon"])
+        .build();
+    let stream = gio::MemoryInputStream::from_bytes(&glib::Bytes::from_static(SHELF_ICON));
+    match gdk_pixbuf::Pixbuf::from_stream_at_scale(
+        &stream,
+        size * 2,
+        size * 2,
+        true,
+        gio::Cancellable::NONE,
+    ) {
+        Ok(pixbuf) => image.set_paintable(Some(&gdk::Texture::for_pixbuf(&pixbuf))),
+        Err(err) => {
+            warn!("could not draw the shelf icon: {err}");
+            image.set_icon_name(Some("folder-download-symbolic"));
+        }
+    }
+    image
+}
+
 fn empty_state(title: &gtk::Label, hint: &gtk::Label) -> gtk::Box {
     let box_ = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
@@ -368,13 +393,7 @@ fn empty_state(title: &gtk::Label, hint: &gtk::Label) -> gtk::Box {
         .valign(gtk::Align::Center)
         .css_classes(["empty"])
         .build();
-    box_.append(
-        &gtk::Image::builder()
-            .icon_name("folder-download-symbolic")
-            .pixel_size(24)
-            .css_classes(["empty-icon"])
-            .build(),
-    );
+    box_.append(&shelf_icon(24));
     box_.append(title);
     box_.append(hint);
     box_
