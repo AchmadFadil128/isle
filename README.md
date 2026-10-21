@@ -11,7 +11,7 @@ calendar and a clipboard shelf, living in a notch at the top of your screen.
 ![GNOME Shell 46–51](https://img.shields.io/badge/GNOME%20Shell-46%E2%80%9351-4a86cf.svg)
 ![Rust 1.85+](https://img.shields.io/badge/Rust-1.85%2B-orange.svg)
 
-<a href="docs/images/demo.mp4"><img src="docs/images/demo-preview.jpg" alt="Isle demo on a GNOME desktop: music with lyrics, notifications, calendar, focus timer and clipboard shelf. Click to play" width="800"></a>
+<img src="docs/images/demo.webp" alt="Isle demo on a GNOME desktop: music with lyrics, notifications, calendar, focus timer and clipboard shelf" width="800">
 
 </div>
 
