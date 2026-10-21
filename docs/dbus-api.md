@@ -61,7 +61,7 @@ from GNOME Shell, not from here.)
 
 | Member | Signature | |
 |---|---|---|
-| `Add(as uris)` | | Add local `file://` URIs (moved to the front if already there). The shelf holds 5 files: files that do not fit are refused with `LimitsExceeded`. Other URIs are skipped and reported with `InvalidArgs` once the rest are added. |
+| `Add(as uris)` | | Add local `file://` URIs (moved to the front if already there). The shelf holds 6 files: files that do not fit are refused with `LimitsExceeded`. Other URIs are skipped and reported with `InvalidArgs` once the rest are added. |
 | `Remove(s uri)`, `Clear()` | | |
 | `Refresh()` | | Drop items whose files no longer exist. |
 | `Items` | `s` | `[{uri, name, added_at_ms}]`, newest first. |

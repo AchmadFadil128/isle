@@ -220,7 +220,7 @@ segmented control (switching crossfades).
   Clear all (asks once more; pinned items are kept). Opened with Super+V, the search
   field has the keyboard: ← → choose a card (white outline), Enter pastes it
   into the window in front (Ctrl+Shift+V in terminals).
-- **Files**: at most 5 files, all in view with no scrolling; a sixth is
+- **Files**: at most 6 files, all in view with no scrolling; a seventh is
   refused until one is removed. Each file is a tile of one size: a 52 px
   square preview (a picture cut to a square, or the file's icon) with a
   round × always on its corner, and the name below, shortened in the

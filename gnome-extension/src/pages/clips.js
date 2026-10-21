@@ -19,7 +19,7 @@ import {icon, iconButton, label} from '../widgets.js';
 const MAX_CARDS = 30;
 const MAX_PINNED = 10;
 /** The Files tab holds this many files. */
-const SHELF_CAPACITY = 5;
+const SHELF_CAPACITY = 6;
 /** Cards drawn at once (about a screenful); the rest follow a few per frame so opening never stutters. */
 const FIRST_CARDS = 6;
 const CARDS_PER_IDLE = 6;

@@ -17,7 +17,7 @@ const DAEMON: &str = "io.github.zickrian.isle.Daemon";
 const DAEMON_PATH: &str = "/io/github/zickrian/isle/Daemon";
 const SHELF_INTERFACE: &str = "io.github.zickrian.isle.Shelf1";
 /// isled keeps this many files; a full shelf turns drops away.
-const CAPACITY: usize = 5;
+const CAPACITY: usize = 6;
 
 /// One file on the shelf, as isled describes it.
 #[derive(Debug, Clone, Deserialize)]

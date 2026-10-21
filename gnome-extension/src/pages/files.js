@@ -14,7 +14,7 @@ import {VERTICAL} from '../compat.js';
 import {icon, iconButton, label} from '../widgets.js';
 
 /** The shelf holds this many files (as isled enforces). */
-export const SHELF_CAPACITY = 5;
+export const SHELF_CAPACITY = 6;
 
 // Sizes in pixels; keep them in step with the helper's tile.rs.
 const TILE_WIDTH = 84;
