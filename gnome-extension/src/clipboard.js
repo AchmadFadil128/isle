@@ -5,6 +5,7 @@
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -23,9 +24,38 @@ const MAX_TEXT_BYTES = 512 * 1024;
 const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
 /** Time for the window in front to get the keyboard back before pasting. */
 const PASTE_DELAY_MS = 120;
-/** Terminals paste with Ctrl+Shift+V. Matched against the window class. */
-const TERMINALS = ['terminal', 'console', 'kgx', 'kitty', 'alacritty', 'wezterm', 'foot',
-    'konsole', 'tilix', 'terminator', 'ptyxis', 'xterm', 'blackbox', 'ghostty'];
+/** Terminals paste with Ctrl+Shift+V. Matched against the window's class and app id. */
+const TERMINALS = ['terminal', 'console', 'kgx', 'ptyxis', 'kitty', 'alacritty', 'wezterm', 'konsole',
+    'xterm', 'rxvt', 'tilix', 'terminator', 'foot', 'blackbox', 'ghostty', 'warp', 'tabby', 'hyper',
+    'guake', 'tilda'];
+/** Keyboard layouts whose keys give Latin letters (Dvorak and Colemak are variants of these). */
+const LATIN_LAYOUTS = ['us', 'gb', 'id', 'de', 'fr', 'es', 'it', 'pt', 'br', 'nl', 'be', 'ch', 'at', 'se', 'no',
+    'dk', 'fi', 'is', 'pl', 'cz', 'sk', 'hu', 'ro', 'hr', 'si', 'tr', 'ee', 'lv', 'lt', 'ie', 'ca', 'latam', 'au',
+    'za', 'nz', 'ph', 'my', 'vn', 'epo'];
+
+export function isTerminal(window) {
+    const app = Shell.WindowTracker.get_default().get_window_app(window);
+    const names = [window.get_wm_class(), window.get_wm_class_instance(), app?.get_id()]
+        .map(name => name?.toLowerCase() ?? '').join(' ');
+    return TERMINALS.some(name => names.includes(name));
+}
+
+/** The input source in use, [type, id] as GNOME keeps them: the most recently used one comes first. */
+function currentInputSource() {
+    const settings = new Gio.Settings({schema_id: 'org.gnome.desktop.input-sources'});
+    const [first] = settings.get_value('mru-sources').deep_unpack();
+    return first ?? settings.get_value('sources').deep_unpack()[0] ?? ['xkb', 'us'];
+}
+
+/** Whether the keyboard layout in use types Latin letters (an input method counts as not). */
+export function onLatinLayout() {
+    try {
+        const [type, id] = currentInputSource();
+        return type === 'xkb' && LATIN_LAYOUTS.includes(id.split(/[+(]/)[0]);
+    } catch {
+        return true;
+    }
+}
 
 /** File URIs on the clipboard as Files or a URI list describes them. */
 function parseUris(text, mimetype) {
@@ -35,7 +65,7 @@ function parseUris(text, mimetype) {
     return uris.filter(uri => uri.startsWith('file://'));
 }
 
-/** Linux input key codes for Ctrl, Shift and V. */
+/** Linux input key codes for Ctrl, Shift and V, for layouts whose V key types something else. */
 const KEY_LEFTCTRL = 29;
 const KEY_LEFTSHIFT = 42;
 const KEY_V = 47;
@@ -156,15 +186,28 @@ export class ClipboardHistory {
             const focus = global.stage.get_key_focus();
             if (!global.display.focus_window || (focus && focus !== global.stage))
                 return;
-            const windowClass = global.display.focus_window?.get_wm_class()?.toLowerCase() ?? '';
-            const terminal = TERMINALS.some(name => windowClass.includes(name));
-            // Key codes, the same on every layout, so Ctrl+V pastes with a Cyrillic or Greek one too.
-            const keys = terminal ? [KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_V] : [KEY_LEFTCTRL, KEY_V];
-            // Virtual devices take monotonic microseconds.
-            const time = GLib.get_monotonic_time();
-            keys.forEach(key => this._keyboard.notify_key(time, key, Clutter.KeyState.PRESSED));
-            [...keys].reverse().forEach(key => this._keyboard.notify_key(time, key, Clutter.KeyState.RELEASED));
+            this.pressPaste(isTerminal(global.display.focus_window));
         });
+    }
+
+    /** The shared virtual keyboard, for typing into the window in front. */
+    get keyboard() {
+        return this._keyboard;
+    }
+
+    // Presses Ctrl+V (Ctrl+Shift+V in a terminal): by symbol on a Latin layout (right on Dvorak, or
+    // with Ctrl and Caps Lock swapped), by key code on others, where the V key types another letter.
+    pressPaste(terminal) {
+        const time = GLib.get_monotonic_time();
+        if (onLatinLayout()) {
+            const keys = terminal ? [Clutter.KEY_Control_L, Clutter.KEY_Shift_L, Clutter.KEY_v] : [Clutter.KEY_Control_L, Clutter.KEY_v];
+            keys.forEach(key => this._keyboard.notify_keyval(time, key, Clutter.KeyState.PRESSED));
+            [...keys].reverse().forEach(key => this._keyboard.notify_keyval(time, key, Clutter.KeyState.RELEASED));
+        } else {
+            const codes = terminal ? [KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_V] : [KEY_LEFTCTRL, KEY_V];
+            codes.forEach(code => this._keyboard.notify_key(time, code, Clutter.KeyState.PRESSED));
+            [...codes].reverse().forEach(code => this._keyboard.notify_key(time, code, Clutter.KeyState.RELEASED));
+        }
     }
 
     _later(ms, callback) {
