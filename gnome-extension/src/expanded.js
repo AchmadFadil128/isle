@@ -238,9 +238,15 @@ export const ExpandedView = GObject.registerClass({
     _headerWidth() {
         if (!this._header?.get_stage())
             return 0;
+        // As wide as with the longest tab name open, so switching tabs never resizes the island. Names
+        // are measured in the open one's font: the others, never shown yet, may not be styled.
+        const openName = this._tabs[this._index]?.name;
+        const open = openName?.get_preferred_width(-1)[1] ?? 0;
+        const names = this._tabs.map(({name}) => openName?.clutter_text.create_pango_layout(name.text).get_pixel_size()[0] ?? 0);
         const [, tabs] = this._tabsBox.get_preferred_width(-1);
         const [, status] = this._status.get_preferred_width(-1);
-        return Math.ceil(tabs + status + this._header.get_theme_node().get_horizontal_padding() + HEADER_GAP);
+        return Math.ceil(tabs - open + Math.max(open, ...names) + status +
+            this._header.get_theme_node().get_horizontal_padding() + HEADER_GAP);
     }
 
     /** RGB colour to wash the island with, or null. */
