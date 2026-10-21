@@ -28,14 +28,14 @@ import {KeyboardWatcher, OsdHook, SF_PRO_CLASS, TopBar, hasSfPro} from './shell.
 import {ShelfHelper} from './shelfHelper.js';
 import {CallPage} from './pages/call.js';
 import {CalendarPage} from './pages/calendar.js';
+import {FocusPage} from './pages/focus.js';
 import {MediaPage} from './pages/media.js';
 import {NotificationsPage} from './pages/notifications.js';
 import {ShelfPage} from './pages/shelf.js';
-import {TasksPage} from './pages/tasks.js';
-import {TimerPage} from './pages/timer.js';
 
-/** The pointer must rest this long before the island opens. */
+/** The pointer must rest this long before the island opens, moving at most this far meanwhile. */
 const EXPAND_DELAY_MS = 120;
+const REST_DISTANCE_PX = 10;
 /** Grace period before closing when the pointer leaves. */
 const COLLAPSE_DELAY_MS = 300;
 /** A page picked by hand is kept for this long before smart defaults resume. */
@@ -116,9 +116,8 @@ export class Controller {
             new CallPage(this._daemon, this._call, this._privacy, this._settings, size),
             new MediaPage(this._daemon, this._audio, size),
             new NotificationsPage(this._daemon, this._notifications, size),
-            new TimerPage(this._daemon, size),
+            new FocusPage(this._daemon, size),
             new ShelfPage(this._daemon, this._clipboard, this._settings, size),
-            new TasksPage(this._daemon, size),
             new CalendarPage(this._daemon, size),
         ];
         for (const page of pages) {
@@ -302,12 +301,40 @@ export class Controller {
         if (this._island.hover) {
             this._cancel('collapse');
             if (!this._expandWanted)
-                this._later('expand', EXPAND_DELAY_MS, () => this.expand());
+                this._expandOnRest();
         } else {
             this._cancel('expand');
-            if (this._expandWanted && !this._keyboardGrab)
+            if (!this._expandWanted || this._keyboardGrab)
+                return;
+            // Shrinking under a still pointer is no reason to close: wait until it moves.
+            if (this._island.morphing)
+                this._collapseOnMove(global.get_pointer());
+            else
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
         }
+    }
+
+    // Opens once the pointer rests on the island, so passing over it along the top bar opens nothing.
+    _expandOnRest() {
+        const [x, y] = global.get_pointer();
+        this._later('expand', EXPAND_DELAY_MS, () => {
+            const [nowX, nowY] = global.get_pointer();
+            if (Math.hypot(nowX - x, nowY - y) <= REST_DISTANCE_PX)
+                this.expand();
+            else if (this._island.hover)
+                this._expandOnRest();
+        });
+    }
+
+    // Closes after the pointer, outside the island, moves away from `[x, y]`.
+    _collapseOnMove([x, y]) {
+        this._later('collapse', 100, () => {
+            const [nowX, nowY] = global.get_pointer();
+            if (Math.hypot(nowX - x, nowY - y) > 2)
+                this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
+            else
+                this._collapseOnMove([x, y]);
+        });
     }
 
     _collapseUnlessHeld() {

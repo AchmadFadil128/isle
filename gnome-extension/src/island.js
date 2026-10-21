@@ -160,6 +160,11 @@ export const Island = GObject.registerClass({
         this._showView(view);
     }
 
+    /** Whether the island is still changing shape. */
+    get morphing() {
+        return this._driver.running;
+    }
+
     /** Adds a view, hidden. All views are added up front so they are always on the stage. */
     addView(view) {
         view.connect('notify::width', () => this._placeView(view));

@@ -223,7 +223,7 @@
   border-radius: 999px;
 }
 .isle-peek-title { font-size: 14px; font-weight: 600; }
-.isle-peek-subtitle { font-size: 11px; color: rgba(255, 255, 255, 0.5); }
+.isle-peek-subtitle { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
 .isle-peek-value { font-size: 20px; font-weight: 600; letter-spacing: -0.5px; }
 .isle-peek-level-box { spacing: 8px; }
 .isle-peek-level-text { font-size: 12px; font-weight: 600; min-width: 30px; text-align: right; }
@@ -429,24 +429,23 @@
 
 /* ── Focus ────────────────────────────────────────────── */
 
-.isle-timer-time { font-size: 24px; font-weight: 600; letter-spacing: -0.5px; }
+.isle-timer-time { font-size: 26px; font-weight: 600; letter-spacing: -0.5px; }
 .isle-timer-side { spacing: 2px; }
-.isle-timer-head { spacing: 10px; }
 .isle-timer-caption { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
-/* The cycle's sessions: four dots, filled as they are done. */
-.isle-timer-dots { spacing: 4px; }
-.isle-timer-dot { width: 6px; height: 6px; border-radius: 3px; background-color: rgba(255, 255, 255, 0.18); transition-duration: 300ms; }
-.isle-timer-dot.filled { background-color: #ffffff; }
 .isle-timer-stats { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
-.isle-timer-buttons { spacing: 8px; padding-top: 12px; }
+.isle-timer-buttons { spacing: 6px; padding-top: 14px; }
 
 .isle-play-pill {
-  padding: 8px 24px;
+  padding: 8px 18px;
   color: #000000;
   background-color: #ffffff;
 }
 
 .isle-play-pill:hover { background-color: #e6e6e6; }
+
+/* The Focus page: the timer, a hairline, then today's reminders (focus.js). */
+.isle-focus-divider { width: 1px; height: 112px; margin: 0 16px; background-color: rgba(255, 255, 255, 0.1); }
+.isle-timer .isle-chip { padding: 7px 12px; }
 
 /* ── Lists (notifications, calendar) ──────────────────── */
 
@@ -457,47 +456,48 @@
 
 /* ── Reminders ────────────────────────────────────────── */
 
-/* After macOS Reminders, lighter: a progress ring by the title, rows as soft pills, no hairlines. */
-.isle-reminders-header { padding: 0 6px 6px 6px; spacing: 8px; }
-.isle-reminders-title { font-size: 17px; font-weight: 700; color: #ffffff; letter-spacing: -0.2px; }
-.isle-reminders-progress { font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.45); }
+/* As macOS Reminders in dark mode: an orange title and count, rows of a ring and a title over a
+ * hairline. 28 px of header and 29 px rows fill the 144 px page with four whole rows. */
+.isle-reminders-header { height: 28px; padding: 0 0 0 2px; spacing: 4px; }
+.isle-reminders-title { font-size: 19px; font-weight: 700; color: #ff9f0a; letter-spacing: -0.3px; }
+.isle-reminders-count { font-size: 19px; font-weight: 600; color: #ff9f0a; padding-right: 2px; }
+.isle-reminders-add { padding: 5px; border-radius: 99px; color: rgba(255, 255, 255, 0.55); }
+.isle-reminders-add:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
 
 /* Lists fade out at an edge that scrolls on, instead of being cut. */
-.isle-reminder-scroll { -st-vfade-offset: 16px; }
-.isle-reminder-list { spacing: 2px; }
-.isle-reminder { spacing: 10px; padding: 6px 6px 6px 8px; border-radius: 12px; transition-duration: 140ms; }
-.isle-reminder:hover { background-color: rgba(255, 255, 255, 0.06); }
+.isle-reminder-scroll { -st-vfade-offset: 14px; }
+.isle-reminder { height: 29px; spacing: 10px; padding-left: 2px; }
 
-/* An 18 px ring that fills orange, a white tick popping in. */
+/* An 18 px ring; ticked, it turns orange with a 10 px dot inside, as on macOS. */
 .isle-reminder-check {
-  width: 15px;
-  height: 15px;
+  width: 10px;
+  height: 10px;
+  padding: 2.5px;
   border-radius: 99px;
   border: 1.5px solid rgba(255, 255, 255, 0.32);
-  color: #ffffff;
   transition-duration: 160ms;
 }
 
-.isle-reminder-check:hover { border-color: #ff9f0a; background-color: rgba(255, 159, 10, 0.12); }
-.isle-reminder-check:checked { border-color: #ff9f0a; background-color: #ff9f0a; }
+.isle-reminder-check:hover { border-color: rgba(255, 255, 255, 0.6); }
+.isle-reminder-check:checked { border-color: #ff9f0a; }
+.isle-reminder-check.faint { border-color: rgba(255, 255, 255, 0.14); }
+.isle-reminder-dot { border-radius: 99px; background-color: #ff9f0a; }
 
-.isle-reminder-title { font-size: 14px; color: #ffffff; transition-duration: 200ms; }
+.isle-reminder-content { spacing: 6px; padding-right: 2px; }
+/* The hairline runs under the text, from the title to the edge, as on macOS. */
+.isle-reminder-line { height: 1px; background-color: rgba(255, 255, 255, 0.1); }
+.isle-reminder-title { font-size: 13.5px; color: #ffffff; transition-duration: 200ms; }
 .isle-reminder.done .isle-reminder-title { color: rgba(255, 255, 255, 0.38); }
 .isle-reminder-strike { height: 1.5px; background-color: rgba(255, 255, 255, 0.45); }
-.isle-reminder-remove { padding: 3px; color: rgba(255, 255, 255, 0.55); }
+.isle-reminder-remove { padding: 3px; border-radius: 99px; color: rgba(255, 255, 255, 0.5); }
+.isle-reminder-remove:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
 
-/* Always at the bottom: a filled orange plus and the field. */
-.isle-reminder-add { spacing: 10px; padding: 7px 6px 2px 8px; margin-top: 4px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
-.isle-reminder-add-plus { width: 18px; height: 18px; border-radius: 99px; background-color: #ff9f0a; color: #ffffff; }
-
-.isle-reminders-empty { spacing: 8px; }
-.isle-reminders-empty-badge { width: 30px; height: 30px; border-radius: 99px; background-color: rgba(255, 159, 10, 0.16); color: #ff9f0a; }
-.isle-reminders-empty-title { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.5); }
+.isle-reminders-empty { font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.3); padding-top: 22px; }
 
 /* Plain text fields, inside the row (Blur my Shell restyles entries with !important). */
 #isleIsland .isle-reminder-field,
 #isleIsland .isle-reminder-field:focus {
-  font-size: 14px;
+  font-size: 13.5px;
   padding: 0;
   border: none;
   color: #ffffff !important;

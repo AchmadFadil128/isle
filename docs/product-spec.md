@@ -33,7 +33,7 @@ sizes are logical pixels.
 | Compact | 144 × P; 232 with an activity | 10 | 7 | Clock; activity slots left/right |
 | Compact, hanging | 164 × (P + 30); 256 with an activity | 16 | 10 | As above |
 | Peek (alert) | fits its content, 220–380 wide × (P + 56); 62 high off a black bar | 22 | 13 | Badge · title/subtitle · value, level bar or button, centred |
-| Expanded | 600 × (P + 164); 720 for lyrics | 32 | 22 | Header row (tabs) · page |
+| Expanded | 720 × (P + 164), the same on every page | 32 | 22 | Header row (tabs) · page |
 
 The top bar is slimmed to a thin bezel (status icons and the tray stay in
 it) and see-through like glass, with no colour of its own. The
@@ -119,7 +119,7 @@ call starts → Call during a call → Notifications if some arrived unseen
 runs → Music.
 
 Pages, in order: **Call** (only during a call) **· Music · Notifications ·
-Focus · Shelf · Tasks · Calendar**, one tab each in the header. Lists scroll with the wheel or touchpad and never show
+Focus · Shelf · Calendar**, one tab each in the header. Lists scroll with the wheel or touchpad and never show
 a scrollbar.
 
 ## 4. Closed island
@@ -190,8 +190,7 @@ headphones, earbuds, HDMI) with a check on the current one; click one to
 switch. The output button lights up and fills in while this is shown; it
 returns to the player when the island closes.
 
-**Lyrics** (Music page, toggled), like Apple Music's. The island widens to
-720. Left, in a column: a 64 px cover, title, artist and the music bars
+**Lyrics** (Music page, toggled), like Apple Music's. Left, in a column: a 64 px cover, title, artist and the music bars
 (dancing while it plays), the scrubber, then the lyrics toggle (lit),
 previous · play/pause · next and the output button. Right: synced lines;
 the one being sung is white and full size, the others a little smaller,
@@ -221,13 +220,15 @@ Chrome"; clicking that unfolds them under the app's name with **Show
 less**. Opening the page marks them seen. Empty: a bell, "No
 notifications · You're all caught up".
 
-**Focus**. A white ring that fills clockwise as the phase runs (green
+**Focus**: the timer on the left and today's reminders on the right, split
+by a hairline, so what to work on sits beside the time to work on it.
+The timer is a white ring that fills clockwise as the phase runs (green
 during breaks) with the remaining time inside. Beside it the phase ("Focus
 time", "Short break", "Long break", "· paused"), then today's total ("Today
 · 3 sessions · 1h 15m") or, before the first session, what comes ("25m of
 focus, then a break"), and one row of controls: white play/pause, reset,
-**Short Break** and **Focus Time**; the chips start that phase at once and
-the current one is lit. No glows.
+**Break** and **Focus**; the chips start that phase at once and the current
+one is lit. No glows.
 
 While a focus phase runs (paused included), Do Not Disturb is on, like a
 Focus mode; it goes off when the phase ends. Isle only undoes what it did:
@@ -245,7 +246,7 @@ segmented control (switching crossfades).
   (thumbnail with its size) and files (icon, name, "+2 more"). Each card shows
   the app it came from and how long ago. Click a card to copy it ("Copied"
   flashes on it). On hover: pin (pinned items stay at the front and are
-  never cleared), a hand-off (text to Tasks; images and files to the Files
+  never cleared), a hand-off (text to Reminders; images and files to the Files
   tab) and ×. The bar holds type filters (text, links,
   images, files; the chosen one lit, the others dimmed), search (a round
   button that opens into a field, closing again when left empty) and
@@ -286,15 +287,18 @@ drawn while the page is open, so copying costs nothing on screen. Copies are nev
 when a password manager marks them secret, from ignored apps (password
 managers by default; Settings → Clipboard), or while history is off.
 
-**Tasks** (title "Tasks"): a plain list, with no times or reminders. Left: a
-white progress ring with done / total inside, and under it "2 to go" and "3
-of 5 done today" (or "No tasks yet · Plan your day"). Right: an "Add a task" field (Enter adds and stays ready, Esc
-stops), then open tasks in the order they were added. On a task: the circle
-ticks it off; clicking the title renames it in place (Enter or clicking away
-saves, Esc cancels); × appears on hover. Finished tasks fold under
-"Completed · N" and show as plain struck-through rows when unfolded, the
-list scrolling to them.
-Finished tasks are cleared at midnight.
+**Reminders** (the Focus page's right half), as macOS's in dark mode: an
+orange "Reminders" with the number still open on the right and a +; under
+it the reminders as rows of a thin ring and the title over a hairline that
+runs from the text to the edge, four whole rows before it scrolls, and a
+last faint row "New Reminder" (Enter adds and stays ready, Esc stops; + puts
+the cursor there). Clicking the title renames it in place (Enter or clicking
+away saves, Esc cancels); × appears on hover. Ticking one fills its ring
+with an orange dot and strikes the title through at once; it lingers 0.9 s
+(a second tap undoes it), then fades and folds away, the rows below sliding
+up. Closing the island in that moment keeps it done. Empty: "No Reminders",
+or "All Done" once today's are ticked off. Done ones are cleared at
+midnight.
 
 **Calendar** (title "Calendar"), like macOS's Calendar widget. Left: the
 month in red capitals with the year (click: back to today) and ‹ › to move
@@ -350,7 +354,7 @@ hovering opens the Notifications page.
 
 ## 7. Data and reliability
 
-- Tasks, shelf, clipboard history (images in `clips/`) and timer settings
+- Reminders, shelf, clipboard history (images in `clips/`) and timer settings
   live in `~/.local/share/isle/*.json`,
   written atomically and flushed to disk (file and folder), so they survive
   reboots and power cuts. A corrupt file is set aside, never lost silently.

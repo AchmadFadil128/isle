@@ -13,8 +13,10 @@ export const GENTLE = {stiffness: 155, damping: 25};
 
 const MAX_STEP = 1 / 240;
 const MAX_FRAME = 0.25;
-const REST_DISTANCE = 0.05;
-const REST_SPEED = 0.05;
+/** At rest within a quarter pixel, slower than 2 px/s: closer is invisible, and creeping on would keep
+ * nudging the island's edges by a pixel for a second more. */
+const REST_DISTANCE = 0.25;
+const REST_SPEED = 2;
 
 export class Spring {
     constructor(value, config = ISLAND) {
@@ -69,6 +71,11 @@ export class SpringDriver {
         // A looping timeline is just a frame clock tied to the actor.
         this._timeline = new Clutter.Timeline({actor, duration: 1000, repeat_count: -1});
         this._timeline.connect('new-frame', () => this._tick());
+    }
+
+    /** Whether the springs are still moving. */
+    get running() {
+        return this._timeline?.is_playing() ?? false;
     }
 
     start() {
