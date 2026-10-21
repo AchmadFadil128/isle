@@ -441,45 +441,61 @@
 
 .isle-play-pill:hover { background-color: #e6e6e6; }
 
-/* ── Reminders ────────────────────────────────────────── */
+/* ── Lists (notifications, calendar) ──────────────────── */
 
-/* As macOS Reminders: an add row, then a card per reminder with a round tick box. */
-.isle-tasks-column { spacing: 6px; }
-#isleIsland .isle-task-add { border-radius: 12px; padding: 9px 12px; }
-.isle-task-add-icon { padding-right: 10px; }
 /* Lists fade out at an edge that scrolls on, instead of being cut. */
 .isle-task-scroll { padding: 6px 0; -st-vfade-offset: 18px; }
-.isle-tasks-scroll { padding: 0 0 4px 0; -st-vfade-offset: 18px; }
-.isle-task-list { spacing: 6px; }
-.isle-tasks-empty { font-size: 13px; color: rgba(255, 255, 255, 0.4); }
-
-.isle-task {
-  spacing: 12px;
-  padding: 9px 10px 9px 12px;
-  border-radius: 12px;
-  background-color: #1c1c1e;
-}
-
-.isle-task:hover { background-color: #242426; }
-
-.isle-task-check {
-  width: 18px;
-  height: 18px;
-  border-radius: 9px;
-  border: 1.5px solid rgba(255, 255, 255, 0.45);
-  color: transparent;
-}
-
-.isle-task-check:hover { border-color: rgba(255, 255, 255, 0.8); }
-.isle-task-check:checked { background-color: #ff9f0a; border-color: #ff9f0a; color: #ffffff; }
-
-.isle-task-title { font-size: 14px; }
-.isle-task-entry { font-size: 14px; padding: 2px 10px; }
-/* Ticked: the title dims as a line strikes it through (see tasks.js). */
-.isle-task.done .isle-task-title { color: rgba(255, 255, 255, 0.45); }
-.isle-task-strike { height: 1.5px; background-color: rgba(255, 255, 255, 0.55); }
-
+.isle-task-add-icon { color: rgba(255, 255, 255, 0.5); padding-right: 8px; }
 .isle-task-remove { padding: 3px; color: rgba(255, 255, 255, 0.7); }
+
+/* ── Reminders ────────────────────────────────────────── */
+
+/* As macOS Reminders in dark mode: an orange title and count, plain rows under hairlines. */
+.isle-reminders-header { padding: 0 2px 4px 4px; spacing: 6px; }
+.isle-reminders-title { font-size: 20px; font-weight: 700; color: #ff9f0a; letter-spacing: -0.3px; }
+.isle-reminders-count { font-size: 20px; font-weight: 600; color: #ff9f0a; }
+.isle-reminders-add { padding: 4px; color: rgba(255, 255, 255, 0.7); }
+.isle-reminders-add:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.08); }
+
+/* Lists fade out at an edge that scrolls on, instead of being cut. */
+.isle-reminder-scroll { -st-vfade-offset: 16px; }
+.isle-reminder { spacing: 10px; padding-left: 4px; }
+
+/* 20 px across: the dot inside, a 3.5 px gap, then the ring. */
+.isle-reminder-check {
+  width: 10px;
+  height: 10px;
+  padding: 3.5px;
+  border-radius: 99px;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  transition-duration: 180ms;
+}
+
+.isle-reminder-check:hover { border-color: rgba(255, 255, 255, 0.55); }
+.isle-reminder-check:checked { border-color: #ff9f0a; }
+.isle-reminder-check-faint { border-color: rgba(255, 255, 255, 0.15); }
+.isle-reminder-dot { border-radius: 99px; background-color: #ff9f0a; }
+
+.isle-reminder-content { padding: 7px 4px 7px 0; spacing: 6px; }
+/* The hairline runs under the text, from the title to the edge, as on macOS. */
+.isle-reminder-line { height: 1px; background-color: rgba(255, 255, 255, 0.12); }
+.isle-reminder-title { font-size: 14px; color: #ffffff; transition-duration: 200ms; }
+.isle-reminder.done .isle-reminder-title { color: rgba(255, 255, 255, 0.4); }
+.isle-reminder-strike { height: 1.5px; background-color: rgba(255, 255, 255, 0.5); }
+.isle-reminder-remove { padding: 2px; color: rgba(255, 255, 255, 0.6); }
+
+/* Plain text fields, inside the row (Blur my Shell restyles entries with !important). */
+#isleIsland .isle-reminder-field,
+#isleIsland .isle-reminder-field:focus {
+  font-size: 14px;
+  padding: 0;
+  border: none;
+  color: #ffffff !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.isle-reminder-field StLabel.hint-text { color: rgba(255, 255, 255, 0.35); }
 
 /* ── Calendar ─────────────────────────────────────────── */
 

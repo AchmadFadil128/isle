@@ -467,12 +467,12 @@ export const ClipsView = GObject.registerClass({
                 this.flash(item, 'isle-shelf', 'Added to Files');
             }));
         } else {
-            actions.add_child(button('isle-tasks', 'Add to Tasks', () => {
+            actions.add_child(button('isle-tasks', 'Add to Reminders', () => {
                 const title = item.preview.split('\n').find(line => line.trim())?.trim().slice(0, 120);
                 if (!title)
                     return;
                 this._daemon.call('todo', 'Add', title);
-                this.flash(item, 'isle-tasks', 'Added to Tasks');
+                this.flash(item, 'isle-tasks', 'Added to Reminders');
             }));
         }
 
