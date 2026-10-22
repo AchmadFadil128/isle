@@ -6,6 +6,34 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-22
+
+### Fixed
+
+- **GNOME Shell could crash** when the island closed in the moment a ticked
+  reminder folded away, or when renaming one reminder and then another.
+- The island **no longer shakes by a pixel** while it grows and shrinks:
+  its contents stay put on screen, and its edges no longer step back.
+- **Switching tabs** no longer makes the tabs jump: names open and close
+  smoothly, and the Focus page now fits the same width as the others, so
+  the island keeps its size from tab to tab.
+- One alert replacing another fades over instead of swapping in a frame,
+  and an alert shown again while fading out no longer blinks.
+- After adding a reminder with Enter, the field keeps the keyboard, ready
+  for the next one.
+- `isled` stops when its session ends instead of lingering in the
+  background.
+- Less work while music plays: synced lyrics no longer retry scrolling
+  sixty times a second while hidden, the music bars animate without
+  re-laying out the island, the output list is not rebuilt as the volume
+  moves, and a cover is decoded once.
+- Cached covers and lyrics are trimmed to the latest 500 songs.
+
+### Changed
+
+- The Focus page's Break and Focus are round buttons, lit in the phase's
+  colour, so the timer and today's reminders share the usual width.
+
 ## [0.4.0] - 2026-10-22
 
 ### Added
@@ -297,7 +325,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/zickrian/isle/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/zickrian/isle/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/zickrian/isle/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/zickrian/isle/compare/v0.1.2...v0.2.0
