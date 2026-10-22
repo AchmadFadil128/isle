@@ -6,7 +6,38 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
-## [0.5.1] - 2026-10-22
+## [0.6.0] - 2026-10-22
+
+### Added
+
+- **The voice assistant works as an agent, in the background.** A request
+  with several steps ("open Firefox, then put it on the left", "find my CV
+  and open it") is done one step after another, each step seeing what the
+  last one did. Close the island while it works: it carries on, with a small
+  mic in the closed island, and the answer comes as an alert. Click the
+  island or press Super+I to watch it, and Stop to end it.
+- `isled --doctor` checks speech recognition and each AI: where it is
+  installed and whether you are signed in, as Isle itself sees them.
+  `isle-setup-voice` runs it at the end. Also `isled --version` and `--help`.
+
+### Changed
+
+- **Nothing of the assistant runs while you are not asking.** The AI quits
+  as soon as a request is done (it used to stay ten minutes) and speech
+  recognition once your words are text; both run at a lower priority, take
+  everything they started with them when they quit, and transcribing uses at
+  most half the processor's cores.
+- **Lighter when idle.** `isled` sleeps until its next real deadline instead
+  of waking every 30 seconds, checks the clock again on waking from
+  suspend, and asks nothing about AI usage while that is turned off; the
+  files tray's helper quits a minute after the tray closes; on battery the
+  music bars rest after 15 seconds without input.
+- Updating keeps your top bar settings: the installer sets Isle's look only
+  on a first install. It refuses to run as root, stops before changing
+  anything on an unsupported GNOME Shell, and says what went wrong when
+  GitHub cannot be reached.
+- Uninstalling also removes speech recognition and Isle's caches, and lifts
+  a battery charge limit Isle set.
 
 ### Fixed
 
@@ -22,6 +53,15 @@ All notable changes to Isle are listed here. The format follows
   whole music page.
 - Opening the calendar or notifications no longer rebuilds them unless
   something changed.
+- The assistant finds AIs installed with nvm, volta, fnm or pnpm, and the
+  Node.js beside them.
+- AI usage shows up soon after login: offline at first, Claude is asked
+  again within a minute instead of 20; the Usage tab no longer goes
+  missing when Isle starts before GNOME Shell asks for it.
+- A second `isled` started by hand (`isled --version` did) no longer takes
+  over the running one.
+- Plugging in at a battery charge limit no longer repeats the Charging and
+  On Battery alerts.
 
 ## [0.5.0] - 2026-10-22
 
@@ -366,8 +406,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.5.1...HEAD
-[0.5.1]: https://github.com/zickrian/isle/compare/v0.5.0...v0.5.1
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/zickrian/isle/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/zickrian/isle/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/zickrian/isle/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/zickrian/isle/compare/v0.3.0...v0.4.0
