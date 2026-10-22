@@ -35,6 +35,9 @@ jobs:
         run: |
           # man-db's index rebuild can stall apt for many minutes on the runners; nothing here needs it.
           sudo rm -f /var/lib/man-db/auto-update
+          # A mirror that stops answering fails and is tried again, rather than hanging the job.
+          printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' |
+            sudo tee /etc/apt/apt.conf.d/99retries >/dev/null
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev rpm file cmake g++ clang libclang-dev libvulkan-dev glslc
       - uses: dtolnay/rust-toolchain@stable
