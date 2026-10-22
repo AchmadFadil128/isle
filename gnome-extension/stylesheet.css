@@ -24,7 +24,7 @@
 
 .isle-button:hover { background-color: rgba(255, 255, 255, 0.12); }
 .isle-button:active { background-color: rgba(255, 255, 255, 0.2); }
-.isle-button:focus { box-shadow: inset 0 0 0 2px rgba(90, 171, 255, 0.8); }
+.isle-button:focus { color: #ffffff; }
 
 .isle-button-flat { background-color: transparent; }
 
@@ -39,38 +39,16 @@
   transition-duration: 120ms;
 }
 
+/* As macOS's notification buttons: translucent grey, white text, lighter under the pointer. */
 .isle-pill-small {
   font-size: 12px;
   padding: 6px 14px;
-  background-color: #ffffff;
-  color: #000000;
-}
-
-.isle-pill-small:hover { background-color: #e6e6e6; }
-
-/* Pill with an icon and a label (Short Break, Add Task…). */
-.isle-chip {
   color: #ffffff;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: 999px;
-  padding: 7px 14px;
-  background-color: #1c1c1e;
-  transition-duration: 150ms;
+  background-color: rgba(255, 255, 255, 0.16);
 }
 
-.isle-chip:hover { background-color: #2c2c2e; }
-.isle-chip:checked { background-color: rgba(255, 255, 255, 0.2); }
-/* Coloured "on" states: indigo for Do Not Disturb and focus (like a Focus
- * mode), green for a break. */
-.isle-chip-dnd:checked,
-.isle-chip-focus:checked { background-color: #5e5ce6; }
-.isle-chip-dnd:checked:hover,
-.isle-chip-focus:checked:hover { background-color: #6e6cf0; }
-.isle-chip-break:checked { background-color: #2fb35a; }
-.isle-chip-break:checked:hover { background-color: #36c264; }
-.isle-chip:focus { box-shadow: inset 0 0 0 2px rgba(90, 171, 255, 0.8); }
-.isle-chip-box { spacing: 7px; }
+.isle-pill-small:hover { background-color: rgba(255, 255, 255, 0.24); }
+.isle-pill-small:active { background-color: rgba(255, 255, 255, 0.3); }
 
 .isle-art { background-color: #2c2c2e; }
 .isle-art-placeholder { color: rgba(255, 255, 255, 0.4); }
@@ -103,17 +81,17 @@
   selected-color: #ffffff;
 }
 
-.isle-entry:focus { background-color: #2c2c2e; box-shadow: inset 0 0 0 1px rgba(90, 171, 255, 0.7); }
-.isle-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.4); }
+.isle-entry:focus { background-color: #2c2c2e; }
+.isle-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.55); }
 
 /* Blur my Shell restyles every entry in the shell from an ancestor, with
  * !important (light entries on a black island); the island's keep theirs. */
 #isleIsland .isle-entry { color: #ffffff !important; background-color: #1c1c1e !important; }
 #isleIsland .isle-entry:focus {
   background-color: #2c2c2e !important;
-  box-shadow: inset 0 0 0 1px rgba(90, 171, 255, 0.7) !important;
+  box-shadow: none !important;
 }
-#isleIsland .isle-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.4) !important; }
+#isleIsland .isle-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.55) !important; }
 
 /* ── Top bar ──────────────────────────────────────────── */
 
@@ -231,14 +209,45 @@
 /* ── Voice assistant ──────────────────────────────────── */
 
 /* The orb on the left, then what was heard above the answer (voice.js sizes them to match). */
-.isle-voice-row { padding: 14px 22px 22px 16px; spacing: 14px; }
+.isle-voice-row { padding: 14px 16px 20px 16px; spacing: 12px; }
 .isle-voice-orb { border-radius: 999px; }
-.isle-voice-heard { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-bottom: 3px; }
+.isle-voice-heard { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-bottom: 2px; }
 .isle-voice-text { font-size: 15px; font-weight: 500; }
 .isle-voice-text-dim { color: rgba(255, 255, 255, 0.6); font-weight: 600; }
-.isle-voice-hint { font-size: 12px; color: rgba(255, 255, 255, 0.55); padding-top: 3px; }
-.isle-voice-sign-in { margin-top: 8px; }
+.isle-voice-hint { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-top: 4px; }
+.isle-voice-sign-in { margin-top: 10px; }
+
+/* The round button at the row's end: 32 px with any of its icons (see ACTION_SIZE in voice.js). */
+.isle-voice-action { padding: 8px; color: rgba(255, 255, 255, 0.7); background-color: rgba(255, 255, 255, 0.08); }
+.isle-voice-action:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.15); }
+.isle-voice-action:active { background-color: rgba(255, 255, 255, 0.22); }
+.isle-voice-stop { padding: 10px; color: #ffffff; background-color: rgba(255, 255, 255, 0.14); }
+.isle-voice-send { padding: 7px; border-radius: 999px; color: #000000; background-color: #ffffff; transition-duration: 150ms; }
+.isle-voice-send-empty { color: rgba(255, 255, 255, 0.45); background-color: rgba(255, 255, 255, 0.12); }
+
+/* The typed request: a quiet field, no accent ring (GNOME's and Blur my Shell's, with !important). */
+#isleIsland .isle-voice-entry,
+#isleIsland .isle-voice-entry:hover,
+#isleIsland .isle-voice-entry:focus,
+#isleIsland .isle-voice-entry:focus:hover {
+  font-size: 14px;
+  font-weight: 500;
+  min-height: 0;
+  padding: 4px 4px 4px 16px;
+  border-radius: 999px;
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.07) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: none !important;
+  caret-color: #ffffff;
+  selection-background-color: rgba(255, 255, 255, 0.28);
+  selected-color: #ffffff;
+}
+#isleIsland .isle-voice-entry:focus,
+#isleIsland .isle-voice-entry:focus:hover { border: 1px solid rgba(255, 255, 255, 0.16) !important; }
+#isleIsland .isle-voice-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.38) !important; }
 .isle-compact-assistant { color: #8f66ff; }
+.isle-compact-warning { color: #ff453a; }
 .isle-header-mic { padding: 4px; color: rgba(255, 255, 255, 0.75); }
 
 /* ── Expanded: frame ──────────────────────────────────── */
@@ -258,7 +267,7 @@
 
 /* The open tab sits on a dark grey pill, like NotchNook's; no outlines. */
 .isle-tab:hover,
-.isle-tab:focus { background-color: rgba(255, 255, 255, 0.05); }
+.isle-tab:focus { background-color: rgba(255, 255, 255, 0.05); color: #ffffff; }
 .isle-tab:checked { background-color: rgba(255, 255, 255, 0.09); }
 .isle-tab-box { spacing: 0; }
 /* The gap from the icon is the name's own margin, so a closed name takes no room (expanded.js). */
@@ -393,14 +402,14 @@
 .isle-lyrics-state-dots { padding: 4px 0 8px 0; }
 .isle-lyrics-state-dots .isle-lyric-dot { background-color: rgba(255, 255, 255, 0.6); }
 .isle-lyrics-state-title { font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.85); }
-.isle-lyrics-state-hint { font-size: 12px; color: rgba(255, 255, 255, 0.45); }
+.isle-lyrics-state-hint { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
 
 /* ── Call ─────────────────────────────────────────────── */
 
 /* The call's window; call.js rounds its corners and draws a hairline edge. */
 .isle-call-preview { background-color: #1c1c1e; border-radius: 14px; }
 .isle-call-preview-button { border-radius: 14px; }
-.isle-call-preview-button:focus { box-shadow: 0 0 0 2px rgba(90, 171, 255, 0.8); }
+.isle-call-preview-button:focus { color: #ffffff; }
 .isle-call-placeholder { spacing: 8px; }
 .isle-call-hint { font-size: 11px; font-weight: 500; color: rgba(255, 255, 255, 0.5); }
 
@@ -433,7 +442,7 @@
 }
 
 .isle-call-control:hover { background-color: #3a3a3c; }
-.isle-call-control:focus { box-shadow: inset 0 0 0 2px rgba(90, 171, 255, 0.8); }
+.isle-call-control:focus { color: #ffffff; }
 .isle-call-control:checked { color: #000000; background-color: #ffffff; }
 .isle-call-control:checked:hover { background-color: #e6e6e6; }
 .isle-call-control-label { font-size: 11px; font-weight: 500; color: rgba(255, 255, 255, 0.6); }
@@ -511,7 +520,7 @@
 .isle-reminder-remove { padding: 3px; border-radius: 99px; color: rgba(255, 255, 255, 0.5); }
 .isle-reminder-remove:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
 
-.isle-reminders-empty { font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.3); padding-top: 22px; }
+.isle-reminders-empty { font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.55); padding-top: 22px; }
 
 /* Plain text fields, inside the row (Blur my Shell restyles entries with !important). */
 #isleIsland .isle-reminder-field,
@@ -547,7 +556,7 @@
   text-align: center;
   color: rgba(255, 255, 255, 0.55);
 }
-.isle-cal-weekday.weekend { color: rgba(255, 255, 255, 0.35); }
+.isle-cal-weekday.weekend { color: rgba(255, 255, 255, 0.5); }
 
 .isle-cal-cell { width: 28px; }
 
@@ -562,7 +571,7 @@
 }
 
 .isle-cal-day:hover { background-color: rgba(255, 255, 255, 0.12); }
-.isle-cal-day:focus { box-shadow: inset 0 0 0 1.5px rgba(90, 171, 255, 0.8); }
+.isle-cal-day:focus { background-color: rgba(255, 255, 255, 0.1); color: #ffffff; }
 .isle-cal-day.weekend { color: rgba(255, 255, 255, 0.55); }
 .isle-cal-day.selected { background-color: rgba(255, 255, 255, 0.22); }
 .isle-cal-day.today { background-color: #ff453a; font-weight: 700; }
@@ -609,7 +618,10 @@
 .isle-cal-event-bar { width: 3px; border-radius: 2px; margin: 4px 0 4px 5px; }
 .isle-cal-event-title { font-size: 13px; font-weight: 600; }
 .isle-cal-event-time { font-size: 11px; font-weight: 500; color: rgba(255, 255, 255, 0.65); }
-.isle-cal-empty { font-size: 13px; color: rgba(255, 255, 255, 0.4); }
+.isle-cal-empty { font-size: 13px; color: rgba(255, 255, 255, 0.55); }
+.isle-cal-accounts { font-size: 12px; color: rgba(90, 171, 255, 1); padding: 4px 8px; border-radius: 8px; }
+.isle-cal-accounts:hover { background-color: rgba(255, 255, 255, 0.08); }
+.isle-cal-accounts:focus { color: #ffffff; }
 
 /* ── Notifications ────────────────────────────────────── */
 
@@ -671,7 +683,8 @@
   color: #ffffff;
 }
 .isle-notification-body { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
-.isle-notification-time { font-size: 12px; color: rgba(255, 255, 255, 0.4); }
+.isle-notification-actions { spacing: 6px; padding-top: 6px; }
+.isle-notification-time { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
 
 .isle-dnd-moon { color: rgba(255, 255, 255, 0.85); }
 
@@ -713,7 +726,7 @@
 .isle-shelf-field { padding: 5px 12px; font-size: 12px; }
 .isle-shelf-field-icon { padding-right: 6px; }
 .isle-shelf-confirm { padding: 5px 12px; }
-.isle-shelf-hint { font-size: 12px; color: rgba(255, 255, 255, 0.45); transition-duration: 180ms; }
+.isle-shelf-hint { font-size: 12px; color: rgba(255, 255, 255, 0.55); transition-duration: 180ms; }
 /* While a file is on its way in. */
 .isle-shelf-hint.active { color: #ffffff; font-weight: 600; }
 
@@ -788,7 +801,7 @@
 }
 
 .isle-shelf-tile:hover { background-color: #1c1c1e; }
-.isle-shelf-tile:focus { box-shadow: inset 0 0 0 2px rgba(90, 171, 255, 0.8); }
+.isle-shelf-tile:focus { background-color: rgba(255, 255, 255, 0.1); }
 .isle-shelf-tile-box { spacing: 4px; }
 .isle-shelf-name { font-size: 12px; text-align: center; }
 
@@ -831,23 +844,28 @@
   color: rgba(255, 255, 255, 0.7);
   background-color: rgba(255, 255, 255, 0.1);
 }
-.isle-usage-stamp { font-size: 11px; color: rgba(255, 255, 255, 0.42); }
-.isle-usage-stamp.warning { color: #ff9f0a; }
+.isle-usage-stamp { font-size: 11px; color: rgba(255, 255, 255, 0.55); }
+.isle-usage-stamp.warning { color: rgba(255, 255, 255, 0.8); }
 .isle-usage-limits { spacing: 11px; }
 .isle-usage-limit { spacing: 5px; }
 .isle-usage-line { spacing: 10px; }
 .isle-usage-window { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.9); }
-.isle-usage-reset { font-size: 11px; color: rgba(255, 255, 255, 0.45); }
+.isle-usage-reset { font-size: 11px; color: rgba(255, 255, 255, 0.55); }
 .isle-usage-percent { font-size: 13px; font-weight: 700; min-width: 34px; text-align: right; }
-.isle-usage-percent.warn { color: #ff9f0a; }
 .isle-usage-percent.critical { color: #ff453a; }
 .isle-usage-track { height: 5px; border-radius: 3px; background-color: rgba(255, 255, 255, 0.1); }
 .isle-usage-fill { height: 5px; border-radius: 3px; }
-.isle-usage-fill.warn { background-color: #ff9f0a; }
 .isle-usage-fill.critical { background-color: #ff453a; }
-.isle-usage-empty { font-size: 12px; color: rgba(255, 255, 255, 0.45); }
+.isle-usage-empty { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
 
 .isle-usage-dots { spacing: 6px; padding-left: 14px; }
 .isle-usage-dot { width: 6px; height: 6px; border-radius: 3px; background-color: rgba(255, 255, 255, 0.22); transition-duration: 200ms; }
 .isle-usage-dot:hover { background-color: rgba(255, 255, 255, 0.45); }
 .isle-usage-dot.shown { height: 16px; background-color: #ffffff; }
+
+/* Focused (from the keyboard), a button lights up: no ring around it. */
+.isle-pill:focus, .isle-pill-small:focus, .isle-notification-row:focus, .isle-output-button:focus,
+.isle-cal-today:focus, .isle-cal-month-title:focus, .isle-segment:focus, .isle-usage-dot:focus,
+.isle-recording-pill:focus, .isle-notification-more:focus, .isle-notification-less:focus {
+  color: #ffffff;
+}

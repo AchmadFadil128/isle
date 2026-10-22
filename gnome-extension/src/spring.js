@@ -7,7 +7,7 @@ import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 
 /** The island's size spring: ~3.5% overshoot, peaking at ~0.37 s and at rest by ~0.57 s. */
-export const ISLAND = {stiffness: 155, damping: 18};
+const ISLAND = {stiffness: 155, damping: 18};
 /** Same speed without overshoot, for corner and shoulder radii. */
 export const GENTLE = {stiffness: 155, damping: 25};
 

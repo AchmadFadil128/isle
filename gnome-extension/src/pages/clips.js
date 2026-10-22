@@ -110,16 +110,18 @@ export const ClipsView = GObject.registerClass({
         this.update();
     }
 
-    /** Redraws the cards; `off` means clipboard history is switched off, for the empty state. */
-    update({off = false} = {}) {
+    /** Redraws the cards; `off` means clipboard history is switched off, `hidden` that the screen is
+     * shared or recorded: either way no card shows, and the empty state says why. */
+    update({off = false, hidden = false} = {}) {
         this._off = off;
+        this._hidden = hidden;
         // Pinned items stay at the front, the rest newest first (as isled
         // sends them).
         const all = this._daemon.state.clipboard ?? [];
         const items = [...all.filter(item => item.pinned), ...all.filter(item => !item.pinned)]
             .filter(item => !this._kind || item.kind === this._kind)
             .filter(item => matches(item, this._query));
-        this._shown = items.slice(0, MAX_CARDS);
+        this._shown = hidden ? [] : items.slice(0, MAX_CARDS);
         this._selected = Math.min(this._selected, Math.max(0, this._shown.length - 1));
 
         this._cancelPending();
@@ -160,7 +162,11 @@ export const ClipsView = GObject.registerClass({
 
     _updateEmpty() {
         const searching = this._query || this._kind;
-        if (searching) {
+        if (this._hidden) {
+            this._emptyIcon.gicon = icon('isle-clipboard');
+            this._emptyTitle.text = 'Hidden while you share your screen';
+            this._emptyHint.text = 'Your clipboard shows again once sharing stops';
+        } else if (searching) {
             this._emptyIcon.gicon = icon('isle-search');
             this._emptyTitle.text = 'Nothing found';
             this._emptyHint.text = 'Try other words or another filter';

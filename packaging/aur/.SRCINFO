@@ -1,0 +1,27 @@
+pkgbase = isle-bin
+	pkgdesc = A dynamic island for the GNOME Shell top bar: music with synced lyrics, calls, a focus timer, a calendar, a file shelf and a voice assistant
+	pkgver = 0.6.0
+	pkgrel = 1
+	url = https://github.com/zickrian/isle
+	install = isle-bin.install
+	arch = x86_64
+	license = GPL-3.0-or-later
+	license = OFL-1.1
+	depends = gnome-shell>=1:46
+	depends = dconf
+	depends = gtk4
+	depends = glib2
+	depends = pango
+	depends = gdk-pixbuf2
+	depends = gcc-libs
+	depends = glibc
+	depends = bash
+	optdepends = vulkan-icd-loader: speech recognition on the graphics card, else on the processor
+	provides = isle
+	conflicts = isle
+	options = !strip
+	options = !debug
+	source_x86_64 = https://github.com/zickrian/isle/releases/download/v0.6.0/isle-0.6.0-x86_64-linux.tar.gz
+	sha256sums_x86_64 = 0000000000000000000000000000000000000000000000000000000000000000
+
+pkgname = isle-bin

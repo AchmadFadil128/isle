@@ -69,33 +69,6 @@ export function pillButton(text, styleClass, onClick) {
     return button;
 }
 
-/** A pill with an icon and a label; change its state with `setChip`. */
-export function chipButton(iconName, text, onClick, styleClass = '') {
-    const box = new St.BoxLayout({style_class: 'isle-chip-box'});
-    const glyph = new St.Icon({gicon: icon(iconName), icon_size: 14});
-    const caption = new St.Label({text, y_align: Clutter.ActorAlign.CENTER});
-    box.add_child(glyph);
-    box.add_child(caption);
-    const button = new St.Button({style_class: `isle-chip ${styleClass}`, child: box, can_focus: true, y_align: Clutter.ActorAlign.CENTER});
-    button.connect('clicked', () => onClick());
-    button._isleIcon = glyph;
-    button._isleCaption = caption;
-    return button;
-}
-
-/** Updates a chip's state; a state change always changes the icon too, never just the colour. */
-export function setChip(button, {active = false, icon: iconName = null, label: text = null, enabled = true}) {
-    if (iconName)
-        button._isleIcon.gicon = icon(iconName);
-    if (text)
-        button._isleCaption.text = text;
-    if (active)
-        button.add_style_pseudo_class('checked');
-    else
-        button.remove_style_pseudo_class('checked');
-    setEnabled(button, enabled);
-}
-
 /** Opacity of disabled controls: still visible, clearly not available. */
 const DISABLED_OPACITY = 90;
 
@@ -271,7 +244,7 @@ export function isSymbolic(gicon) {
 }
 
 /** A key for `path`'s current contents: a player may write new art under the same name. */
-export function fileKey(path) {
+function fileKey(path) {
     try {
         const info = Gio.File.new_for_path(path).query_info('time::modified', Gio.FileQueryInfoFlags.NONE, null);
         return `${path}\u001f${info.get_attribute_uint64('time::modified')}`;
@@ -323,13 +296,39 @@ function clearOldCovers(dir) {
     if (oldCoversCleared)
         return;
     oldCoversCleared = true;
-    try {
-        const children = Gio.File.new_for_path(dir).enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
-        for (let info = children.next_file(null); info; info = children.next_file(null))
-            children.get_child(info).delete(null);
-    } catch {
-        // None yet.
-    }
+    // The listing may land after this shell's first copies are written: those stay.
+    forEachChild(dir, child => {
+        if (!coversMade.includes(child.get_path()))
+            child.delete_async(GLib.PRIORITY_LOW, null, null);
+    });
+}
+
+/** Calls `callback` with each file in the folder at `path`, read off the main loop's way; none if it is not there. */
+export function forEachChild(path, callback, cancellable = null) {
+    Gio.File.new_for_path(path).enumerate_children_async('standard::name', Gio.FileQueryInfoFlags.NONE,
+        GLib.PRIORITY_LOW, cancellable, (folder, result) => {
+            let children;
+            try {
+                children = folder.enumerate_children_finish(result);
+            } catch {
+                return; // not there
+            }
+            const next = () => children.next_files_async(32, GLib.PRIORITY_LOW, cancellable, (_children, batch) => {
+                let infos = [];
+                try {
+                    infos = children.next_files_finish(batch);
+                } catch {
+                    // Cancelled, or unreadable: the rest is left.
+                }
+                if (infos.length === 0) {
+                    children.close_async(GLib.PRIORITY_LOW, null, null);
+                    return;
+                }
+                infos.forEach(info => callback(children.get_child(info), info));
+                next();
+            });
+            next();
+        });
 }
 
 /**
@@ -341,8 +340,16 @@ export const smallCover = memoByFile(async path => {
         return null;
     let copy = null;
     try {
+        const stream = await new Promise((resolve, reject) => {
+            Gio.File.new_for_path(path).read_async(GLib.PRIORITY_LOW, null, (file, result) => {
+                try {
+                    resolve(file.read_finish(result));
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        });
         const pixbuf = await new Promise((resolve, reject) => {
-            const stream = Gio.File.new_for_path(path).read(null);
             GdkPixbuf.Pixbuf.new_from_stream_at_scale_async(stream, COVER_SIZE, COVER_SIZE, true, null, (_source, result) => {
                 stream.close(null);
                 try {
@@ -353,10 +360,20 @@ export const smallCover = memoByFile(async path => {
             });
         });
         const dir = GLib.build_filenamev([GLib.get_user_runtime_dir(), 'isle-covers']);
-        clearOldCovers(dir);
         GLib.mkdir_with_parents(dir, 0o700);
         copy = GLib.build_filenamev([dir, `${GLib.uuid_string_random()}.png`]);
-        const out = Gio.File.new_for_path(copy).replace(null, false, Gio.FileCreateFlags.PRIVATE, null);
+        coversMade.push(copy);
+        clearOldCovers(dir);
+        const out = await new Promise((resolve, reject) => {
+            Gio.File.new_for_path(copy).replace_async(null, false, Gio.FileCreateFlags.PRIVATE, GLib.PRIORITY_LOW, null,
+                (file, result) => {
+                    try {
+                        resolve(file.replace_finish(result));
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+        });
         await new Promise((resolve, reject) => {
             pixbuf.save_to_streamv_async(out, 'png', [], [], null, (_source, result) => {
                 out.close(null);
@@ -367,14 +384,17 @@ export const smallCover = memoByFile(async path => {
                 }
             });
         });
-        coversMade.push(copy);
         if (coversMade.length > COVERS_KEPT)
             GLib.unlink(coversMade.shift());
         return copy;
     } catch {
         // Nothing half written is left behind.
-        if (copy)
+        if (copy) {
+            const made = coversMade.indexOf(copy);
+            if (made >= 0)
+                coversMade.splice(made, 1);
             GLib.unlink(copy);
+        }
         return null;
     }
 });

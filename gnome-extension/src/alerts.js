@@ -12,6 +12,8 @@ const OSD_DURATION = 1500;
 const STATUS_DURATION = 2600;
 const REMINDER_DURATION = 8000;
 const NOTIFICATION_DURATION = 5000;
+/** A critical notification stays this long once someone is there to see it. */
+const CRITICAL_DURATION = 20000;
 
 function batteryIcon(percent, plugged) {
     const level = Math.min(100, Math.max(0, Math.round(percent / 10) * 10));
@@ -66,7 +68,7 @@ export function osd(gicon, text, level, maxLevel) {
         status: hasLevel ? null : state,
         level: hasLevel ? Math.min(fraction, 1) : null,
         levelText: hasLevel ? percentText(level * 100) : null,
-        tone: hasLevel && level > 1 ? 'warn' : 'neutral',
+        tone: 'neutral',
         duration: OSD_DURATION,
     };
 }
@@ -79,7 +81,7 @@ export function capsLock(on) {
         icon: 'isle-capslock-symbolic',
         title: 'Caps Lock',
         status: on ? 'On' : 'Off',
-        tone: on ? 'warn' : 'neutral',
+        tone: 'neutral',
         duration: OSD_DURATION,
     };
 }
@@ -145,7 +147,7 @@ export function system(event) {
             title: device.name,
             subtitle: event.connected ? 'Connected' : 'Disconnected',
             value: battery !== null ? percentText(battery) : null,
-            tone: !event.connected ? 'neutral' : battery !== null && battery < 20 ? 'warn' : 'good',
+            tone: !event.connected ? 'neutral' : battery !== null && battery < 20 ? 'bad' : 'good',
             duration: STATUS_DURATION,
         };
     }
@@ -196,6 +198,9 @@ export function track(nowPlaying) {
 /** Notifications already watched, and those since withdrawn (destroyed). */
 const watched = new WeakSet();
 const withdrawn = new WeakSet();
+/** Each notification's own number, so alerts for different ones never replace each other. */
+const numbers = new WeakMap();
+let lastNumber = 0;
 
 /** Watches `item` for being withdrawn, once however often it is shown (updates come as the same one). */
 function watchWithdrawal(item) {
@@ -208,16 +213,34 @@ function watchWithdrawal(item) {
     });
 }
 
-/** A GNOME notification, shown in place of GNOME's own banner. */
-export function notification(item, urgent) {
+/** A GNOME notification, shown in place of GNOME's own banner; `onShown` once it is on screen. While the
+ * screen is `shared`, only who it is from shows. */
+export function notification(item, urgent, onShown, shared = false) {
     // The app or GNOME may withdraw the notification while it is shown;
     // clicking the alert afterwards must not touch the destroyed object.
     watchWithdrawal(item);
-    const body = plainBody(item).replace(/\s+/g, ' ').trim();
-    const title = item.title || item.source?.title || '';
+    if (!numbers.has(item))
+        numbers.set(item, ++lastNumber);
+    const body = shared ? '' : plainBody(item).replace(/\s+/g, ' ').trim();
+    const title = shared ? item.source?.title || 'New notification' : item.title || item.source?.title || '';
     return {
-        // A critical one is never replaced by a routine one behind it.
-        key: urgent ? 'notification-urgent' : 'notification',
+        // Its own key: one arriving behind another waits its turn; the same one updated replaces itself.
+        key: `notification:${numbers.get(item)}`,
+        kind: 'notification',
+        // A critical one waits for someone to be there, like GNOME's, which stays until handled.
+        sticky: urgent,
+        // Its first button ("Mark as read"), as GNOME's banner had it.
+        action: !shared && item.actions?.length ? {
+            label: item.actions[0].label,
+            callback: () => {
+                if (!withdrawn.has(item))
+                    item.actions[0].activate();
+            },
+        } : undefined,
+        onShown: () => {
+            if (!withdrawn.has(item))
+                onShown();
+        },
         appIcon: true,
         gicon: notificationIcon(item),
         icon: 'dialog-information-symbolic',
@@ -226,7 +249,7 @@ export function notification(item, urgent) {
         // A critical one stands out in red.
         tone: urgent ? 'bad' : 'neutral',
         priority: urgent ? 'instant' : undefined,
-        duration: urgent ? REMINDER_DURATION : NOTIFICATION_DURATION,
+        duration: urgent ? CRITICAL_DURATION : NOTIFICATION_DURATION,
         page: 'notifications',
         onActivate: () => {
             if (!withdrawn.has(item))
@@ -248,7 +271,7 @@ function limitName(window) {
 export function usage(provider, window, percent, resetsAt, critical) {
     const at = GLib.DateTime.new_from_unix_local(Math.floor(resetsAt / 1000));
     // Within the next 20 hours (later today or tomorrow morning), the time alone; later, with the day.
-    const when = at.format(resetsAt - Date.now() < 20 * 3600e3 ? '%H:%M' : '%a %H:%M');
+    const when = resetsAt - Date.now() < 20 * 3600e3 ? Format.timeOfDay(at) : `${at.format('%a')} ${Format.timeOfDay(at)}`;
     const name = provider.toLowerCase();
     return {
         key: `usage:${provider}:${window}`,
@@ -257,22 +280,66 @@ export function usage(provider, window, percent, resetsAt, critical) {
         title: provider,
         subtitle: resetsAt > 0 ? `${limitName(window)} · resets ${when}` : limitName(window),
         value: percentText(percent),
-        tone: percent >= critical ? 'bad' : 'warn',
+        // In the plan's own colour, as on the Usage page; red once nearly used up.
+        tone: percent >= critical ? 'bad' : name.includes('claude') ? 'claude' : name.includes('gpt') || name.includes('codex') ? 'codex' : 'neutral',
         duration: REMINDER_DURATION,
         page: 'usage',
     };
 }
 
-/** A reminder the voice assistant set ("remind me in ten minutes to..."). */
-export function reminder({id, text}) {
+/** A reminder the voice assistant set ("remind me in ten minutes to..."). `onShown` once on screen. */
+export function reminder({id, text}, onShown) {
     return {
         // Its own key, so reminders due together queue instead of replacing each other.
         key: `reminder:${id}`,
         icon: 'isle-bell',
         title: text,
         subtitle: 'Reminder',
-        tone: 'warn',
+        tone: 'neutral',
         duration: REMINDER_DURATION,
+        // Its time only runs while someone is there to see it.
+        sticky: true,
+        onShown,
+    };
+}
+
+/** A newer Isle is out; `howTo` shows how to update. */
+export function update(version, howTo) {
+    return {
+        key: 'update',
+        icon: 'software-update-available-symbolic',
+        title: `Isle ${version} is out`,
+        subtitle: 'Run the install command again to update',
+        tone: 'good',
+        action: {label: 'How', callback: howTo},
+        duration: REMINDER_DURATION,
+    };
+}
+
+/** isled is not running: the island's music, timer, reminders and assistant wait for it. */
+export function serviceDown(restart) {
+    return {
+        key: 'service-down',
+        icon: 'dialog-warning-symbolic',
+        title: 'Isle\'s service isn\'t running',
+        subtitle: 'Music, timer and reminders need it',
+        tone: 'bad',
+        action: {label: 'Restart', callback: restart},
+        duration: REMINDER_DURATION,
+    };
+}
+
+/** Several notifications that came while the island could not show them, summed up. */
+export function notificationsSummary(count) {
+    return {
+        key: 'notifications-summary',
+        count,
+        icon: 'isle-bell',
+        title: `${count} new notifications`,
+        subtitle: 'Open the island to read them',
+        tone: 'neutral',
+        duration: NOTIFICATION_DURATION,
+        page: 'notifications',
     };
 }
 

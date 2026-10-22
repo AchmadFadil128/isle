@@ -14,10 +14,11 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
+import {describeActions, failed, outcomeOf, slotsFor, TILES} from './actionRules.js';
 import {isTerminal} from './clipboard.js';
 import {VERTICAL} from './compat.js';
 import {plainBody} from './notifications.js';
-import {pillButton} from './widgets.js';
+import {icon, iconButton, pillButton} from './widgets.js';
 
 /** Three calm colours, violet to blue to cyan, that light the island while it is open (see island.js). */
 export const SIRI_COLORS = [[0.56, 0.4, 1], [0.27, 0.56, 1], [0.22, 0.84, 0.96]];
@@ -26,10 +27,12 @@ const FACE_SIZE = 36;
 /** The pill while listening, and the panel an answer opens into. */
 const LISTENING_WIDTH = 280;
 const ANSWER_WIDTH = 460;
-/** Row padding plus the face and the gap after it (see stylesheet.css). */
-const TEXT_INSET = 16 + 22 + FACE_SIZE + 14;
+/** The round button at the row's end: type instead, stop or send (see stylesheet.css). */
+const ACTION_SIZE = 32;
+/** Row padding, the face, the action and the gaps between them (see stylesheet.css). */
+const TEXT_INSET = 16 + 16 + FACE_SIZE + 2 * 12 + ACTION_SIZE;
 /** The row's padding above and below the texts; below leaves room for the glow. */
-const ROW_PADDING = 14 + 22;
+const ROW_PADDING = 14 + 20;
 /** Always room for the whole face. */
 const MIN_HEIGHT = FACE_SIZE + ROW_PADDING;
 const MAX_HEIGHT = 230;
@@ -49,6 +52,8 @@ const EYE_HEIGHT = 11.5;
 const EYE_SPACING = 5.1;
 /** An app just opened gets this long (ms) to show its window before the next step goes on without it. */
 const WINDOW_WAIT_MS = 5000;
+/** An app asked to quit gets this long (ms) to close its windows; one asking to save stays open. */
+const CLOSE_WAIT_MS = 3000;
 /** A player just opened gets this long (ms) to appear before a media command is dropped. */
 const PLAYER_WAIT_MS = 12000;
 /** Spotify's name on the session bus, for its MPRIS player. */
@@ -63,12 +68,16 @@ const MIC_ATTACK = 14;
 const MIC_RELEASE = 4;
 const MIC_FADE = 2;
 const LEVEL_RATE = 8;
+/** The glow's level when animations are off in GNOME: there, but still. */
+const STILL_LEVEL = 0.2;
 /** After answering it smiles this long (s). */
 const SMILE_S = 1.6;
 /** Blinks come every few seconds, at random, and take this long (s). */
 const BLINK_S = 0.15;
 /** Without the pointer moving for this long (s), the eyes wander on their own. */
 const POINTER_REST_S = 2.5;
+/** How much each key typed lights the edge, as a syllable does. */
+const KEY_LEVEL = 0.32;
 
 const easeOutBack = x => 1 + 2.2 * (x - 1) ** 3 + 1.2 * (x - 1) ** 2;
 const clamp = (value, limit = 1) => Math.max(-limit, Math.min(limit, value));
@@ -83,6 +92,8 @@ class Face extends St.DrawingArea {
         this.level = 0;
         this._form = 'listening';
         this._pointer = [0, 0];
+        /** While typing: where on the stage to look (the caret), or null. */
+        this.lookAt = null;
         this.restart();
         this.connect('repaint', area => this._paint(area));
     }
@@ -121,8 +132,10 @@ class Face extends St.DrawingArea {
         const target = this._target(time, px, py);
         // Quick to turn, then settled: an eye's saccade.
         const follow = 1 - Math.exp(-dt * 16);
-        this._gaze.x += (target.x - this._gaze.x) * follow;
-        this._gaze.y += (target.y - this._gaze.y) * follow;
+        if (Number.isFinite(target.x) && Number.isFinite(target.y)) {
+            this._gaze.x += (target.x - this._gaze.x) * follow;
+            this._gaze.y += (target.y - this._gaze.y) * follow;
+        }
 
         if (time >= this._nextBlink) {
             this._blinkAt = time;
@@ -133,6 +146,12 @@ class Face extends St.DrawingArea {
 
     /** Where the eyes look, each of x and y in -1..1. */
     _target(time, px, py) {
+        const [fx, fy] = this.get_transformed_position();
+        const towards = (x, y) => ({x: clamp((x - fx - FACE_SIZE / 2) / 260), y: clamp((y - fy - FACE_SIZE / 2) / 180)});
+        // Reading along as you type.
+        const caret = this._form === 'typing' ? this.lookAt?.() : null;
+        if (caret)
+            return towards(...caret);
         if (this._form === 'thinking')
             return {x: 0.75 * Math.sin(time * 1.3), y: -0.75};
         // Reading along, line after line: a sweep left to right, then back.
@@ -140,10 +159,8 @@ class Face extends St.DrawingArea {
             return {x: 0.9 * Math.sin(time * 2.2), y: 0.15 + 0.1 * Math.sin(time * 0.7)};
         if (this._form === 'error')
             return {x: 0.25 * Math.sin(time * 0.8), y: 0.5};
-        if (time - this._pointerAt < POINTER_REST_S) {
-            const [fx, fy] = this.get_transformed_position();
-            return {x: clamp((px - fx - FACE_SIZE / 2) / 260), y: clamp((py - fy - FACE_SIZE / 2) / 180)};
-        }
+        if (time - this._pointerAt < POINTER_REST_S)
+            return towards(px, py);
         if (time >= this._nextGlance) {
             this._glance = {x: (Math.random() * 2 - 1) * 0.8, y: (Math.random() * 2 - 1) * 0.5};
             this._nextGlance = time + 1 + Math.random() * 2.2;
@@ -214,8 +231,14 @@ export const VoiceView = GObject.registerClass({
         'orb-clicked': {},
         // The Sign in button, shown when the AI is signed out.
         'sign-in': {},
-        // The Stop button, while a request is being worked on.
+        // The Set up button, shown when speech recognition (or its model) is missing.
+        'set-up': {},
+        // The stop button, while a request is being worked on.
         'stop': {},
+        // The keyboard button: type the request instead of saying it.
+        'type-requested': {},
+        // A typed request, sent with Enter.
+        'typed': {param_types: [GObject.TYPE_STRING]},
         // Each frame: the animation's time (s) and level, to move the island's edge glow with.
         'frame': {param_types: [GObject.TYPE_DOUBLE, GObject.TYPE_DOUBLE]},
     },
@@ -227,6 +250,8 @@ export const VoiceView = GObject.registerClass({
         this.greeting = null;
         /** While it listens for a follow-up, what it just asked, so you know what you answer. */
         this.followUp = null;
+        /** The shortcut as set, for hints that name it ("Press Super+I…"). */
+        this.shortcut = 'Super+I';
         this._mic = 0;
         this._micTarget = 0;
         this._level = 0;
@@ -255,16 +280,51 @@ export const VoiceView = GObject.registerClass({
         // Not wider than its label, at the start of the line.
         this._signIn = pillButton('Sign in', 'isle-pill-small isle-voice-sign-in', () => this.emit('sign-in'));
         this._signIn.x_align = Clutter.ActorAlign.START;
-        this._stop = pillButton('Stop', 'isle-pill-small isle-voice-sign-in', () => this.emit('stop'));
-        this._stop.x_align = Clutter.ActorAlign.START;
+        this._setUp = pillButton('Set up', 'isle-pill-small isle-voice-sign-in', () => this.emit('set-up'));
+        this._setUp.x_align = Clutter.ActorAlign.START;
         /** The steps of the request being worked on, done ones first. */
         this._steps = [];
+        // A typed request, instead of a spoken one (see `startTyping`).
+        this._entry = new St.Entry({style_class: 'isle-voice-entry', hint_text: 'Ask anything…', can_focus: true,
+            x_expand: true, visible: false});
+        const caret = this._entry.clutter_text;
+        caret.connect('activate', () => this._send());
+        // Sent from inside the field, as in Messages.
+        this._sendButton = new St.Bin({style_class: 'isle-voice-send', reactive: true,
+            child: new St.Icon({gicon: icon('isle-send-symbolic'), icon_size: 14})});
+        this._entry.set_secondary_icon(this._sendButton);
+        this._entry.connect('secondary-icon-clicked', () => this._send());
+        caret.connect('text-changed', () => {
+            this._micTarget = KEY_LEVEL;
+            this._syncSend();
+        });
+        this._face.lookAt = () => {
+            const position = caret.cursor_position < 0 ? caret.text.length : caret.cursor_position;
+            // [ok, x, y, line height], or without ok in older GNOME.
+            const [x, y, line] = caret.position_to_coords(position).slice(-3);
+            const [cx, cy] = caret.get_transformed_position();
+            return [cx + x, cy + y + line / 2].every(Number.isFinite) ? [cx + x, cy + y + line / 2] : null;
+        };
         this._texts.add_child(this._heard);
+        this._texts.add_child(this._entry);
         this._texts.add_child(this._text);
         this._texts.add_child(this._hint);
         this._texts.add_child(this._signIn);
-        this._texts.add_child(this._stop);
+        this._texts.add_child(this._setUp);
         row.add_child(this._texts);
+        // One round button at the end, its size kept whichever shows, so the texts never shift.
+        this._action = new St.Widget({layout_manager: new Clutter.BinLayout(), width: ACTION_SIZE, height: ACTION_SIZE,
+            y_align: Clutter.ActorAlign.CENTER});
+        this._typeButton = iconButton('isle-keyboard-symbolic', 'isle-voice-action', () => this.emit('type-requested'),
+            {accessibleName: 'Type instead'});
+        this._stop = iconButton('isle-stop-symbolic', 'isle-voice-action isle-voice-stop', () => this.emit('stop'),
+            {size: 12, accessibleName: 'Stop'});
+        for (const button of [this._typeButton, this._stop]) {
+            button.set_pivot_point(0.5, 0.5);
+            this._action.add_child(button);
+        }
+        this._shownAction = null;
+        row.add_child(this._action);
         this.add_child(row);
 
         this._timeline = new Clutter.Timeline({actor: this, duration: 1000, repeat_count: -1});
@@ -278,6 +338,7 @@ export const VoiceView = GObject.registerClass({
 
     /** Shows `state` from isled: {phase, heard, reply, error, hint, sign_in, activity, actions}. */
     setState(state) {
+        this.stopTyping();
         this._phase = state.phase;
         this._exchange = {heard: state.heard ?? '', reply: clip(state.reply ?? '')};
         const heard = state.heard ? `“${state.heard}”` : '';
@@ -302,15 +363,77 @@ export const VoiceView = GObject.registerClass({
             this._text.remove_style_class_name('isle-voice-text-dim');
         const working = WORKING.includes(state.phase);
         // While it works, the steps already done, dimmed below the current one.
-        const hint = state.phase === 'error' ? state.hint ?? ''
+        const hint = state.phase === 'error' ? this._withShortcut(state.hint ?? '')
             : working ? this._steps.slice(0, -1).slice(-MAX_DONE_STEPS).map(done => `✓ ${done}`).join('\n') : '';
         this._hint.text = hint;
         this._hint.visible = Boolean(hint);
         this._signIn.visible = state.phase === 'error' && Boolean(state.sign_in);
-        this._stop.visible = working && state.phase !== 'transcribing';
+        this._setUp.visible = state.phase === 'error' && Boolean(state.set_up);
+        // Stop while it works; else typing instead (to follow up, too).
+        this._showAction(working ? this._stop : this._typeButton);
         const searching = (state.phase === 'thinking' && Boolean(state.activity)) || state.phase === 'acting';
         const form = searching ? 'searching' : {transcribing: 'thinking'}[state.phase] ?? state.phase;
         this._face.setForm(form, this._face.time);
+    }
+
+    _send() {
+        const text = this._entry.text.trim();
+        if (text)
+            this.emit('typed', text);
+    }
+
+    // Dim until there is something to send.
+    _syncSend() {
+        if (this._entry.text.trim())
+            this._sendButton.remove_style_class_name('isle-voice-send-empty');
+        else
+            this._sendButton.add_style_class_name('isle-voice-send-empty');
+    }
+
+    /** `text` naming the shortcut as set instead of the default one isled's hints name. */
+    _withShortcut(text) {
+        return this.shortcut ? text.replaceAll('Super+I', this.shortcut) : text.replace(/Press Super\+I and /, '');
+    }
+
+    /** Whether a request is being typed. */
+    get typing() {
+        return this._entry.visible;
+    }
+
+    /** Shows the field to type a request in, starting with `initial` (a key typed while it listened). */
+    startTyping(initial = '') {
+        this._phase = 'typing';
+        this._entry.text = initial;
+        this._entry.show();
+        this._text.hide();
+        this._hint.hide();
+        this._signIn.hide();
+        this._setUp.hide();
+        this._showAction(null);
+        this._syncSend();
+        this._entry.grab_key_focus();
+        this._entry.clutter_text.set_cursor_position(-1);
+        this._face.setForm('typing', this._face.time);
+    }
+
+    stopTyping() {
+        this._entry.hide();
+        this._text.show();
+    }
+
+    /** Shows `button` (or none) at the row's end; a new one comes in with a small pop. */
+    _showAction(button) {
+        this._action.visible = Boolean(button);
+        if (button === this._shownAction)
+            return;
+        this._shownAction = button;
+        for (const other of [this._typeButton, this._stop])
+            other.visible = other === button;
+        if (!button || !St.Settings.get().enable_animations)
+            return;
+        button.remove_all_transitions();
+        button.set({opacity: 0, scale_x: 0.6, scale_y: 0.6});
+        button.ease({opacity: 255, scale_x: 1, scale_y: 1, duration: 220, mode: Clutter.AnimationMode.EASE_OUT_BACK});
     }
 
     /** Keeps the steps of the request being worked on; a new request starts the list over. */
@@ -340,30 +463,37 @@ export const VoiceView = GObject.registerClass({
 
     get preferredWidth() {
         // With something to show above, it stays wide, so a conversation never jumps.
-        const short = ['listening', 'transcribing'].includes(this._phase) && !this.followUp;
+        const short = ['listening', 'transcribing'].includes(this._phase) && !this.followUp && !this.typing;
         return short ? LISTENING_WIDTH : ANSWER_WIDTH;
     }
 
     /** Sizes the texts, wrapped, and returns the height wanted below the top bar. */
     fit() {
-        const width = this.preferredWidth - TEXT_INSET;
+        // Typing, the field takes the button's place too (its send is inside it).
+        const width = this.preferredWidth - TEXT_INSET + (this._action.visible ? 0 : ACTION_SIZE + 12);
         // Measured per label: the box's own answer is the size set below.
-        const natural = [this._heard, this._text, this._hint, this._signIn, this._stop].filter(part => part.visible)
+        const natural = [this._heard, this._entry, this._text, this._hint, this._signIn, this._setUp].filter(part => part.visible)
             .reduce((sum, part) => sum + part.get_preferred_height(width)[1], 0);
         // Set outright: the row kept an earlier, shorter height for them.
         this._texts.set_size(width, Math.min(natural, MAX_HEIGHT - ROW_PADDING));
         // Beside a line or two it sits in the middle; beside more, level with the first line.
-        this._faceButton.y_align = natural > FACE_SIZE + 8 ? Clutter.ActorAlign.START : Clutter.ActorAlign.CENTER;
+        this._faceButton.y_align = this._action.y_align =
+            natural > FACE_SIZE + 8 ? Clutter.ActorAlign.START : Clutter.ActorAlign.CENTER;
         return Math.round(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, natural + ROW_PADDING)));
     }
 
-    /** Animates while shown; rests otherwise. */
+    /** Animates while shown; rests otherwise. With animations off in GNOME, the face and glow hold still. */
     setActive(active) {
         if (active && !this._timeline.is_playing()) {
             this._start = Date.now();
             this._lastTick = 0;
             this._face.restart();
-            this._timeline.start();
+            if (St.Settings.get().enable_animations) {
+                this._timeline.start();
+            } else {
+                this._face.queue_repaint();
+                this.emit('frame', 0, STILL_LEVEL);
+            }
         } else if (!active) {
             this._timeline.stop();
         }
@@ -381,6 +511,8 @@ export const VoiceView = GObject.registerClass({
         // The edge glow swells with your voice, breathes while thinking and settles once answered.
         const target = {
             listening: this._mic,
+            // Each key lights it a little, as a syllable does.
+            typing: 0.08 + 0.6 * this._mic,
             transcribing: 0.28 + 0.05 * Math.sin(t * 2),
             thinking: 0.32 + 0.08 * Math.sin(t * 1.8),
             acting: 0.32 + 0.08 * Math.sin(t * 1.8),
@@ -402,25 +534,6 @@ const WORKING = ['transcribing', 'thinking', 'acting'];
 /** How many done steps show below the current one. */
 const MAX_DONE_STEPS = 3;
 
-/** What actions run mid-way do, for the island: "Opening Files…", or how many there are. */
-function describeActions(actions = []) {
-    const [first] = actions;
-    if (!first)
-        return 'Working…';
-    const what = {
-        open_app: `Opening ${first.app ?? 'the app'}…`,
-        open_url: 'Opening the page…',
-        open_file: 'Opening the file…',
-        open_folder: 'Opening the folder…',
-        window: 'Moving the window…',
-        arrange: 'Arranging the windows…',
-        play_music: 'Playing music…',
-        media: 'Controlling the music…',
-        close_app: `Closing ${first.app ?? 'the app'}…`,
-    }[first.type] ?? 'Working on it…';
-    return actions.length > 1 ? `${what.replace(/…$/, '')} and ${actions.length - 1} more…` : what;
-}
-
 function clip(text) {
     const trimmed = text.trim();
     return trimmed.length > MAX_REPLY ? `${trimmed.slice(0, MAX_REPLY - 1).trimEnd()}…` : trimmed;
@@ -437,6 +550,18 @@ export function openSignIn(provider) {
         GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', name]);
     return GLib.file_test(program, GLib.FileTest.IS_EXECUTABLE) && inTerminal([program, ...args]);
 }
+
+/** Opens a terminal that downloads the speech `model` (isle-setup-voice) and stays open to show how it went. */
+export function openSetUp(model) {
+    const program = GLib.find_program_in_path('isle-setup-voice') ??
+        GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'isle-setup-voice']);
+    return GLib.file_test(program, GLib.FileTest.IS_EXECUTABLE) && inTerminal(['bash', '-c', SET_UP, 'isle', program,
+        ...model ? [model] : []]);
+}
+
+// Runs isle-setup-voice, then says what next; a shell stays open afterwards.
+const SET_UP = '"$@" && printf "\\nIsle: done. Press Super+I and speak.\\n" || ' +
+    'printf "\\nIsle: that did not finish; run isle-setup-voice again.\\n"; exec bash';
 
 /** How each AI CLI signs in, run in a terminal (`agy` and `claude` ask on start). */
 const SIGN_IN = {agy: ['agy'], claude: ['claude'], codex: ['codex', 'login']};
@@ -647,16 +772,18 @@ const ACTIONS = {
         const count = arrangeWindows(layout, Array.isArray(apps) ? apps : []);
         return count ? `${count} windows arranged` : failed('no matching windows are open');
     },
-    open_file: ({path}) => withFile(path, file => openUri(file.get_uri()), {opening: true})
+    open_file: async ({path}) => await withFile(path, file => openUri(file.get_uri()), {opening: true})
         ? 'opened' : failed('not found, or not allowed'),
-    reveal_file: ({path}) => withFile(path, file => revealFile(file)) ? 'shown in Files' : failed('not found, or not allowed'),
+    reveal_file: async ({path}) => await withFile(path, file => revealFile(file))
+        ? 'shown in Files' : failed('not found, or not allowed'),
     chrome_profile: ({profile}) => openChromeProfile(profile ?? ''),
-    close_app: ({app}) => {
+    close_app: async ({app}) => {
         const running = findApp(app ?? '', Shell.AppSystem.get_default().get_running());
         if (!running)
             return failed(`${app} is not open`);
+        const name = running.get_name();
         running.request_quit();
-        return `${running.get_name()} closed`;
+        return await closed(running, CLOSE_WAIT_MS) ? `${name} closed` : failed(`${name} is still open; it may be asking to save`);
     },
     open_folder: ({path}) => openFolder(path ?? ''),
     brightness: ({level, command}) => setBrightness(level, command),
@@ -733,26 +860,6 @@ function whenPlayerOf(daemon, app, run) {
 }
 
 
-// Parts of the screen's work area, as [x, y, width, height] shares of it: where one window goes...
-const TILES = {
-    left: [0, 0, 0.5, 1],
-    right: [0.5, 0, 0.5, 1],
-    top: [0, 0, 1, 0.5],
-    bottom: [0, 0.5, 1, 0.5],
-    top_left: [0, 0, 0.5, 0.5],
-    top_right: [0.5, 0, 0.5, 0.5],
-    bottom_left: [0, 0.5, 0.5, 0.5],
-    bottom_right: [0.5, 0.5, 0.5, 0.5],
-    center: [0.125, 0.1, 0.75, 0.8],
-};
-// ...and where several go, left to right and top to bottom.
-const LAYOUTS = {
-    halves: [TILES.left, TILES.right],
-    rows: [TILES.top, TILES.bottom],
-    quarters: [TILES.top_left, TILES.top_right, TILES.bottom_left, TILES.bottom_right],
-    thirds: [[0, 0, 1 / 3, 1], [1 / 3, 0, 1 / 3, 1], [2 / 3, 0, 1 / 3, 1]],
-};
-
 // What `window` does to a window; GNOME 49 dropped the flags to maximize with.
 const WINDOW_COMMANDS = {
     focus: window => Main.activateWindow(window),
@@ -764,20 +871,6 @@ const WINDOW_COMMANDS = {
     unfullscreen: window => window.unmake_fullscreen(),
     ...Object.fromEntries(Object.entries(TILES).map(([name, slot]) => [name, window => tile(window, slot)])),
 };
-
-/** The places for `count` windows in `layout`, or in a grid that fits them when it names none. */
-function slotsFor(layout, count) {
-    if (LAYOUTS[layout])
-        return LAYOUTS[layout];
-    if (count <= 1)
-        return [[0, 0, 1, 1]];
-    if (count <= 4)
-        return [LAYOUTS.halves, LAYOUTS.thirds, LAYOUTS.quarters][count - 2];
-    const columns = 3;
-    const rows = Math.ceil(count / columns);
-    return Array.from({length: count}, (_, i) =>
-        [(i % columns) / columns, Math.floor(i / columns) / rows, 1 / columns, 1 / rows]);
-}
 
 /** Puts `window` in `slot` of its monitor's work area. */
 function tile(window, [x, y, width, height]) {
@@ -880,7 +973,7 @@ const RUNS = /x-desktop|java-archive|executable|x-sharedlib|x-msdownload|x-ms-do
  * folder (not a hidden part of it) or on a removable drive, and not a link; `opening` also refuses
  * anything that would run. Returns whether it ran.
  */
-function withFile(path, callback, {opening = false} = {}) {
+async function withFile(path, callback, {opening = false} = {}) {
     if (typeof path !== 'string' || !path.trim())
         return false;
     const home = GLib.get_home_dir();
@@ -894,8 +987,8 @@ function withFile(path, callback, {opening = false} = {}) {
         return false;
     let info;
     try {
-        info = file.query_info('standard::is-symlink,standard::content-type,access::can-execute',
-            Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
+        info = await queryInfo(file, 'standard::is-symlink,standard::content-type,access::can-execute',
+            Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS);
     } catch {
         return false; // not there
     }
@@ -968,13 +1061,35 @@ function spawn(argv) {
 }
 
 /** Opens `path` (from ~, or absolute) in Files; a folder that isn't there opens its nearest parent. */
-function openFolder(path) {
+async function openFolder(path) {
     const home = GLib.get_home_dir();
     const expanded = path.trim().replace(/^~(?=\/|$)/, home);
     let folder = Gio.File.new_for_path(GLib.path_is_absolute(expanded) ? expanded : GLib.build_filenamev([home, expanded]));
-    while (folder.get_parent() && folder.query_file_type(Gio.FileQueryInfoFlags.NONE, null) !== Gio.FileType.DIRECTORY)
+    while (folder.get_parent() && !await isFolder(folder))
         folder = folder.get_parent();
     openUri(folder.get_uri());
+    return `opened ${folder.get_path()}`;
+}
+
+/** `file`'s info for `attributes`, read off the main loop's way. */
+function queryInfo(file, attributes, flags = Gio.FileQueryInfoFlags.NONE) {
+    return new Promise((resolve, reject) => {
+        file.query_info_async(attributes, flags, GLib.PRIORITY_DEFAULT, null, (_file, result) => {
+            try {
+                resolve(file.query_info_finish(result));
+            } catch (e) {
+                reject(e);
+            }
+        });
+    });
+}
+
+async function isFolder(file) {
+    try {
+        return (await queryInfo(file, 'standard::type')).get_file_type() === Gio.FileType.DIRECTORY;
+    } catch {
+        return false;
+    }
 }
 
 /** The dark style, and on Ubuntu its Yaru theme to match, as its Settings do. */
@@ -1051,29 +1166,24 @@ export async function runActions(actions, isle) {
     return results;
 }
 
-/** An action that could not be done, and why. */
-function failed(detail) {
-    return {ok: false, detail};
-}
-
-// What an action returned, as {ok, detail}: nothing (or a call's reply) is done, a string says what it
-// did, and false, '' or null (a failed call) is not done.
-function outcomeOf(outcome) {
-    if (outcome?.ok === false)
-        return outcome;
-    if (typeof outcome === 'string' && outcome)
-        return {ok: true, detail: outcome};
-    return {ok: outcome === undefined || outcome === true || Array.isArray(outcome), detail: ''};
-}
-
 /** Resolves once `app` has a window (true), or after `ms` (false). */
 function windowOf(app, ms) {
-    if (app.get_windows().length > 0)
+    return windowsUntil(app, windows => windows.length > 0, ms);
+}
+
+/** Resolves once `app` has no window left (true), or after `ms` (false). */
+function closed(app, ms) {
+    return windowsUntil(app, windows => windows.length === 0, ms);
+}
+
+/** Resolves once `app`'s windows pass `test` (true), or after `ms` (false). */
+function windowsUntil(app, test, ms) {
+    if (test(app.get_windows()))
         return Promise.resolve(true);
     return new Promise(resolve => {
         const entry = {};
         const changed = app.connect('windows-changed', () => {
-            if (app.get_windows().length > 0)
+            if (test(app.get_windows()))
                 entry.stop(true);
         });
         const giveUp = after(ms, () => entry.stop(false));

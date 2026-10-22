@@ -8,7 +8,7 @@ import Gio from 'gi://Gio';
 let interfaceSettings = null;
 
 /** Whether the user prefers a 12-hour clock in GNOME's settings. */
-export function uses12Hour() {
+function uses12Hour() {
     interfaceSettings ??= new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
     return interfaceSettings.get_string('clock-format') === '12h';
 }
@@ -16,6 +16,21 @@ export function uses12Hour() {
 /** "14:05", or "2:05" with a 12-hour clock. */
 export function clockTime(dateTime = GLib.DateTime.new_now_local()) {
     return dateTime.format(uses12Hour() ? '%l:%M' : '%H:%M').trim();
+}
+
+/** "14:05", or "2:05 PM" with a 12-hour clock: a time of day that stands alone. */
+export function timeOfDay(dateTime) {
+    return dateTime.format(uses12Hour() ? '%l:%M %p' : '%H:%M').trim();
+}
+
+/** A shortcut as people write it: "<Super>i" is "Super+I", "<Primary><Alt>space" is "Ctrl+Alt+Space". */
+export function shortcutLabel(accelerator) {
+    const names = {super: 'Super', primary: 'Ctrl', control: 'Ctrl', ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', meta: 'Meta'};
+    const modifiers = [...(accelerator ?? '').matchAll(/<(\w+)>/g)].map(([, name]) => names[name.toLowerCase()] ?? name);
+    const key = (accelerator ?? '').replace(/<\w+>/g, '');
+    if (!key)
+        return '';
+    return [...modifiers, key.length === 1 ? key.toUpperCase() : key[0].toUpperCase() + key.slice(1)].join('+');
 }
 
 /** "Tue 20 Oct", like a Mac's menu bar. */
@@ -32,13 +47,6 @@ export function duration(ms) {
     return hours > 0
         ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}`
         : `${minutes}:${seconds}`;
-}
-
-/** "1,250 ml" or "2 L". */
-export function volume(ml) {
-    if (ml >= 1000 && ml % 1000 === 0)
-        return `${ml / 1000} L`;
-    return `${ml.toLocaleString('en-US')} ml`;
 }
 
 /** How long ago a GLib.DateTime was: "now", "5m", "2h", or "Mon". */
@@ -76,4 +84,19 @@ export function phaseName(phase) {
 /** Wall-clock milliseconds, in the same terms as the daemon's timestamps. */
 export function nowMs() {
     return Math.floor(GLib.get_real_time() / 1000);
+}
+
+/** Days of rest other than Saturday and Sunday, by the region in the locale (0 is Sunday). */
+const WEEKENDS = {
+    ...Object.fromEntries(['AE', 'BH', 'DZ', 'EG', 'IQ', 'JO', 'KW', 'LY', 'OM', 'QA', 'SA', 'SD', 'SY', 'YE', 'IL']
+        .map(region => [region, [5, 6]])),
+    IR: [5],
+    AF: [4, 5],
+};
+
+/** The weekend days (0 is Sunday) where `locale` ("ar_SA.UTF-8") is: Saturday and Sunday unless its region
+ * rests otherwise. */
+export function weekendDays(locale) {
+    const region = locale.match(/^[a-z]{2,3}_([A-Z]{2})/)?.[1];
+    return WEEKENDS[region] ?? [0, 6];
 }

@@ -24,8 +24,10 @@ const TONE_COLORS = {
     neutral: [1, 1, 1],
     good: [0.2, 0.88, 0.48],
     focus: [0.2, 0.88, 0.48],
-    warn: [1, 0.72, 0.2],
     bad: [1, 0.36, 0.36],
+    // The plans' colours on the Usage page (see pages/usage.js).
+    claude: [0.85, 0.47, 0.34],
+    codex: [0.06, 0.64, 0.5],
     break: [0.35, 0.67, 1],
 };
 

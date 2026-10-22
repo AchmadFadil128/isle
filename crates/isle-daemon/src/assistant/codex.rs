@@ -175,6 +175,10 @@ impl Codex {
             }
         }
         child.wait().await.ok();
+        // A token it renewed meanwhile goes back to the user's own Codex.
+        if let Some(user) = dirs::home_dir() {
+            link_sign_in(&user.join(".codex"), &home());
+        }
         let errors = errors.await.unwrap_or_default();
         match (answer, failure) {
             (Some(text), _) => parse_answer(&text),
@@ -195,9 +199,12 @@ fn step(item: &Value) -> Option<String> {
     })
 }
 
+/// Its answer; without the JSON asked for, the text as said, as the other AIs' (see `answer::from_text`).
 fn parse_answer(text: &str) -> anyhow::Result<Answer> {
-    let mut value: Value =
-        serde_json::from_str(text.trim()).context("codex answered without the JSON asked for")?;
+    let Ok(mut value) = serde_json::from_str::<Value>(text.trim()) else {
+        anyhow::ensure!(!text.trim().is_empty(), "codex answered nothing");
+        return Ok(super::answer::from_text(text));
+    };
     // Its schema has every field, unused ones null: only what was given is kept.
     if let Some(answer) = value.as_object_mut() {
         answer.retain(|_, field| !field.is_null());
@@ -283,16 +290,9 @@ fn top_level_model(config: &str) -> Option<String> {
         })
 }
 
-/// Links Isle's Codex home to the user's sign-in (`auth.json`), relinked if Codex replaced the link.
+/// Links Isle's Codex home to the user's sign-in (`auth.json`; see sign_in.rs).
 fn link_sign_in(user: &Path, isle: &Path) {
-    let (real, linked) = (user.join("auth.json"), isle.join("auth.json"));
-    if !real.exists() || std::fs::read_link(&linked).is_ok_and(|target| target == real) {
-        return;
-    }
-    std::fs::remove_file(&linked).ok();
-    if let Err(err) = std::os::unix::fs::symlink(&real, &linked) {
-        log::warn!("could not share Codex's sign-in with Isle: {err}");
-    }
+    super::sign_in::share(&user.join("auth.json"), &isle.join("auth.json"));
 }
 
 /// Deletes Isle's Codex conversation `id` now.

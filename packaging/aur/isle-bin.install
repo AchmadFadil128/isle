@@ -1,0 +1,9 @@
+post_install() {
+  echo 'Turn Isle on once as each user, then log out and back in:'
+  echo '  gnome-extensions enable isle@zickrian.github.io'
+  echo 'For the voice assistant, each user also runs isle-setup-voice once.'
+}
+
+post_upgrade() {
+  echo 'Log out and back in so GNOME Shell loads the new Isle.'
+}

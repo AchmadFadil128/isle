@@ -99,12 +99,13 @@ place, dimmed, so the layout never jumps.
 
 | Input | Closed / alert | Open |
 |---|---|---|
-| Pointer rests 120 ms | Open on the default page | – |
+| Pointer rests 120 ms (Settings: 60–1000 ms, or click only) | Open on the default page | – |
 | Pointer leaves | – | Close after 300 ms (not while typing or dragging a file) |
 | Click | Open now (an alert opens on its page) | Normal button clicks |
 | Middle-click | Play / pause | Play / pause |
-| Right-click | Bring the call, or else the music player, to the front | Bring the music player to the front |
-| Super+V (GNOME's calendar shortcut) | Open the clipboard history, search ready, held open | Close |
+| Right-click | On an alert: put it away; else bring the call, or the music player, to the front | Bring the music player to the front |
+| Super+V (GNOME's calendar shortcut) | Open the clipboard history, search ready, held open (Settings may leave it to GNOME's calendar) | Close |
+| Super+I (Settings: any shortcut) | Ask the assistant; typing while it listens types the request instead | Speak again |
 | Click a tab | – | Go to that page |
 | Two-finger swipe sideways | – | Previous / next page, one page a swipe |
 | Scroll up / down | – | Lists and lyrics scroll; elsewhere previous / next page, one a wheel click |
@@ -124,6 +125,12 @@ a scrollbar.
 
 ## 4. Closed island
 
+- Where it is: on the main display, in its top bar; or (Settings) on the display of the window in use,
+  moving there once closed. A display without the top bar has the island hang from its top edge, with
+  a header of its own when open, and GNOME's clock comes back to the main top bar meanwhile.
+- Right slot, first that applies: a warning (Isle's service stopped; a click offers to restart it) →
+  a still mic (the assistant works on a request with the island closed; a click shows its steps) →
+  muted microphone on a call → music bars → up to two privacy dots.
 - Left slot, first that applies: breathing red dot (screen recording) →
   green phone (a call) → focus timer ring → cover art (a song playing or paused) → white dot (unseen
   notifications) → moon (Do Not Disturb on).
@@ -322,9 +329,13 @@ days.
 ## 6. Alerts
 
 One at a time. *Instant* alerts replace whatever is showing; the rest queue
-(same kind replaces in place) and wait while the island is open. Volume,
-brightness and Caps Lock are dropped instead of waiting, since they are
-stale by the time the island closes.
+(the same one updated replaces itself in place) and wait while the island is
+open or hidden by a fullscreen window. Volume, brightness and Caps Lock are
+dropped instead of waiting, since they are stale by then. More than three
+notifications waiting come as one ("6 new notifications"); a notification
+only counts as seen once it was on screen. Reminders and critical
+notifications are *sticky*: their time only runs while someone is at the
+computer. Right-clicking an alert puts it away without opening it.
 
 | Alert | Badge | Title / subtitle | Right | Time |
 |---|---|---|---|---|
@@ -339,10 +350,45 @@ stale by the time the island closes.
 | New song (off by default) | cover | title / artist | – | 2.6 s |
 | Timer phase ends (+ chime) | timer | Focus session done… | Start break | 8 s |
 | Screen recording started | red record icon | Recording screen | Stop | 2.6 s |
-| Notification (GNOME's sound) | app icon, large | title / first line | – | 5 s; urgent 8 s and instant |
+| Notification (GNOME's sound) | app icon, large | title / first line (only who it is from while the screen is shared) | its first button ("Mark as read") | 5 s; critical 20 s, instant and sticky |
+| Reminder (+ chime) | bell | the reminder | – | 8 s, sticky |
+| Assistant done in the background | mic | the answer | – | as long as it takes to read |
+| Isle's service stopped | warning | Isle's service isn't running | Restart | 8 s |
+| Newer Isle (once per version) | update | Isle 0.x is out | How | 8 s |
+| AI plan nearly used up | the plan's logo in a ring of its colour (Claude coral, ChatGPT green; red when nearly gone) | Claude / Weekly limit · resets Sat 09:30 | 86% | 8 s |
 
-When a window is fullscreen the island hides and GNOME's own volume pop-up
-is used.
+Badges are grey unless the colour says something (green charging, red low
+battery or failure, the plan's own colour); nothing amber. Buttons on alerts,
+notifications and the assistant are translucent grey pills with white text,
+lighter under the pointer, as macOS's notification buttons.
+
+When a window is fullscreen the island hides, alerts wait (see above) and
+GNOME's own volume pop-up is used. Charging, network, Bluetooth and Caps
+Lock alerts each have their own switch, and wait out Do Not Disturb, except
+a low battery. On a display other than the island's, GNOME's own volume
+pop-up shows there.
+
+### Voice assistant
+
+Super+I opens a pill below the top bar (280 px wide while it listens, 460 px
+once there is more to show): the face on the left, the text beside it, one
+round 32 px button at the end. The face is a white head with two eyes that
+follow the pointer, glance about and blink; they read along as you type,
+look up while it thinks, smile at an answer and droop on an error. Light
+rises from the panel's edge, brightest along the bottom and gone by the top
+of the sides, its colours (violet, blue, cyan) flowing slowly; it follows
+the voice, each key typed, and breathes while it works. No blobs of colour.
+
+| State | Text | End button |
+|---|---|---|
+| Listening | "How can I help?" (a follow-up: what it asked) | keyboard (type instead) |
+| Typing | a pill field, Send inside it (dim until there is text) | – |
+| Working | what was heard, the step now, done steps ticked below | Stop (a white square) |
+| Answer | what was heard, the answer | keyboard (follow up) |
+| Error | what went wrong, what to do, and Sign in or Set up when that fixes it | keyboard |
+
+Closed while it works, the request carries on: a still mic shows in the
+closed island and the answer comes as an alert.
 
 ### Notifications and Do Not Disturb
 
@@ -366,7 +412,13 @@ hovering opens the Notifications page.
 
 ## 8. Performance budget
 
-- Idle, nothing playing: one wake-up per minute (the clock). No polling.
+- Idle, nothing playing: one wake-up per minute (the clock, GNOME's own WallClock, which also catches
+  waking from suspend and time-zone changes). No polling.
+- `isled` sleeps until its next real deadline (a timer phase, a reminder, midnight) and re-checks the
+  clock on waking from suspend; AI usage asks nothing while it is off.
+- The assistant's AI and speech recognition run only while a request is worked on, at a lower
+  priority, in a process group of their own that is killed whole; transcribing uses at most half the
+  cores. The files tray's helper quits a minute after the tray closes.
 - Animations run on the display's frame clock only while a spring moves.
 - The open island ticks only the visible page (scrubber 4×/s, timer 1×/s).
 - Calls are found from the shell's own audio events, never polled. The

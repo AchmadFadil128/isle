@@ -19,7 +19,7 @@ use zbus::{Connection, MatchRule, MessageStream, proxy};
 
 use super::gap::GapBridge;
 use super::lyrics::{self, Lyrics, LyricsStatus, TrackQuery};
-use super::{MediaService, NowPlaying, art};
+use super::{MediaService, NowPlaying, PlayerChoice, Wish, art};
 use crate::clock::now_ms;
 
 const NAME_PREFIX: &str = "org.mpris.MediaPlayer2.";
@@ -138,6 +138,10 @@ struct Watcher {
     gap: GapBridge<Option<(PlayerProxy<'static>, Option<OwnedObjectPath>)>>,
     /// When a `GapOver` is due, so only one waits at a time.
     gap_check: Option<Instant>,
+    /// The player the user picked; it stays until another starts playing.
+    chosen: Option<OwnedBusName>,
+    /// Whether lyrics are looked up online (Settings).
+    lyrics_enabled: bool,
 }
 
 /// Runs forever, keeping `iface` in sync with the active player.
@@ -166,7 +170,11 @@ pub async fn watch(conn: Connection, iface: InterfaceRef<MediaService>) -> anyho
         lyrics_failures: 0,
         gap: GapBridge::default(),
         gap_check: None,
+        chosen: None,
+        lyrics_enabled: true,
     };
+    let (wishes, mut wished) = mpsc::unbounded_channel();
+    watcher.iface.get_mut().await.wishes = Some(wishes);
 
     for name in dbus.list_names().await? {
         if is_player(name.as_str()) {
@@ -191,6 +199,7 @@ pub async fn watch(conn: Connection, iface: InterfaceRef<MediaService>) -> anyho
                     watcher.add(name).await;
                 }
             }
+            Some(wish) = wished.recv() => watcher.wish(wish),
             Some(event) = received.recv() => match event {
                 Event::Player(name) => watcher.refresh(&name).await,
                 Event::ArtDone { url, ok } => watcher.art_done(url, ok),
@@ -208,6 +217,24 @@ pub async fn watch(conn: Connection, iface: InterfaceRef<MediaService>) -> anyho
         }
         watcher.publish().await;
     }
+}
+
+/// The player to show: the one picked by hand while it runs, else the one playing, else the one that played
+/// last. Each player comes as (name, playing, when it last started playing).
+fn pick<'a, N: PartialEq + 'a>(
+    players: impl Iterator<Item = (&'a N, bool, u64)> + Clone,
+    chosen: Option<&N>,
+) -> Option<&'a N> {
+    if let Some(name) = players
+        .clone()
+        .map(|(name, _, _)| name)
+        .find(|name| Some(*name) == chosen)
+    {
+        return Some(name);
+    }
+    players
+        .max_by_key(|&(_, playing, started)| (playing, started))
+        .map(|(name, _, _)| name)
 }
 
 fn is_player(name: &str) -> bool {
@@ -322,15 +349,66 @@ impl Watcher {
         if snapshot.status == "Playing" && entry.snapshot.status != "Playing" {
             self.play_counter += 1;
             entry.started_playing = self.play_counter;
+            // Another player started: the one picked by hand gives way.
+            if self.chosen.as_ref().is_some_and(|chosen| chosen != name) {
+                self.chosen = None;
+            }
         }
         entry.snapshot = snapshot;
     }
 
-    /// The player that is playing, or else the one that played most recently.
+    /// The player picked by hand, else the one that is playing, else the one that played most recently.
     fn active(&self) -> Option<&Entry> {
-        self.players
-            .values()
-            .max_by_key(|entry| (entry.snapshot.status == "Playing", entry.started_playing))
+        self.active_name().and_then(|name| self.players.get(name))
+    }
+
+    fn active_name(&self) -> Option<&OwnedBusName> {
+        let players = self.players.iter().map(|(name, entry)| {
+            (
+                name,
+                entry.snapshot.status == "Playing",
+                entry.started_playing,
+            )
+        });
+        pick(players, self.chosen.as_ref())
+    }
+
+    fn wish(&mut self, wish: Wish) {
+        match wish {
+            Wish::Player(name) => {
+                self.chosen = OwnedBusName::try_from(name)
+                    .ok()
+                    .filter(|name| self.players.contains_key(name));
+            }
+            Wish::Lyrics(enabled) if enabled != self.lyrics_enabled => {
+                self.lyrics_enabled = enabled;
+                // Looked up again (or put away) for the current track.
+                self.lyrics_query = None;
+                self.lyrics_lookup += 1;
+            }
+            Wish::Lyrics(_) => {}
+        }
+    }
+
+    /// The players that run, for picking one; empty with fewer than two.
+    fn choices(&self) -> Vec<PlayerChoice> {
+        if self.players.len() < 2 {
+            return Vec::new();
+        }
+        let active = self.active_name();
+        let mut choices: Vec<PlayerChoice> = self
+            .players
+            .iter()
+            .map(|(name, entry)| PlayerChoice {
+                name: name.to_string(),
+                identity: entry.identity.clone(),
+                desktop_entry: entry.desktop_entry.clone(),
+                playing: entry.snapshot.status == "Playing",
+                active: Some(name) == active,
+            })
+            .collect();
+        choices.sort_by(|a, b| a.identity.cmp(&b.identity).then(a.name.cmp(&b.name)));
+        choices
     }
 
     async fn publish(&mut self) {
@@ -377,8 +455,15 @@ impl Watcher {
         });
         self.load_lyrics(query).await;
 
+        let choices = self.choices();
         let mut service = self.iface.get_mut().await;
         service.active = active;
+        if service.players != choices {
+            service.players = choices;
+            if let Err(err) = service.players_changed(self.iface.signal_emitter()).await {
+                warn!("could not publish the players: {err}");
+            }
+        }
         if !service.now_playing.continues_as(&now_playing) {
             service.now_playing = now_playing;
             if let Err(err) = service
@@ -446,6 +531,10 @@ impl Watcher {
         self.lyrics_query = query.clone();
         self.lyrics_failures = 0;
         match query {
+            Some(query) if !self.lyrics_enabled => {
+                self.lyrics_lookup += 1;
+                self.set_lyrics(query.status(LyricsStatus::Off)).await;
+            }
             Some(query) => {
                 self.set_lyrics(query.status(LyricsStatus::Loading)).await;
                 self.fetch_lyrics(query);
@@ -600,5 +689,31 @@ fn boolean(value: &Value<'_>) -> Option<bool> {
     match unwrap_variant(value) {
         Value::Bool(b) => Some(*b),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pick;
+
+    const PLAYERS: [(&str, bool, u64); 3] = [
+        ("spotify", false, 3),
+        ("firefox", true, 5),
+        ("mpv", true, 4),
+    ];
+
+    fn pick_from(chosen: Option<&'static str>) -> Option<&'static str> {
+        let players = PLAYERS
+            .iter()
+            .map(|(name, playing, started)| (name, *playing, *started));
+        pick(players, chosen.as_ref()).copied()
+    }
+
+    #[test]
+    fn picks_the_chosen_player_else_the_one_playing_last() {
+        assert_eq!(pick_from(None), Some("firefox"));
+        assert_eq!(pick_from(Some("spotify")), Some("spotify"));
+        // Picked, then gone: back to the rule.
+        assert_eq!(pick_from(Some("vlc")), Some("firefox"));
     }
 }

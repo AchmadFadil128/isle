@@ -97,7 +97,10 @@ main() {
     # The package's uninstaller stays around as a command.
     install -Dm755 "$package/uninstall.sh" "$HOME/.local/bin/isle-uninstall"
     echo
-    echo "Voice assistant (optional): run ~/.local/bin/isle-setup-voice once, then press Super+I."
+    # Not when a speech model is there already (an update, or a voice setup it moved over).
+    if ! compgen -G "${XDG_DATA_HOME:-$HOME/.local/share}/isle/models/ggml-*-q8_0.bin" >/dev/null; then
+        echo "Voice assistant (optional): press Super+I and Set up, or run ~/.local/bin/isle-setup-voice once."
+    fi
     echo "To check it, run ~/.local/bin/isled --doctor; to remove Isle, run ~/.local/bin/isle-uninstall."
 }
 

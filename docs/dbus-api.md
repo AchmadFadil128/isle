@@ -6,17 +6,31 @@ properties holding JSON, with `PropertiesChanged` emitted on every change.
 Timestamps are milliseconds since the Unix epoch; durations are
 milliseconds unless the name says `_us` (microseconds).
 
+Methods that read what the user copied (`Clipboard1.GetText`) or steer the
+assistant (every `Assistant1` method) answer GNOME Shell only, where the
+extension runs; any other caller gets `org.freedesktop.DBus.Error.AccessDenied`.
+
+`isled --version`, `isled --doctor` (what works: the service, speech
+recognition, each AI's install and sign-in) and `isled --report` (that, the
+versions and recent logs, for a bug report) print and exit. A second `isled`
+started by hand exits at once ("already running") and leaves the running one
+alone.
+
 ## io.github.zickrian.isle.Media1
 
-The active MPRIS player: the one playing, or else the one that played last.
+The active MPRIS player: the one picked with `Choose` while it runs, else the one playing, else the one
+that played last. Another player starting to play ends the pick.
 
 | Member | Signature | |
 |---|---|---|
 | `PlayPause()`, `Next()`, `Previous()` | | Control the active player. |
 | `SetPosition(x position_us)` | | Seek to an absolute position. |
 | `Raise()` | | Bring the player's window to the front. |
+| `Choose(s name)` | | Show and control the player `name` (from `Players`). |
+| `SetLyrics(b enabled)` | | Look lyrics up online (LRCLIB), or not; off, `Lyrics` says `off`. The extension sends its setting whenever isled appears. |
 | `NowPlaying` | `s` | `{available, identity, desktop_entry, status, title, artist, album, art_path, length_us, position_us, sampled_at_ms, rate, can_go_next, can_go_previous, can_play_pause, can_seek}` |
-| `Lyrics` | `s` | `{track, status, lines: [{time_ms, text}]}`; `status` is `none`, `loading`, `synced`, `plain` (lines have `time_ms` -1), `instrumental`, `not_found`, `error` (LRCLIB could not be reached) or `unavailable` (LRCLIB answered but is busy or failing); isled retries the last two on its own. |
+| `Lyrics` | `s` | `{track, status, lines: [{time_ms, text}]}`; `status` is `none`, `loading`, `synced`, `plain` (lines have `time_ms` -1), `instrumental`, `not_found`, `error` (LRCLIB could not be reached), `unavailable` (LRCLIB answered but is busy or failing) or `off` (turned off with `SetLyrics`); isled retries `error` and `unavailable` on its own. |
+| `Players` | `s` | `[{name, identity, desktop_entry, playing, active}]`, sorted by name; empty unless two or more players run. |
 
 The position is only sampled when something changes. While playing, the
 current position is `position_us + (now - sampled_at_ms) * 1000 * rate`.
@@ -79,7 +93,7 @@ of the app copied from, or `""`.
 | `AddText(s text, s app_id) → t id` | | Copied text, at most 512 KiB and not blank. A lone `http://` or `https://` address is a `link`. |
 | `AddImage(ay png, s app_id) → t id` | | A copied PNG image, at most 16 MiB. |
 | `AddFiles(as uris, s app_id) → t id` | | Copied files; only `file://` URIs. |
-| `GetText(t id) → s` | | The full content to copy back: the text, the URIs one per line, or the path of an image's PNG. |
+| `GetText(t id) → s` | | The full content to copy back: the text, the URIs one per line, or the path of an image's PNG. GNOME Shell only. |
 | `Touch(t id)` | | Move to the top, as copied again (e.g. from the history). |
 | `SetPinned(t id, b pinned)` | | At most 10 items are pinned; pinning an eleventh fails with `LimitsExceeded`. |
 | `Remove(t id)` | | |
@@ -107,7 +121,7 @@ when it is due, then dismisses it.
 ## io.github.zickrian.isle.Assistant1
 
 The voice assistant. isled records the microphone, turns speech into text
-(faster-whisper, through `isle-whisper.py`), asks the AI picked in Settings
+(whisper.cpp, through `isle-whisper`), asks the AI picked in Settings
 (Claude Code, Codex or agy, with the user's own sign-in), runs the look-up
 tools the AI asks for (finding files and apps, reading small text files), and
 publishes the answer; the extension runs its actions. It works step by step:
@@ -124,7 +138,7 @@ needed and quit afterwards.
 | `End()` | | The island closed: listening stops, and the AI and the speech model quit. A request being answered carries on in the background and finishes as a `reply` or `error`. |
 | `Results(t step, s results)` | | What the actions handed out as `step` did: JSON `[{type, ok, detail}]`, one per action, in order. Unanswered within 20 s, they count as not done. |
 | `Cancel()` | | Stops the request being answered; the AI quits. |
-| `State` | `s` | `{phase, heard, reply, actions, error, hint, sign_in, listen, heard_nothing, activity, provider, turn, step}`. `phase` is `idle`, `listening`, `transcribing`, `thinking`, `acting`, `reply` or `error`. In `acting`, `actions` are to run now, once per `step`, and reported with `Results`; in `reply`, they are what the answer asks, run once per `turn`. `activity` says what the AI is doing while it thinks ("Searching ~/Downloads for “ttd”…"). |
+| `State` | `s` | `{phase, heard, reply, actions, error, hint, sign_in, provider, set_up, model, listen, heard_nothing, activity, turn, step}`. With `sign_in`, signing in to `provider` fixes the error; with `set_up`, running `isle-setup-voice model` does. `phase` is `idle`, `listening`, `transcribing`, `thinking`, `acting`, `reply` or `error`. In `acting`, `actions` are to run now, once per `step`, and reported with `Results`; in `reply`, they are what the answer asks, run once per `turn`. `activity` says what the AI is doing while it thinks ("Searching ~/Downloads for “ttd”…"). |
 | `Level` (signal) | `d` | The microphone's level (0..1) while listening, 20 times a second. |
 
 ## io.github.zickrian.isle.Usage1
@@ -141,6 +155,15 @@ ChatGPT's are read from Codex's own logs. Turned off, nothing runs.
 | `Refresh()` | | Reads again now (Claude at most every two minutes). |
 | `Usage` | `s` | `{providers: [{id, name, plan, windows: [{label, percent, resets_at_ms}], updated_ms, note}]}`; a provider not signed in is left out. |
 | `Alert` (signal) | `ssdx` | `(provider, window, percent, resets_at_ms)`: a limit passed the warning or the critical share, once per window. |
+
+## io.github.zickrian.isle.Updates1
+
+Whether a newer Isle is out: GitHub's latest release, looked up at most once a day while enabled.
+
+| Member | Signature | |
+|---|---|---|
+| `SetEnabled(b enabled)` | | Look, or not (Settings → New versions); off until set. |
+| `Latest` | `s` | The latest release's version (`0.8.0`) when it is newer than this isled; empty otherwise. |
 
 ## io.github.zickrian.isle.System1
 

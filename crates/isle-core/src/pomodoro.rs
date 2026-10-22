@@ -243,7 +243,7 @@ impl Pomodoro {
                     self.completed_sessions += 1;
                 }
                 let every = self.config.sessions_before_long_break.max(1);
-                let long = completed && self.completed_sessions % every == 0;
+                let long = completed && self.completed_sessions.is_multiple_of(every);
                 let next = if long {
                     Phase::LongBreak
                 } else {

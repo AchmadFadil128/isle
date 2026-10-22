@@ -4,13 +4,24 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request replaces a run still going.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install GTK 4
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
+      # GTK 4 for isle-shelf; cmake, libclang, the Vulkan headers and glslc for isle-whisper (whisper.cpp).
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev cmake g++ clang libclang-dev libvulkan-dev glslc
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
@@ -23,6 +34,62 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
+  msrv:
+    name: Minimum Rust version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev cmake g++ clang libclang-dev libvulkan-dev glslc
+      - name: Read rust-version
+        id: msrv
+        run: |
+          echo "core=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
+          echo "shelf=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' crates/isle-shelf/Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.core }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.shelf }}
+      - uses: Swatinem/rust-cache@v2
+      - name: isle-core and isled on their rust-version
+        env:
+          TOOLCHAIN: ${{ steps.msrv.outputs.core }}
+        run: cargo "+$TOOLCHAIN" check --locked
+      - name: The whole workspace on isle-shelf's rust-version
+        env:
+          TOOLCHAIN: ${{ steps.msrv.outputs.shelf }}
+        run: cargo "+$TOOLCHAIN" check --locked --workspace
+
+  deny:
+    name: cargo deny (${{ matrix.checks }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        checks: [advisories, bans licenses sources]
+    # A new advisory should not block unrelated changes; it still shows as a failed check.
+    continue-on-error: ${{ matrix.checks == 'advisories' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check ${{ matrix.checks }}
+          arguments: --workspace
+
+  shell:
+    name: Shell scripts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck
+        run: |
+          shellcheck --version
+          shellcheck get.sh install.sh uninstall.sh scripts/*.sh scripts/isle-charge-limit scripts/ci/*.sh packaging/aur/update.sh
+
   extension:
     runs-on: ubuntu-24.04
     steps:
@@ -30,12 +97,72 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
       - name: Check JavaScript syntax
         run: |
           for file in gnome-extension/*.js gnome-extension/src/*.js gnome-extension/src/pages/*.js; do
             node --experimental-default-type=module --check "$file"
           done
-      - name: Check the settings schema
+      - name: ESLint
         run: |
-          sudo apt-get update && sudo apt-get install -y libglib2.0-bin
+          npm ci --ignore-scripts
+          npx eslint
+      - name: Tests of the parts that need no GNOME Shell
+        run: node --experimental-default-type=module --test tests/extension/*.test.js
+      - name: Check the settings schema, and the tests that need GLib
+        run: |
+          sudo apt-get update && sudo apt-get install -y libglib2.0-bin gjs
           glib-compile-schemas --strict --dry-run gnome-extension/schemas
+          gjs -m tests/extension/format.gjs.js
+
+  package:
+    name: Release packages
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # As the release builds them: isle-whisper needs cmake, libclang, the Vulkan headers and glslc.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev rpm file cmake g++ clang libclang-dev libvulkan-dev glslc
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Package
+        run: |
+          tarball="$(scripts/package.sh | tail -n1)"
+          scripts/package-system.sh "$tarball"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: isle-packages
+          path: dist/*
+          retention-days: 14
+
+  smoke:
+    name: GNOME Shell smoke test (${{ matrix.image }}, ${{ matrix.package }})
+    needs: package
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {image: 'ubuntu:24.04', package: tarball}
+          - {image: 'ubuntu:24.04', package: deb}
+          - {image: 'fedora:42', package: tarball}
+          - {image: 'fedora:42', package: rpm}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: isle-packages
+          path: dist
+      - name: Install Isle and start a headless GNOME Shell
+        env:
+          IMAGE: ${{ matrix.image }}
+          KIND: ${{ matrix.package }}
+        run: |
+          case "$KIND" in
+            tarball) package="$(ls dist/isle-*-linux.tar.gz)" ;;
+            deb) package="$(ls dist/isle_*.deb)" ;;
+            rpm) package="$(ls dist/isle-*.rpm)" ;;
+          esac
+          docker run --rm -v "$PWD:/src:ro" "$IMAGE" /src/scripts/ci/smoke-test.sh "/src/$package"

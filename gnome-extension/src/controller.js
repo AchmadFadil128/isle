@@ -5,6 +5,7 @@
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
@@ -21,6 +22,7 @@ import {Island} from './island.js';
 import {AudioOutputs} from './audio.js';
 import {CallMonitor} from './call.js';
 import {FocusMode} from './focusMode.js';
+import * as Format from './format.js';
 import {NotificationCenter} from './notifications.js';
 import {PrivacyMonitor} from './privacy.js';
 import {PeekView} from './peek.js';
@@ -35,11 +37,10 @@ import {NotificationsPage} from './pages/notifications.js';
 import {ShelfPage} from './pages/shelf.js';
 import {UsagePage} from './pages/usage.js';
 import {ReminderWatcher} from './reminders.js';
-import {GREETING, InstalledApps, SIRI_COLORS, VoiceView, actionTypes, aiSettings, openSignIn, runActions, stopPending, voiceContext} from './voice.js';
+import {GREETING, InstalledApps, SIRI_COLORS, VoiceView, actionTypes, aiSettings, openSetUp, openSignIn, runActions, stopPending, voiceContext} from './voice.js';
 import {TextWriter} from './writer.js';
 
-/** The pointer must rest this long before the island opens, moving at most this far meanwhile. */
-const EXPAND_DELAY_MS = 120;
+/** While the pointer rests before the island opens (Settings: hover-delay), it moves at most this far. */
 const REST_DISTANCE_PX = 10;
 /** The views and pages are laid out ahead this long after starting, a step at a time (see `_warmUp`). */
 const WARM_START_MS = 3000;
@@ -57,6 +58,18 @@ const COLLAPSE_DELAY_MS = 300;
 const PAGE_MEMORY_MS = 5 * 60 * 1000;
 /** An alert's width is checked again this soon after it shows. */
 const ALERT_FIT_DELAY_MS = 60;
+/** Where updating is explained. */
+const UPDATE_HELP = 'https://github.com/zickrian/isle/blob/main/docs/install.md#updating';
+/** Which switch in Settings each kind of system event answers to. */
+const SYSTEM_ALERTS = {power: 'power', battery_low: 'power', battery_full: 'power', network: 'network', bluetooth: 'bluetooth'};
+/** The open island's header on a display without the top bar. */
+const HEADER_WITHOUT_BAR = 32;
+/** isled may be away this long (restarting after an update) before the island does anything about it. */
+const SERVICE_GRACE_MS = 5000;
+/** Opened from the keyboard without getting it, the island closes this soon unless the pointer is on it. */
+const KEYBOARD_LESS_CLOSE_MS = 4000;
+/** Notifications waiting to be shown past this many come as one summary. */
+const MAX_QUEUED_NOTIFICATIONS = 3;
 /** Without input for this long, the user is away and animations rest; sooner on battery. */
 const IDLE_MS = 60 * 1000;
 const IDLE_ON_BATTERY_MS = 15 * 1000;
@@ -139,10 +152,17 @@ export class Controller {
             const focus = global.display.focus_window;
             if (this._voiceOpen && this._voiceAnswered && focus && focus !== this._voiceTarget)
                 this.collapse();
+            this._syncMonitor();
         });
 
         this._topBar = new TopBar(this._settings);
-        this._notifications = new NotificationCenter();
+        // One "system alerts" switch before 0.7: an "off" there carries over to each of its parts.
+        if (!this._settings.get_boolean('system-alerts')) {
+            for (const category of ['power', 'network', 'bluetooth', 'caps-lock'])
+                this._settings.set_boolean(`alert-${category}`, false);
+            this._settings.set_boolean('system-alerts', true);
+        }
+        this._notifications = new NotificationCenter(this._settings);
         this._privacy = new PrivacyMonitor(this._daemon);
         this._call = new CallMonitor(this._privacy, this._settings);
         this._audio = new AudioOutputs();
@@ -164,15 +184,22 @@ export class Controller {
         for (const view of [this._compact, ...this._peeks, this._expanded, this._voice])
             this._island.addView(view);
         Main.layoutManager.addChrome(this._island, {trackFullscreen: true});
+        // Hidden by a fullscreen window meanwhile: what waited shows now.
+        this._island.connect('notify::visible', () => {
+            if (this._island.visible && !this._alert)
+                this._nextAlert();
+        });
         this._connectSignals();
         this._keyboard = new KeyboardWatcher();
-        this._keyboard.connect('caps-lock', (_watcher, on) => this._postSystemAlert(Alerts.capsLock(on)));
+        this._keyboard.connect('caps-lock', (_watcher, on) => this._postSystemAlert(Alerts.capsLock(on), 'caps-lock'));
         this._osd = new OsdHook((icon, label, level, maxLevel) => this._showOsd(icon, label, level, maxLevel));
         this._watchIdle();
         this._installedApps = new InstalledApps();
-        this._reminders = new ReminderWatcher(this._daemon, reminder => {
-            this._chime('complete');
-            this._post(Alerts.reminder(reminder));
+        this._reminders = new ReminderWatcher(this._daemon, (reminder, done) => {
+            this._post(Alerts.reminder(reminder, () => {
+                this._chime('complete');
+                done();
+            }));
         });
         this._syncVoiceEnabled();
         this._syncUsage();
@@ -261,7 +288,11 @@ export class Controller {
 
         this._settingsChanged = ['notch-depth', 'island-in-top-bar'].map(key =>
             this._settings.connect(`changed::${key}`, () => this._render()));
+        this._settingsChanged.push(this._settings.connect('changed::island-monitor', () => this._updateGeometry()));
+        // On the display in use, it follows the window in front, once closed.
+        this._focusMonitorChanged = global.display.connect('window-entered-monitor', () => this._syncMonitor());
         this._settingsChanged.push(this._settings.connect('changed::voice-assistant', () => this._syncVoiceEnabled()));
+        this._settingsChanged.push(this._settings.connect('changed::voice-shortcut', () => (this._voice.shortcut = this._voiceShortcut)));
         for (const key of ['usage-enabled', 'usage-claude', 'usage-codex', 'usage-warn', 'usage-critical'])
             this._settingsChanged.push(this._settings.connect(`changed::${key}`, () => this._syncUsage()));
 
@@ -269,10 +300,20 @@ export class Controller {
         this._topBar.connect('style-changed', () => this._updateGeometry());
         this._topBar.connect('calendar-requested', () => this._toggleFromKeyboard());
         island.connect('key-press-event', (_actor, event) => {
-            if (event.get_key_symbol() !== Clutter.KEY_Escape)
-                return Clutter.EVENT_PROPAGATE;
-            this.collapse();
-            return Clutter.EVENT_STOP;
+            if (event.get_key_symbol() === Clutter.KEY_Escape) {
+                this.collapse();
+                return Clutter.EVENT_STOP;
+            }
+            // Typing while it listens: the request is typed instead.
+            const typed = event.get_key_unicode();
+            const modified = event.get_state() & (Clutter.ModifierType.CONTROL_MASK | Clutter.ModifierType.MOD1_MASK |
+                Clutter.ModifierType.SUPER_MASK);
+            if (this._voiceOpen && !this._voice.typing && this._voice.phase === 'listening' && !modified &&
+                typed && /\S/.test(typed)) {
+                this._startTyping(typed);
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
         });
         this._monitorsChanged = Main.layoutManager.connect('monitors-changed', () => this._updateGeometry());
 
@@ -285,14 +326,30 @@ export class Controller {
         });
         daemon.connect('voice-level', (_daemon, level) => this._voice.setLevel(level));
         daemon.connect('assistant-lost', () => this._onAssistantLost());
+        daemon.connect('running-changed', () => this._onServiceChanged());
+        // Never started at all (a broken install) is the same as stopped.
+        this._onServiceChanged();
         daemon.connect('usage-alert', (_daemon, provider, window, percent, resetsAt) =>
             this._post(Alerts.usage(provider, window, percent, resetsAt, this._settings.get_int('usage-critical'))));
         // isled forgets the settings when it restarts; they are sent again whenever it appears.
         daemon.connect('appeared', (_daemon, name) => {
             if (name === 'usage')
                 this._syncUsage();
+            else if (name === 'updates')
+                this._syncUpdates();
+            else if (name === 'media')
+                this._daemon.call('media', 'SetLyrics', this._settings.get_boolean('lyrics-online'));
         });
+        daemon.connect('changed', (_daemon, key) => {
+            if (key === 'updates')
+                this._onLatest();
+        });
+        this._settingsChanged.push(this._settings.connect('changed::check-updates', () => this._syncUpdates()));
+        this._settingsChanged.push(this._settings.connect('changed::lyrics-online', () =>
+            this._daemon.call('media', 'SetLyrics', this._settings.get_boolean('lyrics-online'))));
         this._voice.connect('orb-clicked', () => this._onVoiceKey());
+        this._voice.connect('type-requested', () => this._startTyping(''));
+        this._voice.connect('typed', (_view, text) => this._ask(text));
         this._voice.connect('stop', () => {
             this._daemon.call('assistant', 'Cancel');
             this.collapse();
@@ -305,13 +362,21 @@ export class Controller {
             if (openSignIn(this._daemon.state.assistant?.provider))
                 this.collapse();
         });
+        this._voice.connect('set-up', () => {
+            if (openSetUp(this._daemon.state.assistant?.model))
+                this.collapse();
+        });
         this._voice.connect('frame', (_view, time, level) => this._island.setTintMotion(time, level));
         daemon.connect('pomodoro-finished', (_daemon, finished, next) => {
             this._chime('complete');
             this._post(Alerts.pomodoroFinished(finished, next, daemon.state.pomodoro, daemon));
         });
-        daemon.connect('system-event', (_daemon, event) => this._postSystemAlert(Alerts.system(event)));
+        daemon.connect('system-event', (_daemon, event) =>
+            this._postSystemAlert(Alerts.system(event), SYSTEM_ALERTS[event.kind] ?? 'power', event.kind === 'battery_low'));
 
+        // Sharing or recording the screen, what others write and what was copied stay out of sight.
+        this._privacy.connect('changed', () => this._syncSharing());
+        this._syncSharing();
         this._privacy.connect('recording-started', () =>
             this._post(Alerts.recordingStarted(() => this._privacy.stopRecording())));
         // A new call is what the island opens on next, whatever was picked before.
@@ -321,7 +386,8 @@ export class Controller {
         const notifications = this._notifications;
         notifications.connect('banner', (_center, notification) => {
             const urgent = notification.urgency === MessageTray.Urgency.CRITICAL;
-            this._post(Alerts.notification(notification, urgent));
+            this._post(Alerts.notification(notification, urgent, () => notifications.acknowledge(notification),
+                this._sharing));
         });
         notifications.connect('dnd-changed', () => (this._compact.doNotDisturb = notifications.dnd));
         notifications.connect('changed', () => (this._compact.unseenNotifications = notifications.unseenCount > 0));
@@ -332,12 +398,40 @@ export class Controller {
     // Layout
 
     _updateGeometry() {
+        this._monitor = this._wantedMonitor();
         // On a black bar the island grows out of it, its shoulders below the
         // bar; on any other it hangs from the top of the screen like a notch.
-        this._island.topInset = this._topBar.blendsIn ? this._topBar.height : 0;
-        this._island.monitor = Main.layoutManager.primaryMonitor;
-        this._expanded.topInset = this._topBar.height;
+        this._island.topInset = this._blendsIn ? this._topBar.height : 0;
+        this._island.monitor = this._monitor;
+        // Without a top bar (another display) the open island's header is its own.
+        this._expanded.topInset = this._onBar ? this._topBar.height : HEADER_WITHOUT_BAR;
+        this._topBar.clockShown = !this._onBar;
         this._render();
+    }
+
+    /** The display the island belongs on: the main one, or the one of the window in use (see Settings). */
+    _wantedMonitor() {
+        const {monitors, primaryMonitor} = Main.layoutManager;
+        if (this._settings.get_string('island-monitor') !== 'active')
+            return primaryMonitor;
+        const index = global.display.focus_window?.get_monitor() ?? -1;
+        return monitors[index] ?? primaryMonitor;
+    }
+
+    /** Moves the island to the display in use, once it is closed (never mid-alert or open). */
+    _syncMonitor() {
+        if (this._monitor && this._presentation === 'compact' && this._wantedMonitor() !== this._monitor)
+            this._updateGeometry();
+    }
+
+    /** Whether the island is on the main display, in its top bar. */
+    get _onBar() {
+        return this._monitor === Main.layoutManager.primaryMonitor;
+    }
+
+    /** Whether it grows out of a black top bar there. */
+    get _blendsIn() {
+        return this._onBar && this._topBar.blendsIn;
     }
 
     _render() {
@@ -348,8 +442,9 @@ export class Controller {
         this._presentation = presentation;
         if (presentation !== 'compact')
             this._putAwayWarm();
-        const top = this._topBar.height;
-        const inBar = this._settings.get_boolean('island-in-top-bar');
+        // A display without the top bar: the island hangs from its top edge.
+        const top = this._onBar ? this._topBar.height : 0;
+        const inBar = this._onBar && this._settings.get_boolean('island-in-top-bar');
         // Before measuring it: inside the bar it is smaller.
         this._compact.inBar = inBar;
 
@@ -360,7 +455,7 @@ export class Controller {
         case 'expanded':
             size = {
                 width: this._expanded.preferredWidth,
-                height: top + PAGE_HEIGHT + BOTTOM_PADDING,
+                height: (this._onBar ? top : HEADER_WITHOUT_BAR) + PAGE_HEIGHT + BOTTOM_PADDING,
                 radius: EXPANDED_RADIUS,
                 shoulder: EXPANDED_SHOULDER,
             };
@@ -368,14 +463,14 @@ export class Controller {
             break;
         case 'voice': {
             // Like an alert, it hangs below the bar (or near the top of the screen).
-            const inset = this._topBar.blendsIn ? top : PEEK_TOP_GLASS;
+            const inset = this._blendsIn ? top : PEEK_TOP_GLASS;
             size = {width: this._voice.preferredWidth, height: inset + this._voice.fit(), radius: VOICE_RADIUS, shoulder: PEEK_SHOULDER};
             view = this._voice;
             view.style = `padding-top: ${inset}px;`;
             break;
         }
         case 'peek': {
-            const inset = this._topBar.blendsIn ? top : PEEK_TOP_GLASS;
+            const inset = this._blendsIn ? top : PEEK_TOP_GLASS;
             size = {width: this._peek.preferredWidth, height: inset + this._peek.preferredHeight, radius: PEEK_RADIUS, shoulder: PEEK_SHOULDER};
             view = this._peek;
             view.style = `padding-top: ${inset}px;`;
@@ -392,11 +487,15 @@ export class Controller {
             view.style = inBar ? null : `padding-top: ${top}px;`;
         }
         view.set_size(size.width, size.height);
-        this._topBar.reserveWidth(this._compact.preferredWidth);
+        if (this._onBar)
+            this._topBar.reserveWidth(this._compact.preferredWidth);
         this._island.morph(size, view);
         this._expanded.setActive(presentation === 'expanded');
         this._voice.setActive(presentation === 'voice');
         this._syncTint();
+        // Closed again, it goes to the display in use if that changed meanwhile.
+        if (presentation === 'compact' && this._monitor && this._wantedMonitor() !== this._monitor)
+            this._later('monitor', 0, () => this._syncMonitor());
         // Have the helper running before it is needed: starting takes a moment.
         if (presentation === 'expanded' && this._expanded.page === this._shelf)
             this._shelfHelper.prepare();
@@ -493,7 +592,7 @@ export class Controller {
         }
         if (this._island.hovered) {
             this._cancel('collapse');
-            if (!this._expandWanted)
+            if (!this._expandWanted && this._settings.get_string('open-on') === 'hover')
                 this._expandOnRest();
         } else {
             this._cancel('expand');
@@ -510,7 +609,7 @@ export class Controller {
     // Opens once the pointer rests on the island, so passing over it along the top bar opens nothing.
     _expandOnRest() {
         const [x, y] = global.get_pointer();
-        this._later('expand', EXPAND_DELAY_MS, () => {
+        this._later('expand', this._settings.get_int('hover-delay'), () => {
             const [nowX, nowY] = global.get_pointer();
             if (Math.hypot(nowX - x, nowY - y) <= REST_DISTANCE_PX)
                 this.expand();
@@ -555,6 +654,11 @@ export class Controller {
                 this._dismissAlert(true);
                 return Clutter.EVENT_STOP;
             }
+            // isled down: why the island can do little, and how to fix it, rather than the pages.
+            if (!this._expandWanted && this._compact.serviceDown) {
+                this._post(Alerts.serviceDown(() => this._daemon.start()));
+                return Clutter.EVENT_STOP;
+            }
             // The assistant still at work: its progress, rather than the pages.
             if (!this._expandWanted && this._voiceWorking) {
                 this._reopenVoice();
@@ -569,6 +673,11 @@ export class Controller {
             this._daemon.call('media', 'PlayPause');
             return Clutter.EVENT_STOP;
         case Clutter.BUTTON_SECONDARY:
+            // On an alert: puts it away without opening what it is about.
+            if (!this._expandWanted && this._alert) {
+                this._dismissAlert(true);
+                return Clutter.EVENT_STOP;
+            }
             // Brings the call, or else the music player, to the front from the closed island
             // (the open one has its own controls, cards and fields).
             if (this._expandWanted)
@@ -634,6 +743,9 @@ export class Controller {
     // Super+V (GNOME's calendar shortcut, taken over) opens the clipboard history, search ready, and
     // holds the island open without the pointer; Super+V again, Esc or a click elsewhere closes it.
     _toggleFromKeyboard() {
+        // Hidden by a fullscreen window, it would take the keyboard unseen.
+        if (!this._island.visible)
+            return;
         if (this._expandWanted && this._keyboardGrab) {
             this.collapse();
             return;
@@ -643,6 +755,11 @@ export class Controller {
         this._setKeyboard(true);
         if (this._keyboardGrab)
             this._shelf.showTab('clipboard', {focusSearch: true});
+        else // another grab holds the keyboard: it closes once the pointer is not on it
+            this._later('collapse', KEYBOARD_LESS_CLOSE_MS, () => {
+                if (!this._island.hovered)
+                    this._collapseUnlessHeld();
+            });
     }
 
     /** Grabs the keyboard for typing into the island (e.g. a new task). */
@@ -683,6 +800,12 @@ export class Controller {
     _post(alert) {
         if (!alert)
             return;
+        // Hidden by a fullscreen window: shown once it is gone, but a volume or Caps Lock change is stale by then.
+        if (!this._island.visible) {
+            if (!alert.transient)
+                this._enqueue(alert);
+            return;
+        }
         if (this._alert && this._alert.key === alert.key) {
             this._showAlert(alert); // update in place
             return;
@@ -702,14 +825,27 @@ export class Controller {
         this._showAlert(alert);
     }
 
-    _postSystemAlert(alert) {
-        if (this._settings.get_boolean('system-alerts'))
-            this._post(alert);
+    /** A system alert of `category` (power, network, bluetooth, caps-lock), if wanted; only a low battery gets
+     * through Do Not Disturb. */
+    _postSystemAlert(alert, category, urgent = false) {
+        if (!alert || !this._settings.get_boolean(`alert-${category}`))
+            return;
+        if (this._notifications.dnd && !urgent)
+            return;
+        this._post(alert);
     }
 
     _enqueue(alert) {
         this._queue = this._queue.filter(queued => queued.key !== alert.key);
         this._queue.push(alert);
+        // Many notifications waiting (a long fullscreen video) come as one; each stays unread in the list.
+        const waiting = this._queue.filter(queued => queued.kind === 'notification' && queued.priority !== 'instant');
+        const summed = this._queue.some(queued => queued.key === 'notifications-summary');
+        if (waiting.length > (summed ? 0 : MAX_QUEUED_NOTIFICATIONS)) {
+            const before = this._queue.find(queued => queued.key === 'notifications-summary')?.count ?? 0;
+            this._queue = this._queue.filter(queued => !waiting.includes(queued) && queued.key !== 'notifications-summary');
+            this._queue.push(Alerts.notificationsSummary(before + waiting.length));
+        }
     }
 
     _showAlert(alert) {
@@ -718,9 +854,13 @@ export class Controller {
             this._peek = this._peeks[1 - this._peeks.indexOf(this._peek)];
         this._shownAlertKey = alert.key;
         this._alert = alert;
+        if (!alert.shown) {
+            alert.shown = true;
+            alert.onShown?.();
+        }
         // Its button does what it says, and that is the end of the alert.
         this._peek.setAlert(alert, () => this._dismissAlert(true));
-        this._later('alert', alert.duration ?? 3000, () => this._dismissAlert(true));
+        this._timeAlert();
         this._render();
         // Parts shown for the first time are only measured right once styled;
         // fit the island again then.
@@ -728,6 +868,18 @@ export class Controller {
             if (this._presentation === 'peek')
                 this._render();
         });
+    }
+
+    // An alert goes after its time; a sticky one (a reminder) only counts it while someone is there.
+    _timeAlert() {
+        const alert = this._alert;
+        if (!alert)
+            return;
+        if (alert.sticky && this._compact.idle) {
+            this._cancel('alert');
+            return;
+        }
+        this._later('alert', alert.duration ?? 3000, () => this._dismissAlert(true));
     }
 
     _dismissAlert(showNext) {
@@ -738,15 +890,18 @@ export class Controller {
     }
 
     _nextAlert() {
-        const next = this._queue.shift();
-        if (next && !this._expandWanted && !this._voiceOpen)
-            this._showAlert(next);
-        else
+        if (!this._island.visible || this._expandWanted || this._voiceOpen || !this._queue.length) {
             this._render();
+            return;
+        }
+        this._showAlert(this._queue.shift());
     }
 
     _showOsd(icon, label, level, maxLevel) {
         if (!this._settings.get_boolean('replace-osd') || !this._island.visible)
+            return false;
+        // Working on another display, the user would not see it: GNOME shows its own there.
+        if (Main.layoutManager.monitors.length > 1 && global.display.get_current_monitor() !== this._monitor?.index)
             return false;
         // While the island is open the OSD would cover it; let GNOME show it.
         if (this._expandWanted || this._voiceOpen)
@@ -769,6 +924,54 @@ export class Controller {
         this._lastTrack = track;
         if (changed && track && Playback.isPlaying(nowPlaying) && this._settings.get_boolean('track-peek'))
             this._post(Alerts.track(nowPlaying));
+    }
+
+    // isled gone (a crash, or stopped by hand): started again once; still gone, the island says so and offers
+    // to restart it, with a warning on the closed island meanwhile.
+    _onServiceChanged() {
+        if (this._daemon.running) {
+            this._cancel('service-check');
+            this._compact.serviceDown = false;
+            if (this._alert?.key === 'service-down')
+                this._dismissAlert(true);
+            this._queue = this._queue.filter(queued => queued.key !== 'service-down');
+            return;
+        }
+        this._later('service-check', SERVICE_GRACE_MS, () => {
+            this._daemon.start();
+            this._later('service-check', SERVICE_GRACE_MS, () => {
+                if (this._daemon.running)
+                    return;
+                this._compact.serviceDown = true;
+                this._post(Alerts.serviceDown(() => this._daemon.start()));
+            });
+        });
+    }
+
+    /** Whether others may see the screen now: shared, or recorded. */
+    get _sharing() {
+        return this._privacy.screenShare || this._privacy.recording;
+    }
+
+    _syncSharing() {
+        this._shelf.sharing = this._sharing;
+        this._expanded.pageNamed('notifications').sharing = this._sharing;
+    }
+
+    // Updates
+
+    _syncUpdates() {
+        this._daemon.call('updates', 'SetEnabled', this._settings.get_boolean('check-updates'));
+    }
+
+    /** A newer Isle is out: said once per version. */
+    _onLatest() {
+        const latest = this._daemon.state.updates;
+        if (!latest || latest === this._settings.get_string('update-shown'))
+            return;
+        this._settings.set_string('update-shown', latest);
+        this._post(Alerts.update(latest, () => Gio.AppInfo.launch_default_for_uri(UPDATE_HELP,
+            global.create_app_launch_context(0, -1))));
     }
 
     // Usage
@@ -802,11 +1005,15 @@ export class Controller {
         }
         this._voiceBound = enabled;
         this._expanded.voiceEnabled = enabled;
+        this._voice.shortcut = this._voiceShortcut;
     }
 
     // The shortcut (or the face) opens the assistant listening; while listening it finishes,
     // and once answered it listens again for a follow-up.
     _onVoiceKey() {
+        // Hidden by a fullscreen window: it would listen unseen.
+        if (!this._island.visible)
+            return;
         if (!this._voiceOpen) {
             // A request still at work shows its progress; a new one waits until it is done.
             if (this._voiceWorking)
@@ -846,6 +1053,37 @@ export class Controller {
         this._listen({greet: true});
     }
 
+    /** Types the request instead of saying it: listening stops (speech recognition never starts). */
+    _startTyping(initial) {
+        if (this._daemon.state.assistant?.phase === 'listening')
+            this._daemon.call('assistant', 'Cancel');
+        this._listenRequest++;
+        this._cancel('voice-close');
+        this._cancel('voice-listen');
+        this._setKeyboard(true);
+        this._voice.followUp = null;
+        this._voice.greeting = null;
+        this._voice.startTyping(initial);
+        this._render();
+    }
+
+    /** Asks a typed request, with what the island knows, as `_listen` does for a spoken one. */
+    async _ask(text) {
+        const request = ++this._listenRequest;
+        this._voice.setState({phase: 'thinking', heard: text});
+        this._render();
+        let json;
+        try {
+            json = await voiceContext(this._settings, this._notifications,
+                {apps: this._installedApps.names, selectedIn: this._selectedIn});
+        } catch (e) {
+            console.warn(`Isle: could not gather the request's context: ${e.message}`);
+            json = JSON.stringify({...aiSettings(this._settings), actions: actionTypes()});
+        }
+        if (this._voiceOpen && request === this._listenRequest)
+            this._daemon.call('assistant', 'Ask', text, json);
+    }
+
     /** Shows the assistant again as it is (at work, or with the answer it came to), without listening. */
     _reopenVoice() {
         const state = this._daemon.state.assistant;
@@ -864,6 +1102,15 @@ export class Controller {
         this._render();
         if (this._voiceAnswered)
             this._scheduleVoiceClose(VOICE_READ_MS.max);
+    }
+
+    /** The assistant's shortcut as people write it, or '' when it has none. */
+    get _voiceShortcut() {
+        return Format.shortcutLabel(this._settings.get_strv('voice-shortcut')[0] ?? '');
+    }
+
+    get _askAgainHint() {
+        return this._voiceShortcut ? `Press ${this._voiceShortcut} to ask again.` : 'Ask again from the mic in the island.';
     }
 
     /** Whether the assistant works on a request with the island closed. */
@@ -928,6 +1175,9 @@ export class Controller {
         }
         if (state.phase === 'idle')
             return;
+        // Typing: the listening it stopped may still report in.
+        if (this._voice.typing && ['listening', 'transcribing'].includes(state.phase))
+            return;
         // Nothing said back to a follow-up: it just closes, no error.
         if (state.phase === 'error' && state.heard_nothing && this._voice.followUp) {
             this.collapse();
@@ -960,7 +1210,7 @@ export class Controller {
             }
         } else if (state.phase === 'error') {
             // Long enough to reach the Sign in button.
-            this._scheduleVoiceClose(state.sign_in ? VOICE_READ_MS.max : VOICE_ERROR_MS);
+            this._scheduleVoiceClose(state.sign_in || state.set_up ? VOICE_READ_MS.max : VOICE_ERROR_MS);
         }
     }
 
@@ -991,13 +1241,13 @@ export class Controller {
         if (this._voiceInBackground) {
             this._voiceInBackground = false;
             this._syncAssistantBusy();
-            this._post(Alerts.assistant({phase: 'error', error: 'Isle restarted', hint: 'Press Super+I to ask again.'},
+            this._post(Alerts.assistant({phase: 'error', error: 'Isle restarted', hint: this._askAgainHint},
                 () => this._openVoice()));
             return;
         }
         if (!this._voiceOpen || !['listening', ...VOICE_WORKING].includes(this._voice.phase))
             return;
-        this._voice.setState({phase: 'error', error: 'Isle restarted', hint: 'Press Super+I to ask again.'});
+        this._voice.setState({phase: 'error', error: 'Isle restarted', hint: this._askAgainHint});
         this._setKeyboard(false);
         this._render();
         this._scheduleVoiceClose(VOICE_ERROR_MS);
@@ -1059,10 +1309,15 @@ export class Controller {
         const monitor = global.backend.get_core_idle_monitor();
         const rest = () => {
             this._compact.idle = true;
+            // Away: a reminder on screen waits for them.
+            if (this._alert?.sticky)
+                this._cancel('alert');
             if (!this._activeWatch) {
                 this._activeWatch = monitor.add_user_active_watch(() => {
                     this._activeWatch = 0;
                     this._compact.idle = false;
+                    // Back: a reminder that waited starts its time now.
+                    this._timeAlert();
                 });
             }
         };
@@ -1098,6 +1353,7 @@ export class Controller {
     destroy() {
         global.display.get_selection().disconnect(this._primaryChanged);
         global.display.disconnect(this._focusChanged);
+        global.display.disconnect(this._focusMonitorChanged);
         stopPending();
         if (this._voiceBound)
             Main.wm.removeKeybinding('voice-shortcut');

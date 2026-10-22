@@ -182,8 +182,9 @@ fn parse_result(event: &Value) -> anyhow::Result<Answer> {
     if let Ok(answer) = Answer::deserialize(&event["structured_output"]) {
         return Ok(answer);
     }
-    let text = event["result"].as_str().unwrap_or_default().trim();
-    Ok(serde_json::from_str(text).unwrap_or_else(|_| Answer::plain(text)))
+    Ok(super::answer::from_text(
+        event["result"].as_str().unwrap_or_default(),
+    ))
 }
 
 /// Where Claude Code keeps the conversations it had in Isle's workspace (and only those).

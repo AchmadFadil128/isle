@@ -9,9 +9,11 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
-/** Signals: `changed` (): the list or unseen set changed; `banner` (notification); `dnd-changed` (). */
+/** Signals: `changed` (): the list or unseen set changed; `banner` (notification): to show, then acknowledge
+ * once shown; `dnd-changed` (). */
 export class NotificationCenter extends Signals.EventEmitter {
-    constructor() {
+    /** `isleSettings` says whether GNOME keeps its own banners (`gnome-banners`). */
+    constructor(isleSettings) {
         super();
         this._tray = Main.messageTray;
         this._sources = new Map();
@@ -19,7 +21,9 @@ export class NotificationCenter extends Signals.EventEmitter {
         this._settings = new Gio.Settings({schema_id: 'org.gnome.desktop.notifications'});
         this._settingsChanged = this._settings.connect('changed::show-banners', () => this.emit('dnd-changed'));
 
-        this._blockBanners();
+        this._isleSettings = isleSettings;
+        this._bannersChanged = isleSettings.connect('changed::gnome-banners', () => this._syncBanners());
+        this._syncBanners();
 
         for (const source of this._tray.getSources())
             this._watch(source);
@@ -59,9 +63,22 @@ export class NotificationCenter extends Signals.EventEmitter {
             notification.destroy(MessageTray.NotificationDestroyedReason.DISMISSED);
     }
 
+    /** Whether GNOME shows its own banners (as the user chose); else the island does. */
+    get _gnomeBanners() {
+        return this._isleSettings.get_boolean('gnome-banners');
+    }
+
+    _syncBanners() {
+        if (this._gnomeBanners && this._blocking)
+            this._unblockBanners();
+        else if (!this._gnomeBanners && !this._blocking)
+            this._blockBanners();
+    }
+
     // GNOME's banners are hidden by keeping the tray's `bannerBlocked` set. The calendar and overview set
     // it too, so their requests are remembered and applied again when the extension stops.
     _blockBanners() {
+        this._blocking = true;
         const tray = this._tray;
         // The tray only has a setter, so read the field behind it.
         this._requestedBlock = tray._bannerBlocked;
@@ -80,6 +97,7 @@ export class NotificationCenter extends Signals.EventEmitter {
     }
 
     _unblockBanners() {
+        this._blocking = false;
         delete this._tray.bannerBlocked;
         this._tray._bannerBlocked = !this._requestedBlock;
         this._tray.bannerBlocked = this._requestedBlock;
@@ -108,15 +126,21 @@ export class NotificationCenter extends Signals.EventEmitter {
 
     /** The same rules GNOME applies before showing a banner. */
     _onBanner(notification) {
-        if (notification.acknowledged || notification.urgency === MessageTray.Urgency.LOW)
+        if (this._gnomeBanners || notification.acknowledged || notification.urgency === MessageTray.Urgency.LOW)
             return;
         const critical = notification.urgency === MessageTray.Urgency.CRITICAL;
         if (!critical && !notification.source.policy.showBanners)
             return;
-        notification.acknowledged = true;
         notification.playSound();
-        this.emit('changed');
         this.emit('banner', notification);
+    }
+
+    /** Marks `notification` seen, once it was actually shown (see `banner`). */
+    acknowledge(notification) {
+        if (notification.acknowledged)
+            return;
+        notification.acknowledged = true;
+        this.emit('changed');
     }
 
     destroy() {
@@ -127,7 +151,9 @@ export class NotificationCenter extends Signals.EventEmitter {
         for (const source of [...this._sources.keys()])
             this._unwatch(source);
         this._settings.disconnect(this._settingsChanged);
-        this._unblockBanners();
+        this._isleSettings.disconnect(this._bannersChanged);
+        if (this._blocking)
+            this._unblockBanners();
     }
 }
 

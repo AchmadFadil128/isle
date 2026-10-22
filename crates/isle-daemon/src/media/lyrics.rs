@@ -54,6 +54,8 @@ pub enum LyricsStatus {
     /// LRCLIB answered but could not serve the lyrics right now (busy, rate
     /// limited or broken). Never cached, and retried like [`Self::Error`].
     Unavailable,
+    /// Looking lyrics up online is turned off in Settings.
+    Off,
 }
 
 impl LyricsStatus {

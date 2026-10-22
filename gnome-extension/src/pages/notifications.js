@@ -12,8 +12,11 @@ import St from 'gi://St';
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import {notificationIcon, plainBody} from '../notifications.js';
-import {icon, iconButton, isSymbolic, label, setButtonIcon, setEnabled} from '../widgets.js';
+import {icon, iconButton, isSymbolic, label, pillButton, setButtonIcon, setEnabled} from '../widgets.js';
 import {Page} from './page.js';
+
+/** A card offers at most this many of its notification's buttons ("Mark as read", "Accept"). */
+const MAX_ACTIONS = 3;
 
 /** Notifications grouped by app, apps ordered by their newest; newest first within an app. */
 function groupByApp(notifications) {
@@ -206,9 +209,11 @@ class NotificationsPage extends Page {
         const texts = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         const header = new St.BoxLayout({style_class: 'isle-notification-header'});
         const title = label(notification.title || notification.source?.title || '', 'isle-notification-title', {x_expand: true});
-        const body = label(plainBody(notification).replace(/\s+/g, ' ').trim(), 'isle-notification-body');
-        for (const text of [title, body])
-            text.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        // While the screen is shared, only who wrote, not what.
+        const text = this._sharing ? '' : plainBody(notification).replace(/\s+/g, ' ').trim();
+        const body = label(text, 'isle-notification-body');
+        for (const part of [title, body])
+            part.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         body.visible = body.text.length > 0;
         // The time and the close button share one spot.
         const corner = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
@@ -219,6 +224,18 @@ class NotificationsPage extends Page {
         header.add_child(corner);
         texts.add_child(header);
         texts.add_child(body);
+        // Its buttons, as GNOME's banner had them; not while the screen is shared.
+        const actions = this._sharing ? [] : (notification.actions ?? []).slice(0, MAX_ACTIONS);
+        if (actions.length > 0) {
+            const buttons = new St.BoxLayout({style_class: 'isle-notification-actions'});
+            for (const action of actions) {
+                buttons.add_child(pillButton(action.label, 'isle-pill-small isle-notification-action', () => {
+                    action.activate();
+                    this.emit('request-close');
+                }));
+            }
+            texts.add_child(buttons);
+        }
         content.add_child(texts);
 
         const row = new St.Button({style_class: 'isle-notification-row', child: content, x_expand: true, can_focus: true});
@@ -246,6 +263,18 @@ class NotificationsPage extends Page {
     warmUp() {
         if (this._stale)
             this._update();
+    }
+
+    /** While the screen is shared or recorded, the cards leave out what the notifications say. */
+    set sharing(sharing) {
+        if (sharing === Boolean(this._sharing))
+            return;
+        this._sharing = sharing;
+        if (this.active)
+            this._update();
+        else
+            this._stale = true;
+        this.markCold();
     }
 
     onActivate() {

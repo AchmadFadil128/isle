@@ -147,7 +147,7 @@ export class ClipboardHistory {
         switch (item.kind) {
         case 'image':
             try {
-                bytes = GLib.Bytes.new(GLib.file_get_contents(item.image)[1]);
+                bytes = await loadBytes(item.image);
                 mimetype = IMAGE_TYPE;
             } catch (e) {
                 console.warn(`Isle: could not read ${item.image}: ${e.message}`);
@@ -233,4 +233,17 @@ export class ClipboardHistory {
         this._keyboard?.run_dispose();
         this._keyboard = null;
     }
+}
+
+/** The file at `path`, read off the main loop's way. */
+function loadBytes(path) {
+    return new Promise((resolve, reject) => {
+        Gio.File.new_for_path(path).load_contents_async(null, (file, result) => {
+            try {
+                resolve(GLib.Bytes.new(file.load_contents_finish(result)[1]));
+            } catch (e) {
+                reject(e);
+            }
+        });
+    });
 }

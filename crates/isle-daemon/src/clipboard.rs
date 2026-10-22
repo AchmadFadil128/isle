@@ -205,8 +205,14 @@ impl ClipboardService {
     }
 
     /// The full content to put back on the clipboard: the text, the file
-    /// URIs one per line, or the path of an image's PNG file.
-    async fn get_text(&self, id: u64) -> fdo::Result<String> {
+    /// URIs one per line, or the path of an image's PNG file. GNOME Shell's to ask, no other program's.
+    async fn get_text(
+        &self,
+        id: u64,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+    ) -> fdo::Result<String> {
+        crate::caller::shell_only(connection, &header).await?;
         let item = self.history.get(id).ok_or_else(|| not_found(id))?;
         Ok(match &item.clip {
             Clip::Text { text } | Clip::Link { text } => text.clone(),

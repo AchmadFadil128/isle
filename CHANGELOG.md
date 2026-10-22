@@ -6,7 +6,7 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-10-22
+## [0.7.0] - 2026-10-22
 
 ### Added
 
@@ -19,9 +19,59 @@ All notable changes to Isle are listed here. The format follows
 - `isled --doctor` checks speech recognition and each AI: where it is
   installed and whether you are signed in, as Isle itself sees them.
   `isle-setup-voice` runs it at the end. Also `isled --version` and `--help`.
+- **Type a request instead of saying it**: start typing while the assistant
+  listens, or click the keyboard in its panel. No speech recognition runs.
+- A Set up button when speech recognition or the model chosen in Settings is
+  missing: it opens a terminal that downloads it, with no command to type.
+- **Multiple displays**: the island can follow the display you are using
+  (Settings), hanging from its top edge there; GNOME's own volume pop-up
+  shows on a display the island is not on.
+- **Privacy while sharing the screen**: alerts leave out what notifications
+  say, and the clipboard history stays hidden, while the screen is shared or
+  recorded.
+- Notifications keep their buttons ("Mark as read", "Join") on the alert and
+  in the list; critical ones and reminders wait until you are back at the
+  computer; right-clicking an alert puts it away.
+- A switch to another music player when two run, and lyrics online can be
+  turned off.
+- Settings: open on a click or after a chosen rest; each system alert on its
+  own; GNOME's own banners or calendar menu instead of the island's; the
+  assistant's shortcut; an About page with the version, help, a bug report
+  to copy and a reset of every setting.
+- The island says when a newer Isle is out (GitHub, at most once a day; can
+  be turned off), and warns, with a Restart button, when its service stops.
+- `isled --report` gathers what a bug report needs: versions, what works and
+  recent logs.
+- Packages: `.deb`, `.rpm` and an AUR `PKGBUILD`, each attested with build
+  provenance, besides the one-line install.
 
 ### Changed
 
+- **Speech recognition without Python.** The voice assistant now hears you
+  with `isle-whisper`, built on whisper.cpp: no Python environment, and about
+  a tenth of the space (the program 29 MB and the `small` model 265 MB,
+  instead of up to 3 GB). On an NVIDIA, AMD or Intel Arc graphics card it
+  runs through Vulkan, in about a second and with a third of the memory; on
+  the processor it is about half as fast as before. Integrated graphics are
+  not used (Intel UHD crashed). Updating moves a voice set up before over
+  by itself: the installer downloads the new model and deletes the old
+  Python environment and model (`isle-setup-voice --remove-old` does the
+  same by hand). `isled --doctor` shows the models and where speech runs.
+- **A calmer voice panel.** Light rises from the panel's edge and flows
+  along the bottom, instead of drifting blobs of colour; it follows your
+  voice, and your keys as you type. One round button sits at the end: the
+  keyboard, Stop while it works, and Send inside the field as you type. The
+  face's eyes read along as you type.
+- **The assistant checks its work.** An answer's own actions run before it
+  answers, so a step that failed is never answered as done: it tries
+  another way or says what did not work. Closing an app counts once its
+  windows are gone (one asking to save stays open, and you hear so). Out of
+  steps, it says where it got to. Slow steps (opening an app, starting a
+  player) get the time they need, and an answer in a code block or in plain
+  words is read alike from all three AIs.
+- Buttons in the island are translucent grey, as on macOS, and alerts take
+  the island's own colours: the Claude and ChatGPT plans their own, red when
+  nearly used up; reminders and Caps Lock neutral.
 - **Nothing of the assistant runs while you are not asking.** The AI quits
   as soon as a request is done (it used to stay ten minutes) and speech
   recognition once your words are text; both run at a lower priority, take
@@ -38,6 +88,16 @@ All notable changes to Isle are listed here. The format follows
   GitHub cannot be reached.
 - Uninstalling also removes speech recognition and Isle's caches, and lifts
   a battery charge limit Isle set.
+- The installer no longer turns other extensions off (Blur my Shell's top
+  bar blur, Hide Top Bar, other islands); it says which to turn off and how.
+- Sharing the selected text with the assistant is off by default, and the
+  spoken language is detected unless you pick one.
+- The clock follows GNOME's own (right after waking from suspend and on a
+  time-zone change), and times of day follow the 12/24-hour setting
+  everywhere.
+- `isled` keeps restarting after repeated crashes instead of giving up, and
+  can never gain privileges.
+- Building from source needs Rust 1.88 (1.92 with the shelf helper).
 
 ### Fixed
 
@@ -62,6 +122,24 @@ All notable changes to Isle are listed here. The format follows
   over the running one.
 - Plugging in at a battery charge limit no longer repeats the Charging and
   On Battery alerts.
+- **Nothing is lost behind a fullscreen window**: alerts, notifications and
+  reminders wait and show once it is gone, instead of being thrown away; a
+  burst of notifications comes as one; a notification counts as seen only
+  once it was on screen. Super+I and Super+V do nothing while the island is
+  hidden, so nothing listens unseen.
+- A login renewed by Codex or agy inside Isle goes back to your own CLI, so
+  neither is signed out.
+- Reading files in the shell (thumbnails, clipboard images, covers) no
+  longer blocks it.
+- A song's cover could stay blank after logging in, deleted with the last
+  session's covers as it was saved.
+- The AI Usage page of Settings had no icon on GNOME's own theme, and the
+  typed request's field took the theme's accent ring.
+
+### Security
+
+- Only GNOME Shell may read the clipboard history from Isle's service or
+  steer its assistant; other programs on the session bus are refused.
 
 ## [0.5.0] - 2026-10-22
 
@@ -406,8 +484,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.6.0...HEAD
-[0.6.0]: https://github.com/zickrian/isle/compare/v0.5.0...v0.6.0
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/zickrian/isle/compare/v0.5.0...v0.7.0
 [0.5.0]: https://github.com/zickrian/isle/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/zickrian/isle/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/zickrian/isle/compare/v0.3.0...v0.4.0

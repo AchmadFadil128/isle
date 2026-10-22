@@ -23,9 +23,12 @@ const INTERFACES = {
             <method name="Previous"/>
             <method name="SetPosition"><arg name="position_us" type="x" direction="in"/></method>
             <method name="Raise"/>
+            <method name="Choose"><arg name="name" type="s" direction="in"/></method>
+            <method name="SetLyrics"><arg name="enabled" type="b" direction="in"/></method>
             <property name="NowPlaying" type="s" access="read"/>
-            <property name="Lyrics" type="s" access="read"/>`),
-        properties: {NowPlaying: 'nowPlaying', Lyrics: 'lyrics'},
+            <property name="Lyrics" type="s" access="read"/>
+            <property name="Players" type="s" access="read"/>`),
+        properties: {NowPlaying: 'nowPlaying', Lyrics: 'lyrics', Players: 'players'},
     },
     pomodoro: {
         xml: node('Pomodoro1', `
@@ -100,6 +103,12 @@ const INTERFACES = {
             <property name="Usage" type="s" access="read"/>`),
         properties: {Usage: 'usage'},
     },
+    updates: {
+        xml: node('Updates1', `
+            <method name="SetEnabled"><arg name="enabled" type="b" direction="in"/></method>
+            <property name="Latest" type="s" access="read"/>`),
+        properties: {Latest: 'updates'},
+    },
     assistant: {
         xml: node('Assistant1', `
             <method name="Listen"><arg name="context" type="s" direction="in"/></method>
@@ -118,7 +127,8 @@ const INTERFACES = {
 // `system-event` (event): see `SystemEvent` in the daemon; `voice-level` (level): the mic, 0..1;
 // `usage-alert` (provider, window, percent, resets_at_ms): an AI plan limit nears its end;
 // `assistant-lost`: isled stopped or restarted, so a request in flight will not be answered;
-// `appeared` (name): interface `name` can be called now (isled started, or started again).
+// `appeared` (name): interface `name` can be called now (isled started, or started again);
+// `running-changed`: isled came or went (see `running`).
 export class Daemon extends Signals.EventEmitter {
     constructor() {
         super();
@@ -134,11 +144,22 @@ export class Daemon extends Signals.EventEmitter {
                 this.state[key] = null;
             this._connect(name, xml, properties);
         }
-        this._start();
+        /** Whether isled is on the bus. */
+        this.running = false;
+        this._nameWatch = Gio.bus_watch_name(Gio.BusType.SESSION, BUS_NAME, Gio.BusNameWatcherFlags.NONE,
+            () => this._setRunning(true), () => this._setRunning(false));
+        this.start();
     }
 
-    /** Starts isled through D-Bus activation if it is not running yet. */
-    _start() {
+    _setRunning(running) {
+        if (running === this.running)
+            return;
+        this.running = running;
+        this.emit('running-changed');
+    }
+
+    /** Starts isled through D-Bus activation if it is not running. */
+    start() {
         Gio.DBus.session.call(
             'org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus',
             'StartServiceByName', new GLib.Variant('(su)', [BUS_NAME, 0]), null,
@@ -154,10 +175,10 @@ export class Daemon extends Signals.EventEmitter {
     }
 
     _connect(name, xml, properties) {
-        const Proxy = Gio.DBusProxy.makeProxyWrapper(xml);
+        const DaemonProxy = Gio.DBusProxy.makeProxyWrapper(xml);
         // The proxy is created even while isled is not running, and picks up
         // its state whenever it appears (or restarts).
-        new Proxy(Gio.DBus.session, BUS_NAME, OBJECT_PATH, (proxy, error) => {
+        new DaemonProxy(Gio.DBus.session, BUS_NAME, OBJECT_PATH, (proxy, error) => {
             if (error) {
                 if (!error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
                     console.warn(`Isle: could not create the ${name} proxy: ${error.message}`);
@@ -253,6 +274,7 @@ export class Daemon extends Signals.EventEmitter {
         // Tell no one about changes made while tearing down.
         this.disconnectAll();
         this._cancellable.cancel();
+        Gio.bus_unwatch_name(this._nameWatch);
         for (const proxy of Object.values(this._proxies))
             proxy.run_dispose();
         this._proxies = {};

@@ -3,13 +3,20 @@ Description=Isle dynamic island service
 Documentation=file://%h/.local/share/doc/isle/README.md
 PartOf=graphical-session.target
 After=graphical-session.target
+# Never given up on for good: no start limit; a crash loop slows down instead (RestartSteps).
+StartLimitIntervalSec=0
 
 [Service]
 Type=dbus
 BusName=io.github.zickrian.isle.Daemon
 ExecStart=@BINDIR@/isled
 Restart=on-failure
+# 2 s after a crash at first, growing to one try a minute while it keeps crashing.
 RestartSec=2
+RestartSteps=8
+RestartMaxDelaySec=60
+# isled and what it runs (the AI CLIs, the speech helper) never gain privileges.
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=graphical-session.target

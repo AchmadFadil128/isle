@@ -238,13 +238,15 @@ class FilesView extends St.Widget {
         // St takes one type, so only PNGs go as pictures here; the helper converts the rest.
         if ((await this._thumbnails.get(item.uri))?.contentType === 'image/png') {
             try {
-                const bytes = await new Promise((resolve, reject) => file.load_bytes_async(null, (source, result) => {
-                    try {
-                        resolve(source.load_bytes_finish(result)[0]);
-                    } catch (e) {
-                        reject(e);
-                    }
-                }));
+                const bytes = await new Promise((resolve, reject) => {
+                    file.load_bytes_async(null, (source, result) => {
+                        try {
+                            resolve(source.load_bytes_finish(result)[0]);
+                        } catch (e) {
+                            reject(e);
+                        }
+                    });
+                });
                 clipboard.set_content(St.ClipboardType.CLIPBOARD, 'image/png', bytes);
                 return;
             } catch (e) {

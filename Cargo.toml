@@ -4,17 +4,22 @@ members = [
     "crates/isle-core",
     "crates/isle-daemon",
     "crates/isle-shelf",
+    "crates/isle-whisper",
 ]
-# isle-shelf needs the GTK 4 development files,
-# so they are only built when asked for: `cargo build -p isle-shelf`.
+# isle-shelf needs the GTK 4 development files, and isle-whisper cmake, a C++
+# compiler, libclang and (for the GPU) the Vulkan headers and glslc, so they
+# are only built when asked for: `cargo build -p isle-shelf -p isle-whisper`.
 default-members = ["crates/isle-core", "crates/isle-daemon"]
 
 [workspace.package]
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
-rust-version = "1.85"
+# isle-core and isled use let chains (1.88); isle-shelf sets its own, for gtk-rs.
+rust-version = "1.88"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/zickrian/isle"
+# Released as programs, not on crates.io.
+publish = false
 
 [workspace.dependencies]
 isle-core = { path = "crates/isle-core" }

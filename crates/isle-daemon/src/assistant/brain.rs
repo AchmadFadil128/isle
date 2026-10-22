@@ -206,6 +206,9 @@ pub struct Failure {
     pub error: String,
     pub hint: String,
     pub sign_in: bool,
+    /// Running isle-setup-voice with `model` would fix it (speech recognition, or its model, missing).
+    pub set_up: bool,
+    pub model: String,
 }
 
 impl From<(&str, &str)> for Failure {
@@ -214,6 +217,8 @@ impl From<(&str, &str)> for Failure {
             error: error.into(),
             hint: hint.into(),
             sign_in: false,
+            set_up: false,
+            model: String::new(),
         }
     }
 }
@@ -260,6 +265,8 @@ pub fn explain(provider: Provider, error: &str) -> Failure {
             error: format!("Sign in to {name}"),
             hint: "Sign in, then press Super+I again.".into(),
             sign_in: true,
+            set_up: false,
+            model: String::new(),
         };
     }
     if says(&[

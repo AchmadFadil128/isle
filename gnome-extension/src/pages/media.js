@@ -58,6 +58,7 @@ class MediaPage extends Page {
         fence(this);
 
         this.watch(['nowPlaying', 'lyrics'], () => this._update());
+        this.watch(['players'], () => this._syncPlayers());
         this._audioChanged = audio.connect('changed', () => this._updateAudio());
         this._update();
         this._updateAudio();
@@ -186,6 +187,15 @@ class MediaPage extends Page {
         texts.y_align = Clutter.ActorAlign.START;
         head.add_child(texts);
         const modes = new St.BoxLayout({style_class: 'isle-player-modes', y_align: Clutter.ActorAlign.START});
+        // With more than one player running: switch to the next, shown by its app's icon.
+        this._playerIcon = new St.Icon({icon_size: 16});
+        this._playerSwitch = new St.Button({style_class: 'isle-button isle-button-flat isle-player-switch', child: this._playerIcon,
+            can_focus: true, visible: false});
+        this._playerSwitch.connect('clicked', () => {
+            if (this._nextPlayer)
+                this.daemon.call('media', 'Choose', this._nextPlayer.name);
+        });
+        modes.add_child(this._playerSwitch);
         modes.add_child(this._modeButton('lyrics', 'isle-lyrics', 'Show lyrics', false));
         modes.add_child(this._modeButton('audio', 'isle-output', 'Volume and output', false));
         head.add_child(modes);
@@ -324,6 +334,18 @@ class MediaPage extends Page {
         this._lyricsPane.update();
         this._syncBars();
         this._tickProgress();
+    }
+
+    /** The switch to the next running player, after the one shown; hidden with only one. */
+    _syncPlayers() {
+        const players = this.daemon.state.players ?? [];
+        const index = players.findIndex(player => player.active);
+        this._nextPlayer = players.length > 1 ? players[(index + 1) % players.length] : null;
+        this._playerSwitch.visible = Boolean(this._nextPlayer);
+        if (!this._nextPlayer)
+            return;
+        this._playerIcon.gicon = Playback.playerApp(this._nextPlayer)?.get_icon() ?? icon('isle-music');
+        this._playerSwitch.accessible_name = `Switch to ${this._nextPlayer.identity}`;
     }
 
     /** Which app plays it, unless the cover already is that app's logo. */

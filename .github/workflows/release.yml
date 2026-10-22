@@ -1,8 +1,8 @@
 name: Release
 
-# Builds the ready-to-install package for a version tag (v1.2.3) and attaches
-# it to the tag's GitHub release, creating the release if needed. Run by hand,
-# it only builds the package as a workflow artifact.
+# Builds the ready-to-install packages for a version tag (v1.2.3): the tarball get.sh installs, a .deb
+# and an .rpm, each with a build provenance attestation, and attaches them to the tag's GitHub release,
+# creating the release if needed. Run by hand, it only builds them as a workflow artifact.
 
 on:
   push:
@@ -11,6 +11,9 @@ on:
 
 permissions:
   contents: write
+  # For the provenance attestations: `gh attestation verify <file> --repo zickrian/isle`.
+  id-token: write
+  attestations: write
 
 jobs:
   package:
@@ -26,15 +29,29 @@ jobs:
           grep -q "\"version-name\": \"$version\"" gnome-extension/metadata.json ||
             { echo "metadata.json is not at $version"; exit 1; }
           grep -q "^## \[$version\]" CHANGELOG.md || { echo "CHANGELOG.md has no $version"; exit 1; }
-      - name: Install GTK 4
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
+      # GTK 4 for isle-shelf, rpmbuild for the .rpm; cmake, libclang, the Vulkan headers and glslc for isle-whisper.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev rpm file cmake g++ clang libclang-dev libvulkan-dev glslc
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Package
-        id: package
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then version="${GITHUB_REF_NAME#v}"; else version=""; fi
-          echo "file=$(scripts/package.sh $version | tail -n1)" >> "$GITHUB_OUTPUT"
+          tarball="$(scripts/package.sh ${version:+"$version"} | tail -n1)"
+          scripts/package-system.sh "$tarball"
+          cd dist
+          for file in *.deb *.rpm; do sha256sum "$file" > "$file.sha256"; done
+          ls -l
+      - name: Attest build provenance
+        if: github.ref_type == 'tag'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
       - uses: actions/upload-artifact@v4
         with:
           name: isle-package
@@ -45,11 +62,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="$GITHUB_REF_NAME"
+          files=(dist/*.tar.gz dist/*.deb dist/*.rpm dist/*.sha256)
           # The version's own section of the changelog.
           awk -v v="${tag#v}" 'index($0, "## [" v "]") == 1 {on = 1; next} /^## \[/ {on = 0} on' CHANGELOG.md > notes.md
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" dist/*.tar.gz dist/*.sha256 --clobber
+            gh release upload "$tag" "${files[@]}" --clobber
           else
             # Made with its files in one go: get.sh never finds a release without them.
-            gh release create "$tag" dist/*.tar.gz dist/*.sha256 --title "Isle ${tag#v}" --notes-file notes.md
+            gh release create "$tag" "${files[@]}" --title "Isle ${tag#v}" --notes-file notes.md
           fi

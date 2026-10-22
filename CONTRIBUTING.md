@@ -35,9 +35,19 @@ Run these before sending a pull request (CI runs the same). They build
 cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-for f in gnome-extension/*.js gnome-extension/src/*.js gnome-extension/src/pages/*.js; do
-    node --experimental-default-type=module --check "$f"
-done
+npm ci && npx eslint                                  # the extension (eslint.config.mjs)
+shellcheck get.sh install.sh uninstall.sh scripts/*.sh scripts/isle-charge-limit scripts/ci/*.sh packaging/aur/update.sh
+cargo deny check                                      # advisories and licences (deny.toml)
+```
+
+CI also checks the code on the oldest Rust it supports (`rust-version` in
+`Cargo.toml`: 1.88 for isle-core and isled, 1.92 for isle-shelf), builds the
+release packages, and installs each into a headless GNOME Shell on Ubuntu
+24.04 and Fedora 42, failing on any `JS ERROR` or if `isled` never starts.
+Run that smoke test locally with Docker after `scripts/package.sh`:
+
+```sh
+docker run --rm -v "$PWD:/src:ro" ubuntu:24.04 /src/scripts/ci/smoke-test.sh /src/dist/isle-<version>-x86_64-linux.tar.gz
 ```
 
 ## Trying the extension without logging out
@@ -85,8 +95,13 @@ journalctl -f /usr/bin/gnome-shell | grep -i isle    # the extension
 2. Commit, then tag and push: `git tag -a v1.2.3 -m "Isle 1.2.3"` and
    `git push origin main v1.2.3`.
 3. The Release workflow builds `isle-1.2.3-x86_64-linux.tar.gz` with the
-   programs ready-built, and attaches it and its checksum to the tag's
-   GitHub release, which `get.sh` installs from. Edit the release notes
-   there.
+   programs ready-built, and from it `isle_1.2.3_amd64.deb` and
+   `isle-1.2.3-1.x86_64.rpm`, each with a build provenance attestation. It
+   attaches them and their checksums to the tag's GitHub release, which
+   `get.sh` installs from, with the changelog's section as the notes.
+4. Point the AUR package at the release: `packaging/aur/update.sh 1.2.3`,
+   then commit and push `PKGBUILD` and `.SRCINFO` to the AUR's `isle-bin`.
 
-`scripts/package.sh` builds the same package locally, in `dist/`.
+`scripts/package.sh` builds the tarball locally, in `dist/`, and
+`scripts/package-system.sh dist/isle-….tar.gz` the .deb and .rpm from it
+(it needs `dpkg-dev`, `rpm` and `file`).

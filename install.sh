@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds Isle (or takes the programs a release package ships ready-built, in
 # bin/) and installs it for the current user (no root needed):
-#   ~/.local/bin                              isled, isle-shelf
+#   ~/.local/bin                              isled, isle-shelf, isle-whisper
 #   ~/.local/share/gnome-shell/extensions     the GNOME Shell extension
 #   ~/.local/share/dbus-1/services            D-Bus activation files
 #   ~/.config/systemd/user                    isled.service
@@ -36,10 +36,12 @@ install_service() {
 }
 
 SHELF=0
+WHISPER=0
 if [ -x bin/isled ]; then
     # A release package: the programs come built.
     BUILT=bin
     [ -x bin/isle-shelf ] && SHELF=1
+    [ -x bin/isle-whisper ] && WHISPER=1
 else
     BUILT=target/release
     step "Building isled"
@@ -52,6 +54,25 @@ else
         echo "GTK 4 development files not found: skipping isle-shelf (drag and drop on the shelf)."
         echo "Install them with 'sudo apt install libgtk-4-dev' and run this script again."
     fi
+    # The voice assistant's speech recognition: whisper.cpp, built with cmake; Vulkan for the GPU.
+    if command -v cmake >/dev/null && command -v c++ >/dev/null; then
+        step "Building isle-whisper"
+        if command -v glslc >/dev/null && pkg-config --exists vulkan; then
+            FEATURES=()
+        else
+            echo "Vulkan headers or glslc not found: speech recognition will use the processor only."
+            echo "For the GPU: 'sudo apt install libvulkan-dev glslc', then run this script again."
+            FEATURES=(--no-default-features)
+        fi
+        if cargo build --release -p isle-whisper "${FEATURES[@]}"; then
+            WHISPER=1
+        else
+            echo "isle-whisper did not build (it needs libclang too: 'sudo apt install libclang-dev'); the voice assistant needs it."
+        fi
+    else
+        echo "cmake or a C++ compiler not found: skipping isle-whisper (the voice assistant's speech recognition)."
+        echo "Install them with 'sudo apt install cmake g++ libclang-dev' and run this script again."
+    fi
 fi
 
 step "Installing binaries to $BINDIR"
@@ -60,6 +81,9 @@ if [ "$SHELF" = 1 ]; then
     install -Dm755 "$BUILT/isle-shelf" "$BINDIR/isle-shelf"
     # A running helper is the old version; it starts again, updated, when needed.
     pkill -x isle-shelf 2>/dev/null || true
+fi
+if [ "$WHISPER" = 1 ]; then
+    install -Dm755 "$BUILT/isle-whisper" "$BINDIR/isle-whisper"
 fi
 
 step "Installing services"
@@ -73,8 +97,7 @@ if [ "$SHELF" = 1 ] || [ -x "$BINDIR/isle-shelf" ]; then
 fi
 install_service isled.service "$CONFIG/systemd/user"
 install -Dm644 README.md "$DATA/doc/isle/README.md"
-# The voice assistant: its speech helper, and `isle-setup-voice` to install speech recognition once.
-install -Dm755 data/isle-whisper.py "$DATA/isle/isle-whisper.py"
+# The voice assistant: `isle-setup-voice` downloads the speech model once.
 install -Dm755 scripts/setup-voice.sh "$BINDIR/isle-setup-voice"
 # Sets a lasting battery charge limit; the assistant types it into a terminal when asked.
 install -Dm755 scripts/isle-charge-limit "$BINDIR/isle-charge-limit"
@@ -114,6 +137,14 @@ if systemctl --user daemon-reload 2>/dev/null; then
         echo "isled did not start; see 'journalctl --user -u isled' (the island still works without it, minus its services)."
 fi
 
+# The voice assistant set up with an older Isle used Python (up to 3 GB): moved to isle-whisper,
+# with the model chosen then, and the old setup deleted. Offline, it stays for isle-setup-voice.
+if [ "$WHISPER" = 1 ] && { [ -d "$DATA/isle/voice-venv" ] || [ -f "$DATA/isle/isle-whisper.py" ]; }; then
+    step "Moving the voice assistant to the new speech recognition"
+    "$BINDIR/isle-setup-voice" --remove-old </dev/null ||
+        echo "That did not finish; run isle-setup-voice later (the voice assistant needs it)."
+fi
+
 # A running GNOME Shell on Wayland does not know a new extension until the
 # next login, so add it to the enabled list directly when enabling fails.
 if ! gnome-extensions enable "$UUID" 2>/dev/null; then
@@ -139,32 +170,46 @@ step "Setting up the top bar"
 gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle top-bar-style glass
 gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle compact-top-bar true
 gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle island-in-top-bar true
+fi
 
-# Settings of another extension, from its user or system install.
-other_settings() {
-    local uuid="$1"; shift
-    local dir
-    for dir in "$DATA/gnome-shell/extensions/$uuid/schemas" "/usr/share/gnome-shell/extensions/$uuid/schemas"; do
-        if [ -d "$dir" ]; then
-            gsettings --schemadir "$dir" "$@" 2>/dev/null
-            return
+# Other extensions are never changed; ones that fight with the island get a recommendation.
+ENABLED="$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null || true)"
+# Whether another extension is installed (for the user or system-wide) and turned on.
+extension_on() {
+    case "$ENABLED" in *"'$1'"*) ;; *) return 1 ;; esac
+    [ -d "$DATA/gnome-shell/extensions/$1" ] || [ -d "/usr/share/gnome-shell/extensions/$1" ]
+}
+RECOMMEND=()
+BLUR="blur-my-shell@aunetx"
+if extension_on "$BLUR"; then
+    # Its settings schema: in its own folder, else among the system's.
+    schema=()
+    blur_command="gsettings"
+    for dir in "$DATA/gnome-shell/extensions/$BLUR/schemas" "/usr/share/gnome-shell/extensions/$BLUR/schemas"; do
+        if [ -f "$dir/gschemas.compiled" ]; then
+            schema=(--schemadir "$dir")
+            blur_command="gsettings --schemadir $(printf '%q' "$dir")"
+            break
         fi
     done
-    return 1
-}
-# Blur my Shell's top bar blur also darkens it, and the glass bar has no
-# colour of its own.
-if [ "$(other_settings blur-my-shell@aunetx get org.gnome.shell.extensions.blur-my-shell.panel blur)" = "true" ]; then
-    other_settings blur-my-shell@aunetx set org.gnome.shell.extensions.blur-my-shell.panel blur false
-    echo "Turned off Blur my Shell's top bar blur; the rest of its blur is unchanged."
+    # Blur my Shell's top bar blur also darkens it, and the glass bar has no colour of its own.
+    if [ "$(gsettings "${schema[@]}" get org.gnome.shell.extensions.blur-my-shell.panel blur 2>/dev/null)" = true ]; then
+        RECOMMEND+=("Blur my Shell darkens the top bar behind the island. To blur only the rest, turn off
+    Blur my Shell → Panel → Blur, or run: $blur_command set org.gnome.shell.extensions.blur-my-shell.panel blur false")
+    fi
 fi
-# Extensions that take the same place in the top bar.
 for uuid in dynamic-island@bjagetic hidetopbar@mathieu.bidon.ca; do
-    if gnome-extensions info "$uuid" 2>/dev/null | grep -q "Enabled: Yes"; then
-        gnome-extensions disable "$uuid"
-        echo "Turned off $uuid, which would cover the island."
+    if extension_on "$uuid"; then
+        RECOMMEND+=("$uuid takes the same place in the top bar and covers the island. Turn it off in
+    the Extensions app, or run: gnome-extensions disable $uuid")
     fi
 done
+if [ "${#RECOMMEND[@]}" -gt 0 ]; then
+    step "Recommended (Isle changed nothing here)"
+    printf -- '- %s\n' "${RECOMMEND[@]}"
+fi
+if [ -d "/usr/share/gnome-shell/extensions/$UUID" ]; then
+    echo "Isle is also installed system-wide (a .deb, .rpm or AUR package): this install in your home folder takes precedence for you."
 fi
 
 if [ "$FIRST" = 1 ]; then

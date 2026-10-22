@@ -2,7 +2,8 @@
 # Packs a release with the programs ready-built, so installing needs no Rust:
 #   dist/isle-<version>-<arch>-linux.tar.gz and its .sha256
 # Usage: scripts/package.sh [version]   (default: the version in Cargo.toml)
-# Building isle-shelf needs the GTK 4 development files (libgtk-4-dev).
+# Building isle-shelf needs the GTK 4 development files (libgtk-4-dev), and isle-whisper cmake, a C++
+# compiler, libclang, the Vulkan headers and glslc (cmake g++ libclang-dev libvulkan-dev glslc).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -10,12 +11,12 @@ VERSION="${1:-$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)}"
 NAME="isle-$VERSION-$(uname -m)-linux"
 OUT="dist/$NAME"
 
-cargo build --release --locked -p isle-daemon -p isle-shelf
+cargo build --release --locked -p isle-daemon -p isle-shelf -p isle-whisper
 
 rm -rf "$OUT" "dist/$NAME.tar.gz" "dist/$NAME.tar.gz.sha256"
 mkdir -p "$OUT/bin"
-install -m755 target/release/isled target/release/isle-shelf "$OUT/bin/"
-strip "$OUT/bin/isled" "$OUT/bin/isle-shelf"
+install -m755 target/release/isled target/release/isle-shelf target/release/isle-whisper "$OUT/bin/"
+strip "$OUT/bin/isled" "$OUT/bin/isle-shelf" "$OUT/bin/isle-whisper"
 cp -r gnome-extension data install.sh uninstall.sh README.md LICENSE CHANGELOG.md "$OUT/"
 # What install.sh installs as commands: the voice set-up and the battery charge limit.
 mkdir -p "$OUT/scripts"

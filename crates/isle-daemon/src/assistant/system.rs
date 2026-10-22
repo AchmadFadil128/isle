@@ -98,7 +98,12 @@ fn battery() -> Vec<String> {
                     .to_lowercase()
             );
             let limit = path.join("charge_control_end_threshold");
-            let helper = dirs::home_dir().is_some_and(|home| home.join(".local/bin/isle-charge-limit").exists());
+            // From Isle's own install (~/.local/bin) or a system package (/usr/bin).
+            let helper = dirs::home_dir()
+                .map(|home| home.join(".local/bin"))
+                .into_iter()
+                .chain(std::env::var_os("PATH").iter().flat_map(std::env::split_paths))
+                .any(|dir| dir.join("isle-charge-limit").is_file());
             match read(&limit) {
                 // The helper keeps it after a restart, which writing the file alone does not.
                 Some(value) if helper => line.push_str(&format!(

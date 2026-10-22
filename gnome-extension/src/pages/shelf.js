@@ -329,9 +329,18 @@ export const ShelfPage = GObject.registerClass({
         this.emit('tint-changed');
     }
 
+    /** While the screen is shared or recorded, the clipboard history stays out of sight. */
+    set sharing(sharing) {
+        if (sharing === Boolean(this._sharing))
+            return;
+        this._sharing = sharing;
+        this._updateClips();
+        this.markCold();
+    }
+
     _updateClips() {
         const off = !this._settings.get_boolean('clipboard-history');
-        this._clips.update({off});
+        this._clips.update({off, hidden: Boolean(this._sharing)});
         const unpinned = (this.daemon.state.clipboard ?? []).some(item => !item.pinned);
         setEnabled(this._clear, unpinned);
     }

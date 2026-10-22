@@ -5,6 +5,7 @@
 
 mod assistant;
 mod calendar;
+mod caller;
 mod clipboard;
 mod clock;
 mod media;
@@ -14,6 +15,7 @@ mod shelf;
 mod store;
 mod system;
 mod todo;
+mod updates;
 mod usage;
 
 use anyhow::{Context, bail};
@@ -31,6 +33,7 @@ use crate::reminders::RemindersService;
 use crate::shelf::ShelfService;
 use crate::system::SystemService;
 use crate::todo::TodoService;
+use crate::updates::UpdatesService;
 use crate::usage::UsageService;
 
 const BUS_NAME: &str = "io.github.zickrian.isle.Daemon";
@@ -40,9 +43,10 @@ const CACHED_SONGS: usize = 500;
 
 const HELP: &str = "isled: the Isle background service (started by systemd or D-Bus, not by hand)
 
-Usage: isled [--version | --doctor | --help]
+Usage: isled [--version | --doctor | --report | --help]
   --version  print the version
   --doctor   check the service, speech recognition and each AI's install and sign-in
+  --report   everything a bug report needs: versions, the doctor's check and recent logs
   --help     print this";
 
 #[tokio::main(flavor = "current_thread")]
@@ -59,6 +63,10 @@ async fn main() -> anyhow::Result<()> {
         }
         Some("--doctor") => {
             doctor().await;
+            return Ok(());
+        }
+        Some("--report") => {
+            report().await;
             return Ok(());
         }
         Some(other) => bail!("unknown option {other}; see isled --help"),
@@ -85,6 +93,7 @@ async fn main() -> anyhow::Result<()> {
     });
     let (assistant, assistant_commands) = AssistantService::new();
     let (usage, usage_refresh) = UsageService::new();
+    let (updates, updates_wake) = UpdatesService::new();
     let session = connection::Builder::session()?
         .serve_at(OBJECT_PATH, MediaService::default())?
         .serve_at(OBJECT_PATH, PomodoroService::load())?
@@ -96,6 +105,7 @@ async fn main() -> anyhow::Result<()> {
         .serve_at(OBJECT_PATH, SystemService::default())?
         .serve_at(OBJECT_PATH, assistant)?
         .serve_at(OBJECT_PATH, usage)?
+        .serve_at(OBJECT_PATH, updates)?
         .build()
         .await
         .context("could not connect to the session bus")?;
@@ -108,6 +118,8 @@ async fn main() -> anyhow::Result<()> {
     let assistant = server.interface::<_, AssistantService>(OBJECT_PATH).await?;
     let usage = server.interface::<_, UsageService>(OBJECT_PATH).await?;
     tokio::spawn(usage::run(usage, usage_refresh));
+    let updates = server.interface::<_, UpdatesService>(OBJECT_PATH).await?;
+    tokio::spawn(updates::run(updates, updates_wake));
     let own_data = assistant::Sources {
         todo: todo.clone(),
         calendar: server.interface::<_, CalendarService>(OBJECT_PATH).await?,
@@ -184,4 +196,81 @@ async fn doctor() {
         }
     );
     println!("Voice assistant:\n{}", assistant::report());
+}
+
+/// `isled --report`: what a bug report needs, to paste whole; it holds no clipboard, tasks or chats.
+/// Printed as it goes; a reader that stops early (`| head`) just ends it.
+async fn report() {
+    // Rust's println! panics on a closed pipe; quitting quietly is what a shell tool does.
+    // SAFETY: restores SIGPIPE's default disposition; no handler of ours is involved.
+    unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
+    let run = |program: &str, args: &[&str]| -> String {
+        std::process::Command::new(program)
+            .args(args)
+            .output()
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+            .unwrap_or_else(|err| format!("({program} failed: {err})"))
+    };
+    let env = |name: &str| std::env::var(name).unwrap_or_else(|_| "(unset)".into());
+    let distro = std::fs::read_to_string("/etc/os-release")
+        .ok()
+        .and_then(|text| {
+            text.lines()
+                .find_map(|line| line.strip_prefix("PRETTY_NAME="))
+                .map(|name| name.trim_matches('"').to_owned())
+        })
+        .unwrap_or_default();
+    println!("## Isle report\n");
+    println!("- isled: {}", env!("CARGO_PKG_VERSION"));
+    println!("- {}", run("gnome-shell", &["--version"]));
+    println!("- System: {distro} ({})", run("uname", &["-m"]));
+    println!(
+        "- Session: {} on {}",
+        env("XDG_SESSION_TYPE"),
+        env("XDG_CURRENT_DESKTOP")
+    );
+    println!(
+        "\n### Extension\n\n```\n{}\n```",
+        run("gnome-extensions", &["info", "isle@zickrian.github.io"])
+    );
+    println!("\n### Doctor\n\n```");
+    doctor().await;
+    println!("```");
+    println!(
+        "\n### isled's log\n\n```\n{}\n```",
+        run(
+            "journalctl",
+            &[
+                "--user",
+                "-u",
+                "isled",
+                "-n",
+                "60",
+                "--no-pager",
+                "-o",
+                "cat"
+            ]
+        )
+    );
+    let shell_log = run(
+        "journalctl",
+        &[
+            "-b",
+            "-n",
+            "4000",
+            "--no-pager",
+            "-o",
+            "cat",
+            "/usr/bin/gnome-shell",
+        ],
+    );
+    let isle_lines: Vec<&str> = shell_log
+        .lines()
+        .filter(|line| line.contains("Isle") || line.contains("isle@zickrian"))
+        .collect();
+    let recent = &isle_lines[isle_lines.len().saturating_sub(40)..];
+    println!(
+        "\n### GNOME Shell's log about Isle\n\n```\n{}\n```",
+        recent.join("\n")
+    );
 }

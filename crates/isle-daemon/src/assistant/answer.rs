@@ -33,6 +33,9 @@ pub struct Answer {
     /// The tools isled ran for this answer, in order (see agent.rs).
     #[serde(skip)]
     pub tools: Vec<String>,
+    /// Its actions already ran and worked, but those left for once the island closes (see agent.rs).
+    #[serde(skip)]
+    pub checked: bool,
 }
 
 impl Answer {
@@ -44,10 +47,38 @@ impl Answer {
             listen: false,
             done: true,
             tools: Vec::new(),
+            checked: false,
         }
     }
 }
 
 fn yes() -> bool {
     true
+}
+
+/// The answer in `text`: its JSON, also inside a ```json fence, else the text as said, without actions.
+pub fn from_text(text: &str) -> Answer {
+    let text = text.trim();
+    let inner = text
+        .strip_prefix("```json")
+        .or_else(|| text.strip_prefix("```"))
+        .and_then(|rest| rest.trim_end().strip_suffix("```"))
+        .map_or(text, str::trim);
+    serde_json::from_str(inner).unwrap_or_else(|_| Answer::plain(text))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_an_answer_however_it_is_wrapped() {
+        let json = r#"{"say": "Opened", "actions": [{"type": "open_app", "app": "Files"}]}"#;
+        assert_eq!(from_text(json).actions.len(), 1);
+        assert_eq!(from_text(&format!("```json\n{json}\n```")).actions.len(), 1);
+        assert_eq!(from_text(&format!("```\n{json}\n```")).say, "Opened");
+        let plain = from_text("  Sure, it is 3 pm.  ");
+        assert_eq!(plain.say, "Sure, it is 3 pm.");
+        assert!(plain.actions.is_empty() && plain.done);
+    }
 }

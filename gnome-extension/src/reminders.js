@@ -9,7 +9,7 @@ import GLib from 'gi://GLib';
 const MAX_NAP_MS = 30 * 1000;
 
 export class ReminderWatcher {
-    /** `onDue({id, text})` shows a reminder that is due. */
+    /** `onDue({id, text}, done)` shows a reminder that is due, and calls `done` once it was on screen. */
     constructor(daemon, onDue) {
         this._daemon = daemon;
         this._onDue = onDue;
@@ -36,8 +36,8 @@ export class ReminderWatcher {
             if (item.due_ms > now || this._shown.has(item.id))
                 continue;
             this._shown.add(item.id);
-            this._onDue(item);
-            this._daemon.call('reminders', 'Dismiss', item.id);
+            // isled keeps it until it was really shown (the island may be hidden by a fullscreen window).
+            this._onDue(item, () => this._daemon.call('reminders', 'Dismiss', item.id));
         }
         const next = items.find(item => item.due_ms > now);
         if (!next)

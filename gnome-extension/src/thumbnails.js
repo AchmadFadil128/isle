@@ -8,6 +8,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {typeColor, vividColor} from './colors.js';
+import {forEachChild} from './widgets.js';
 
 /** Previews are cut at this many pixels a side: twice the tile's, for HiDPI. */
 const PIXELS = 104;
@@ -57,17 +58,10 @@ export class Thumbnails {
                 this._loads.delete(uri);
         }
         const keep = new Set(uris.map(uri => this._previewName(uri)));
-        let children;
-        try {
-            children = Gio.File.new_for_path(this._dir).enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
-        } catch {
-            return; // no previews yet
-        }
-        for (const info of children) {
+        forEachChild(this._dir, (child, info) => {
             if (!keep.has(info.get_name()))
-                children.get_child(info).delete_async(GLib.PRIORITY_LOW, null, null);
-        }
-        children.close(null);
+                child.delete_async(GLib.PRIORITY_LOW, null, null);
+        }, this._cancellable);
     }
 
     destroy() {

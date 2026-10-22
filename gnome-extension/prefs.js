@@ -4,6 +4,7 @@
 // focus timer durations (stored by isled, edited over D-Bus).
 
 import Adw from 'gi://Adw';
+import Gdk from 'gi://Gdk';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
@@ -28,11 +29,48 @@ export default class IslePreferences extends ExtensionPreferences {
         window.add(this._timerPage(settings, window));
         window.add(this._voicePage(settings));
         window.add(this._usagePage(settings));
+        window.add(this._aboutPage(settings, window));
+    }
+
+    // The version, where to get help, a bug report to paste, and a way back to the defaults.
+    _aboutPage(settings, window) {
+        const page = new Adw.PreferencesPage({title: 'About', icon_name: 'help-about-symbolic'});
+        const about = new Adw.PreferencesGroup({title: `Isle ${this.metadata['version-name'] ?? ''}`.trim(),
+            description: 'A dynamic island for GNOME. Free software under the GPL.'});
+        const link = (title, subtitle, url) => {
+            const row = new Adw.ActionRow({title, subtitle, activatable: true});
+            row.add_suffix(new Gtk.Image({icon_name: 'adw-external-link-symbolic'}));
+            row.connect('activated', () => new Gtk.UriLauncher({uri: url}).launch(window, null, null));
+            return row;
+        };
+        about.add(link('Website', 'Features, installing and updating', 'https://github.com/zickrian/isle'));
+        about.add(link('Report a problem', 'On GitHub; paste the report below in it', 'https://github.com/zickrian/isle/issues/new/choose'));
+        const report = new Adw.ActionRow({title: 'Copy a bug report', subtitle: 'Versions, a check of what works, and recent logs (isled --report)',
+            activatable: true});
+        report.add_suffix(new Gtk.Image({icon_name: 'edit-copy-symbolic'}));
+        report.connect('activated', () => copyReport(window, report));
+        about.add(report);
+        page.add(about);
+
+        const reset = new Adw.PreferencesGroup({title: 'Settings'});
+        const resetRow = new Adw.ActionRow({title: 'Reset all settings', subtitle: 'Back to how Isle came; your data stays',
+            activatable: true});
+        resetRow.connect('activated', () => confirm(window, {
+            heading: 'Reset all of Isle’s settings?',
+            body: 'Every option goes back to its default. Your tasks, events, clipboard history and files stay.',
+            action: 'Reset',
+        }, () => {
+            for (const key of settings.settings_schema.list_keys())
+                settings.reset(key);
+        }));
+        reset.add(resetRow);
+        page.add(reset);
+        return page;
     }
 
     // AI plan usage: only the providers signed in on this computer are listed.
     _usagePage(settings) {
-        const page = new Adw.PreferencesPage({title: 'AI Usage', icon_name: 'speedometer-symbolic'});
+        const page = new Adw.PreferencesPage({title: 'AI Usage', icon_name: 'power-profile-performance-symbolic'});
         const found = usageProviders();
         const group = new Adw.PreferencesGroup({
             title: 'AI Usage',
@@ -46,6 +84,15 @@ export default class IslePreferences extends ExtensionPreferences {
         const rows = found.map(({key, title, subtitle}) => switchRow(settings, key, title, subtitle));
         const warn = spinRow(settings, 'usage-warn', 'Warn at', 'Share of a limit, in %', 50, 99);
         const critical = spinRow(settings, 'usage-critical', 'Warn again at', 'Share of a limit, in %', 50, 100);
+        // The second warning never comes before the first.
+        settings.connect('changed::usage-warn', () => {
+            if (settings.get_int('usage-critical') < settings.get_int('usage-warn'))
+                settings.set_int('usage-critical', settings.get_int('usage-warn'));
+        });
+        settings.connect('changed::usage-critical', () => {
+            if (settings.get_int('usage-critical') < settings.get_int('usage-warn'))
+                settings.set_int('usage-warn', settings.get_int('usage-critical'));
+        });
         for (const row of found.length ? [...rows, warn, critical] : []) {
             settings.bind('usage-enabled', row, 'sensitive', Gio.SettingsBindFlags.GET);
             group.add(row);
@@ -60,11 +107,12 @@ export default class IslePreferences extends ExtensionPreferences {
         const installed = AI_PROVIDERS.filter(provider => findProgram(provider.command));
         const group = new Adw.PreferencesGroup({
             title: 'Voice Assistant',
-            description: 'Press Super+I (or the mic in the open island) and speak. Speech is recognised on this ' +
+            description: 'Press the shortcut (or the mic in the open island) and speak. Speech is recognised on this ' +
                 'computer (set up once with isle-setup-voice in a terminal); the request goes to the AI you pick, with your ' +
                 'own sign-in and plan.',
         });
-        group.add(switchRow(settings, 'voice-assistant', 'Voice assistant', 'Super+I and the mic in the open island'));
+        group.add(switchRow(settings, 'voice-assistant', 'Voice assistant', 'The shortcut and the mic in the open island'));
+        group.add(shortcutRow(settings, 'voice-shortcut', 'Shortcut', 'Opens the assistant and listens'));
 
         // Only the AIs installed here are offered; with none, the assistant says how to get one.
         const provider = choiceRow(settings, 'voice-provider', 'AI', installed.length
@@ -114,16 +162,16 @@ export default class IslePreferences extends ExtensionPreferences {
         syncModel();
 
         const options = [provider, model];
-        options.push(choiceRow(settings, 'voice-speech-model', 'Speech recognition', 'Bigger is more accurate, and slower', [
-            ['base', 'Base'],
-            ['small', 'Small'],
-            ['medium', 'Medium'],
+        options.push(choiceRow(settings, 'voice-speech-model', 'Speech recognition', 'Bigger is more accurate, and slower; downloaded once', [
+            ['base', 'Base (82 MB)'],
+            ['small', 'Small (265 MB)'],
+            ['medium', 'Medium (823 MB)'],
         ]));
         options.push(choiceRow(settings, 'voice-language', 'Language', 'The language you speak', [
+            ['', 'Any (detected)'],
             ['id,en', 'Indonesian or English'],
             ['id', 'Indonesian'],
             ['en', 'English'],
-            ['', 'Detect'],
         ]));
         options.push(switchRow(settings, 'voice-use-selection', 'Use selected text',
             'Send the text you have selected, so the AI can work on it; never from terminals or password managers'));
@@ -186,14 +234,41 @@ export default class IslePreferences extends ExtensionPreferences {
         const depth = spinRow(settings, 'notch-depth', 'Island height', 'How far the closed island hangs below the top bar, in pixels', 24, 40);
         settings.bind('island-in-top-bar', depth, 'sensitive', Gio.SettingsBindFlags.GET | Gio.SettingsBindFlags.INVERT_BOOLEAN);
         look.add(depth);
+        look.add(choiceRow(settings, 'island-monitor', 'Display', 'With more than one display, where the island is', [
+            ['primary', 'Main display'],
+            ['active', 'Display in use'],
+        ]));
+        look.add(choiceRow(settings, 'open-on', 'Open', 'How the closed island opens', [
+            ['hover', 'On hover'],
+            ['click', 'On click'],
+        ]));
+        const delay = Adw.SpinRow.new_with_range(60, 1000, 20);
+        delay.title = 'Rest before opening';
+        delay.subtitle = 'In milliseconds';
+        settings.bind('hover-delay', delay, 'value', Gio.SettingsBindFlags.DEFAULT);
+        const byHover = () => (delay.sensitive = settings.get_string('open-on') === 'hover');
+        settings.connect('changed::open-on', byHover);
+        byHover();
+        look.add(delay);
         page.add(look);
 
         const alerts = new Adw.PreferencesGroup({title: 'Alerts'});
         alerts.add(switchRow(settings, 'replace-osd', 'Volume and brightness', 'Show them in the island instead of the centre of the screen'));
-        alerts.add(switchRow(settings, 'system-alerts', 'Charging, network and Bluetooth', 'Also Caps Lock'));
+        alerts.add(switchRow(settings, 'alert-power', 'Charging and battery', 'Plugged in, unplugged, full and low'));
+        alerts.add(switchRow(settings, 'alert-network', 'Network', 'When the connection drops'));
+        alerts.add(switchRow(settings, 'alert-bluetooth', 'Bluetooth', 'Devices connecting, with their battery'));
+        alerts.add(switchRow(settings, 'alert-caps-lock', 'Caps Lock', 'When it turns on or off'));
+        alerts.add(switchRow(settings, 'gnome-banners', 'GNOME’s notification banners',
+            'Show notifications as GNOME does instead of in the island'));
+        alerts.add(choiceRow(settings, 'super-v', 'Super+V', 'GNOME’s calendar shortcut', [
+            ['isle', 'Isle’s clipboard history'],
+            ['gnome', 'GNOME’s calendar and notifications'],
+        ]));
         alerts.add(switchRow(settings, 'privacy-indicators', 'Privacy indicators', 'Dots when the camera, microphone or screen sharing is in use'));
         alerts.add(switchRow(settings, 'track-peek', 'New song', 'Briefly show the song when the track changes'));
-        alerts.add(switchRow(settings, 'chimes', 'Sounds', 'Chime when a focus session or break ends'));
+        alerts.add(switchRow(settings, 'lyrics-online', 'Lyrics', 'Look up the playing song’s lyrics on LRCLIB'));
+        alerts.add(switchRow(settings, 'chimes', 'Sounds', 'Chime when a focus session or break ends, and for reminders'));
+        alerts.add(switchRow(settings, 'check-updates', 'New versions', 'Say when a newer Isle is out (asks GitHub once a day)'));
         page.add(alerts);
 
         const calls = new Adw.PreferencesGroup({
@@ -419,23 +494,90 @@ function spinRow(settings, key, title, subtitle, min, max) {
     return row;
 }
 
+/** A row showing `key`'s shortcut; clicking it records a new one. */
+function shortcutRow(settings, key, title, subtitle) {
+    const row = new Adw.ActionRow({title, subtitle, activatable: true});
+    const shown = new Gtk.ShortcutLabel({disabled_text: 'Off', valign: Gtk.Align.CENTER});
+    const sync = () => (shown.accelerator = settings.get_strv(key)[0] ?? '');
+    settings.connect(`changed::${key}`, sync);
+    sync();
+    row.add_suffix(shown);
+    row.connect('activated', () => recordShortcut(row.get_root(), accelerator =>
+        settings.set_strv(key, accelerator ? [accelerator] : [])));
+    return row;
+}
+
+/** Waits for a key combination with a modifier, then hands it to `done`; Esc cancels, Backspace clears it. */
+function recordShortcut(window, done) {
+    const dialog = new Adw.Window({transient_for: window, modal: true, title: 'Shortcut', default_width: 420, default_height: 240});
+    dialog.set_content(new Adw.StatusPage({
+        title: 'Press the new shortcut',
+        description: 'With Super, Ctrl or Alt. Esc cancels; Backspace turns it off.',
+        icon_name: 'preferences-desktop-keyboard-shortcuts-symbolic',
+    }));
+    const keys = new Gtk.EventControllerKey();
+    keys.connect('key-pressed', (_keys, keyval, keycode, state) => {
+        const modifiers = state & Gtk.accelerator_get_default_mod_mask();
+        if (!modifiers && keyval === Gdk.KEY_Escape) {
+            dialog.close();
+        } else if (!modifiers && keyval === Gdk.KEY_BackSpace) {
+            done('');
+            dialog.close();
+        } else if (modifiers && Gtk.accelerator_valid(keyval, modifiers)) {
+            done(Gtk.accelerator_name_with_keycode(null, keyval, keycode, modifiers));
+            dialog.close();
+        }
+        return Gdk.EVENT_STOP;
+    });
+    dialog.add_controller(keys);
+    dialog.present();
+}
+
 /** Asks, then clears everything but pinned items from the clipboard history. */
 function confirmClear(window) {
-    const dialog = new Adw.MessageDialog({
-        transient_for: window,
+    confirm(window, {
         heading: 'Clear clipboard history?',
         body: 'Everything you copied is removed. Pinned items stay.',
-    });
+        action: 'Clear',
+    }, () => Gio.DBus.session.call(DAEMON, DAEMON_PATH, CLIPBOARD_INTERFACE, 'Clear', null, null,
+        Gio.DBusCallFlags.NONE, -1, null, null));
+}
+
+/** Asks `heading` (with `body`) and runs `onYes` if the user picks `action`, a destructive one. */
+function confirm(window, {heading, body, action}, onYes) {
+    // AlertDialog since libadwaita 1.5 (GNOME 46); MessageDialog is its deprecated forerunner.
+    const dialog = Adw.AlertDialog ? new Adw.AlertDialog({heading, body})
+        : new Adw.MessageDialog({transient_for: window, heading, body});
     dialog.add_response('cancel', 'Cancel');
-    dialog.add_response('clear', 'Clear');
-    dialog.set_response_appearance('clear', Adw.ResponseAppearance.DESTRUCTIVE);
+    dialog.add_response('yes', action);
+    dialog.set_response_appearance('yes', Adw.ResponseAppearance.DESTRUCTIVE);
     dialog.connect('response', (_dialog, response) => {
-        if (response !== 'clear')
-            return;
-        Gio.DBus.session.call(DAEMON, DAEMON_PATH, CLIPBOARD_INTERFACE, 'Clear', null, null,
-            Gio.DBusCallFlags.NONE, -1, null, null);
+        if (response === 'yes')
+            onYes();
     });
-    dialog.present();
+    if (Adw.AlertDialog)
+        dialog.present(window);
+    else
+        dialog.present();
+}
+
+/** Runs `isled --report` and puts what it says on the clipboard, saying so on `row`. */
+function copyReport(window, row) {
+    const isled = findProgram('isled');
+    if (!isled) {
+        row.subtitle = 'isled was not found; is Isle installed?';
+        return;
+    }
+    const process = Gio.Subprocess.new([isled, '--report'], Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE);
+    process.communicate_utf8_async(null, null, (_process, result) => {
+        try {
+            const [, output] = process.communicate_utf8_finish(result);
+            window.get_display().get_clipboard().set(output);
+            row.subtitle = 'Copied: paste it into the report on GitHub';
+        } catch (e) {
+            row.subtitle = `Could not make the report: ${e.message}`;
+        }
+    });
 }
 
 /** Lists the ignored apps, each with a remove button, and a search to add one. */

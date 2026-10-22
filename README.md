@@ -10,7 +10,7 @@ with the AI you already use, living in a notch at the top of your screen.
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 ![GNOME Shell 46–51](https://img.shields.io/badge/GNOME%20Shell-46%E2%80%9351-4a86cf.svg)
-![Rust 1.85+](https://img.shields.io/badge/Rust-1.85%2B-orange.svg)
+![Rust 1.92+](https://img.shields.io/badge/Rust-1.92%2B-orange.svg)
 
 <img src="docs/images/demo.webp" alt="Isle demo on a GNOME desktop: music with lyrics, notifications, calendar, focus timer and clipboard shelf" width="800">
 
@@ -33,7 +33,7 @@ appear in the same place instead of in the middle of the screen.
 - [Voice assistant](#voice-assistant)
 - [AI usage](#ai-usage)
 - [Resource usage](#resource-usage)
-- [Privacy](#privacy)
+- [Data & network](#data--network)
 - [Troubleshooting](#troubleshooting)
 - [Uninstalling](#uninstalling)
 - [How it works](#how-it-works)
@@ -64,7 +64,7 @@ your windows uncovered.
   Debian 13, …), on a 64-bit Intel or AMD PC (x86_64). Check with
   `gnome-shell --version`.
 - `curl`, which most systems have. Install as yourself, not with `sudo`.
-- For the voice assistant (optional): a microphone, Python 3 with venv, and
+- For the voice assistant (optional): a microphone and
   one of Claude Code, Codex or Antigravity signed in (Codex and the npm
   install of Claude Code need Node.js 18 or newer); see
   [Voice assistant](#voice-assistant).
@@ -90,14 +90,36 @@ updating, uninstalling, installing offline and what to do if the island does
 not appear.
 
 > [!NOTE]
-> The installer turns off settings and extensions that would fight with the
-> island: Blur my Shell's top bar blur (the rest of its blur stays), and
-> extensions that take the same place in the top bar. Isle's look is the
-> same on every desktop: a slim top bar with no colour of its own, and the
-> island as a black notch.
+> The installer never changes other extensions. When one would fight with
+> the island (Blur my Shell's top bar blur, or an extension that takes the
+> same place in the top bar), it says so and how to turn that off. Isle's
+> look is the same on every desktop: a slim top bar with no colour of its
+> own, and the island as a black notch.
+
+### Other ways to install
+
+**Ubuntu and Debian (.deb), Fedora (.rpm).** Each
+[release](../../releases) also has a system-wide package, for every user of
+the computer. Install it, then turn the extension on once as each user and
+log out and back in:
+
+```sh
+sudo apt install ./isle_*_amd64.deb        # Ubuntu 24.04 and newer, Debian 13
+sudo dnf install ./isle-*.x86_64.rpm       # Fedora 40 and newer
+gnome-extensions enable isle@zickrian.github.io
+```
+
+**Arch Linux.** [`packaging/aur`](packaging/aur) has a `PKGBUILD` for
+`isle-bin`, made from the release tarball: run `makepkg -si` in that folder.
+
+A copy installed with the command above, in your home folder, takes
+precedence over a system-wide package; `isle-uninstall` removes it and the
+package's takes over. Releases can be checked with
+`gh attestation verify <file> --repo zickrian/isle` (see
+[SECURITY.md](SECURITY.md#verifying-a-release)).
 
 <details>
-<summary><b>Other ways to install</b></summary>
+<summary><b>From the release tarball, or from source</b></summary>
 
 **From a release package.** Download `isle-<version>-x86_64-linux.tar.gz`
 from [Releases](../../releases), then:
@@ -108,12 +130,15 @@ cd isle-*-x86_64-linux
 ./install.sh
 ```
 
-**From source**, for development or other architectures. You need Rust 1.85
-or newer ([rustup](https://rustup.rs); Ubuntu 24.04's own `cargo` is too
-old) and, for the shelf's drag and drop, the GTK 4 development files:
+**From source**, for development or other architectures. You need Rust 1.92
+or newer (1.88 without the shelf helper) ([rustup](https://rustup.rs); Ubuntu 24.04's own `cargo` is too
+old), for the shelf's drag and drop the GTK 4 development files, and for the
+voice assistant's speech recognition (whisper.cpp) cmake, libclang, and for
+the GPU the Vulkan headers and glslc:
 
 ```sh
-sudo apt install git build-essential pkg-config libgtk-4-dev   # Fedora: git gcc pkgconf gtk4-devel
+sudo apt install git build-essential pkg-config libgtk-4-dev cmake libclang-dev libvulkan-dev glslc
+# Fedora: git gcc-c++ pkgconf gtk4-devel cmake clang-devel vulkan-loader-devel glslc
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 git clone https://github.com/zickrian/isle.git
 cd isle
@@ -126,36 +151,53 @@ cd isle
 
 | Do this | To |
 |---|---|
-| Rest the pointer on the notch | Open the island |
+| Rest the pointer on the notch | Open the island (or click it, if Settings say so) |
 | Click a tab, or swipe sideways with two fingers | Switch pages |
 | Move the pointer away, or press Esc | Close it |
 | Click the notch | Open it now; on an alert, open what it is about |
 | Middle-click the notch | Play or pause |
-| Right-click the notch | Bring the call, or else the music player, to the front |
+| Right-click the notch | Put an alert away; else bring the call, or the music player, to the front |
 | Super+V | Open the clipboard history with search ready; Enter pastes |
 | Drag a file towards the notch | Open the files tray to drop it |
-| Super+I | Ask the voice assistant; press again to finish speaking, or after an answer to ask more |
+| Super+I | Ask the voice assistant; press again to finish speaking, or after an answer to ask more. Start typing (or click the keyboard) to type the request instead |
 
 The island reopens on the page you picked last (for five minutes), or on
-what is live: a call, unseen notifications, music, a running timer.
+what is live: a call, unseen notifications, music, a running timer. With two
+music players running, the music page shows the other one's icon to switch
+to it.
+
+While a window is fullscreen (a video, a game), the island stays out of the
+way: alerts, notifications and reminders wait and show once it is gone, and
+a burst of notifications comes as one ("6 new notifications"), each still
+unread in the list. A reminder stays until you are back at the computer.
+While you share or record the screen, alerts leave out what notifications
+say, and the clipboard history stays hidden. If Isle's background service
+stops, a warning shows in the closed island; click it to start it again.
 
 ## Settings
 
 Click the gear right of the clock in the open island (or Isle's gear in the
 **Extensions** app):
 
-- **Top bar:** glass (default), black, or your theme's colour; the closed
-  island inside the bar or hanging below it.
-- **Alerts:** volume and brightness, battery and network, privacy dots, new
-  songs, timer sounds.
+- **Island:** glass (default), black, or your theme's colour for the top bar;
+  the closed island inside the bar or hanging below it; with more than one
+  display, on the main one or the one you are using; opening when the
+  pointer rests on it (and for how long) or only on a click.
+- **Alerts:** volume and brightness; charging, network, Bluetooth and Caps
+  Lock, each on its own; privacy dots, new songs, sounds; GNOME's own
+  notification banners instead of the island's; what Super+V opens (the
+  clipboard history, or GNOME's calendar); lyrics online; new versions.
+  Alerts other than a low battery wait while Do Not Disturb is on.
 - **Calls:** show calls in the island, and the live preview of the call.
 - **Clipboard:** turn the history on or off, clear it, and choose apps whose
   copies are never kept (password managers are on the list from the start).
 - **Focus timer:** session and break lengths, Do Not Disturb while focusing.
-- **Voice:** the assistant on or off, which AI answers and with which model,
-  speech recognition, language, and whether it may use the text you selected
-  or read your notifications.
+- **Voice:** the assistant on or off, its shortcut, which AI answers and
+  with which model, speech recognition, language, and whether it may use the
+  text you selected (off by default) or read your notifications.
 - **AI Usage:** on or off, which plans to show, and when to warn.
+- **About:** the version, help, a bug report to copy (`isled --report`),
+  and resetting every setting.
 
 ## Voice assistant
 
@@ -171,7 +213,9 @@ step seeing what the last one did (whether the app opened, which windows
 are there). You can **close the island while it works**: it carries on in
 the background, with a small mic in the closed island, and the answer comes
 as an alert; click the island or press Super+I to watch it, and **Stop** to
-end it.
+end it. Its answer's own actions run before it answers, so it never
+says "done" when a step failed: it tries another way, or says what did not
+work.
 
 **What it does:** music (play, pause, a given song on Spotify), apps and
 windows (open, switch to, close, minimize, fullscreen, put side by side or
@@ -194,15 +238,22 @@ midnight.
    | [Codex](https://github.com/openai/codex) | `npm i -g @openai/codex` | `codex login` | Uses your ChatGPT plan, with the model your Codex uses |
    | [Antigravity](https://antigravity.google) | its installer | run `agy` | Its terms bar third-party tools from the service; Isle only runs the official `agy`, at your own risk |
 
-2. Set up speech recognition, once, in a terminal: `isle-setup-voice` (from
-   the source folder: `scripts/setup-voice.sh`). It makes a Python
-   environment with [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
-   and downloads a 0.5 GB model, `small` (`isle-setup-voice base` for a
-   lighter one); the GPU is used when there is one. It needs Python's venv:
-   `sudo apt install python3-venv` on Ubuntu and Debian.
+2. Set up speech recognition, once: press **Set up** when the assistant asks
+   for it, or run `isle-setup-voice` in a terminal (from the source folder:
+   `scripts/setup-voice.sh`). It downloads the speech
+   model chosen in Settings, `small` by default (265 MB; `tiny` 44 MB, `base`
+   82 MB, `medium` 823 MB), which `isle-whisper` runs with
+   [whisper.cpp](https://github.com/ggml-org/whisper.cpp): nothing else to
+   install. On a computer with a graphics card (NVIDIA, AMD or Intel Arc,
+   through Vulkan) it runs there, in about a second; otherwise on the
+   processor, in several seconds (it needs AVX2: Intel since 2013, AMD since
+   2015). An older Isle's Python environment (up to 3 GB) is no longer
+   needed: updating Isle moves you over and deletes it by itself, or run
+   `isle-setup-voice --remove-old`.
 3. Pick the AI in **Settings → Voice**, or leave it on Automatic.
-4. Check with `isled --doctor`: it lists speech recognition and each AI, where
-   it is installed and whether you are signed in, as Isle itself sees them.
+4. Check with `isled --doctor`: it lists speech recognition (the models
+   downloaded, and the GPU or processor it runs on) and each AI, where it is
+   installed and whether you are signed in, as Isle itself sees them.
    Isle finds AIs installed with npm, nvm, volta, fnm, pnpm, bun or their own
    installers.
 
@@ -250,7 +301,7 @@ your last use of Codex.
 ## Resource usage
 
 Isle is built to run all day unnoticed. Measured on Ubuntu 24.04 with
-GNOME 46 (version 0.6.0):
+GNOME 46 (version 0.7.0):
 
 | Part | Memory | CPU when idle |
 |---|---|---|
@@ -262,6 +313,7 @@ GNOME 46 (version 0.6.0):
 | On disk | Size |
 |---|---|
 | Programs (`isled` 8.5 MB, `isle-shelf` 1.9 MB) | 10.4 MB |
+| Speech recognition (`isle-whisper` 29 MB, most of it GPU code; the `small` model 265 MB), only once set up | 294 MB |
 | Extension | 0.5 MB |
 | Inter typeface | 0.9 MB |
 | Cache (`~/.cache/isle`) | about 100 KB per song's cover and 6 KB per lyrics |
@@ -273,22 +325,22 @@ reuses the window's picture already on the graphics card, so it costs about
 nothing, and only exists while the Call page is open; Isle never opens the
 camera or the microphone itself.
 
-## Privacy
+## Data & network
 
-Isle runs locally. The clipboard history, tasks, calendar events and timer stay in
-`~/.local/share/isle` and never leave your computer; copies from password
-managers are never kept. The call preview is drawn by GNOME Shell from the
-call's window as it already is on screen: nothing is recorded or saved, it
-exists only while the Call page is open, and it hides while you share your
-screen. Apart from the voice assistant and AI usage below, the only network
-requests are a lyrics lookup on [LRCLIB](https://lrclib.net) and the cover
-art the player points to, once per song, both then cached.
-
-The voice assistant recognises speech on this computer; only the text of a
-request goes to the AI you picked, with the context it needs (the time, open
-apps and windows, your reminders and events, and, if you allow it, the
-selected text or your notifications). AI usage asks Claude for your plan's
-usage, with your own sign-in.
+Isle has no server and no telemetry; your clipboard history, reminders,
+events, timer and the assistant's chats stay in `~/.local/share/isle`, and
+speech is recognised on this computer. It goes online only for synced lyrics
+([LRCLIB](https://lrclib.net)) and cover art, once per song (lyrics can be
+turned off in Settings); your Claude plan's usage (`api.anthropic.com`, with
+Claude Code's own sign-in); a look for a newer Isle on GitHub at most once a
+day (also in Settings); the speech model, downloaded once from Hugging Face
+when you set up voice; and the voice assistant, whose requests go to the AI
+you picked and may include a web search by it. Copies from password managers
+are never kept, and only GNOME Shell may read the clipboard history from
+Isle's service or steer its assistant. The call preview is drawn by GNOME
+Shell from what is on screen and never recorded.
+[SECURITY.md](SECURITY.md#what-leaves-your-computer) lists exactly what is
+sent where, and the assistant's safety rules.
 
 ## Troubleshooting
 
@@ -312,9 +364,9 @@ turn them off in the Extensions app.
 **The voice assistant does not answer.** Run `isled --doctor`: it says what
 is missing (speech recognition, an AI, or its sign-in) and what to run.
 
-**Something else.** GNOME Shell's log shows extension errors:
-`journalctl -f -o cat /usr/bin/gnome-shell`. Please
-[open an issue](../../issues) with what you see.
+**Something else.** Run `isled --report` (or Settings → About → Copy a bug
+report): it gathers the versions, what works and recent logs, without your
+data. Please [open an issue](../../issues) and paste it there.
 
 ## Uninstalling
 
@@ -326,8 +378,7 @@ isle-uninstall
 removes the extension, the programs, the service, the font, the voice
 assistant's speech recognition and Isle's caches, and lifts a battery charge
 limit Isle set. Your tasks, calendar events, clipboard history, shelf and
-timer settings stay in `~/.local/share/isle`, and the speech model in
-`~/.cache/huggingface`, until you delete them.
+timer settings stay in `~/.local/share/isle` until you delete them.
 
 ## How it works
 
@@ -351,10 +402,12 @@ else lives in Rust behind a D-Bus API.
 | Path | Contents |
 |---|---|
 | `crates/isle-core` | Platform-independent logic: LRC parsing, track-title clean-up, Pomodoro, tasks, calendar, shelf, clipboard history. Unit tested. |
-| `crates/isle-daemon` | `isled`, the D-Bus service; `src/assistant` is the voice assistant (speech, the three AIs, its tools) and `src/usage.rs` the AI usage. |
+| `crates/isle-daemon` | `isled`, the D-Bus service; `src/assistant` is the voice assistant (speech, the three AIs, the agent loop, its tools), `src/usage.rs` the AI usage, `src/updates.rs` the look for new versions, and `src/caller.rs` who may call what. |
 | `crates/isle-shelf` | `isle-shelf`, the files tray's drag-and-drop window. |
-| `gnome-extension` | The GNOME Shell extension. |
-| `data` | systemd and D-Bus activation files, the Inter typeface, and `isle-whisper.py`, the speech helper. |
+| `crates/isle-whisper` | `isle-whisper`, the voice assistant's speech recognition: whisper.cpp, on the GPU through Vulkan or on the processor. |
+| `gnome-extension` | The GNOME Shell extension; `src/actionRules.js` holds the assistant's rules that need no GNOME, so they are tested anywhere. |
+| `tests/extension` | Tests of the extension's GNOME-free parts (`node --test`, and `gjs -m` for those that use GLib). |
+| `data` | systemd and D-Bus activation files, and the Inter typeface. |
 | `scripts` | `setup-voice.sh` (installed as `isle-setup-voice`), `isle-charge-limit`, and `package.sh`, which makes a release. |
 | `docs/product-spec.md` | How the island looks and behaves: sizes, motion, pages, alerts. |
 | `docs/dbus-api.md` | The D-Bus interfaces of `isled` and `isle-shelf`. |

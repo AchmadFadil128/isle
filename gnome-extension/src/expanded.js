@@ -12,9 +12,10 @@ import {timerColor} from './compact.js';
 import {VERTICAL} from './compat.js';
 import * as Format from './format.js';
 import * as Playback from './playback.js';
+import {watchClock} from './wallClock.js';
 import {Bars, PrivacyDots, RecordingDot, Ring, fence, icon, iconButton, label} from './widgets.js';
 
-export const EXPANDED_WIDTH = 600;
+const EXPANDED_WIDTH = 600;
 /** The least room between the tabs and the status on the right. */
 const HEADER_GAP = 16;
 export const PAGE_HEIGHT = 150;
@@ -78,7 +79,6 @@ export const ExpandedView = GObject.registerClass({
         this._gesture = {dx: 0, dy: 0, flipped: false, at: 0};
         /** Set once smooth scrolling is seen; its click-style copies are then ignored. */
         this._smoothScrolling = false;
-        this._clockTimeout = 0;
 
         // Sideways scrolls always flip pages, so catch them before lists and lyrics do;
         // vertical scrolls those leave flip pages in `vfunc_scroll_event`.
@@ -521,25 +521,18 @@ export const ExpandedView = GObject.registerClass({
         }
     }
 
+    /** The header's date and time, kept current by GNOME's clock while the island is open. */
     _tickClock() {
         const now = GLib.DateTime.new_now_local();
         this._date.text = Format.longDate(now);
         this._time.text = Format.clockTime(now);
         this._updateHeader();
-        const msIntoMinute = now.get_second() * 1000 + Math.floor(now.get_microsecond() / 1000);
-        this._stopClock();
-        this._clockTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 60000 - msIntoMinute + 20, () => {
-            this._clockTimeout = 0;
-            this._tickClock();
-            return GLib.SOURCE_REMOVE;
-        });
+        this._unwatchClock ??= watchClock(() => this._tickClock());
     }
 
     _stopClock() {
-        if (this._clockTimeout) {
-            GLib.source_remove(this._clockTimeout);
-            this._clockTimeout = 0;
-        }
+        this._unwatchClock?.();
+        this._unwatchClock = null;
     }
 
     _captureScroll(event) {

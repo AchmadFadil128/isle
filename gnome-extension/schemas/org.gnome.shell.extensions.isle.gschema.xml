@@ -21,6 +21,43 @@
       <summary>Closed island inside the top bar</summary>
       <description>Like a MacBook's notch: the top bar is as tall as the closed island, so it never covers windows. Alerts and the open island still hang below it for a moment.</description>
     </key>
+    <key name="lyrics-online" type="b">
+      <default>true</default>
+      <summary>Look up lyrics online</summary>
+      <description>From LRCLIB, by the song's title, artist and length.</description>
+    </key>
+    <key name="check-updates" type="b">
+      <default>true</default>
+      <summary>Say when a newer Isle is out</summary>
+      <description>Isle asks GitHub for its latest release at most once a day.</description>
+    </key>
+    <key name="update-shown" type="s">
+      <default>''</default>
+      <summary>The newest version already announced, so each is said once</summary>
+    </key>
+    <key name="open-on" type="s">
+      <choices>
+        <choice value="hover"/>
+        <choice value="click"/>
+      </choices>
+      <default>'hover'</default>
+      <summary>How the island opens</summary>
+      <description>"hover": when the pointer rests on it. "click": only when clicked.</description>
+    </key>
+    <key name="hover-delay" type="i">
+      <range min="60" max="1000"/>
+      <default>120</default>
+      <summary>How long the pointer rests before the island opens, in milliseconds</summary>
+    </key>
+    <key name="island-monitor" type="s">
+      <choices>
+        <choice value="primary"/>
+        <choice value="active"/>
+      </choices>
+      <default>'primary'</default>
+      <summary>Display the island is on</summary>
+      <description>"primary": the main display, in its top bar. "active": the display of the window in use; on a display without a top bar it hangs from the top edge.</description>
+    </key>
     <key name="notch-depth" type="i">
       <range min="24" max="40"/>
       <default>30</default>
@@ -34,6 +71,37 @@
     <key name="system-alerts" type="b">
       <default>true</default>
       <summary>Show battery, network, Bluetooth and Caps Lock alerts</summary>
+      <description>Before 0.7, one switch for all four; now each has its own (alert-power, alert-network, alert-bluetooth, alert-caps-lock), and this one is only read once to carry an "off" over.</description>
+    </key>
+    <key name="alert-power" type="b">
+      <default>true</default>
+      <summary>Show charging and battery alerts</summary>
+    </key>
+    <key name="alert-network" type="b">
+      <default>true</default>
+      <summary>Show network alerts</summary>
+    </key>
+    <key name="alert-bluetooth" type="b">
+      <default>true</default>
+      <summary>Show Bluetooth alerts</summary>
+    </key>
+    <key name="alert-caps-lock" type="b">
+      <default>true</default>
+      <summary>Show Caps Lock alerts</summary>
+    </key>
+    <key name="gnome-banners" type="b">
+      <default>false</default>
+      <summary>Leave notifications to GNOME's own banners</summary>
+      <description>The island then shows no notification alerts; its Notifications page still lists them.</description>
+    </key>
+    <key name="super-v" type="s">
+      <choices>
+        <choice value="isle"/>
+        <choice value="gnome"/>
+      </choices>
+      <default>'isle'</default>
+      <summary>What Super+V (GNOME's calendar shortcut) opens</summary>
+      <description>"isle": the island's clipboard history. "gnome": GNOME's own calendar and notification list.</description>
     </key>
     <key name="track-peek" type="b">
       <default>false</default>
@@ -105,15 +173,15 @@
     <key name="voice-speech-model" type="s">
       <default>'small'</default>
       <summary>Speech recognition model</summary>
-      <description>A Whisper model: tiny, base, small or medium. Bigger is more accurate and slower.</description>
+      <description>A whisper.cpp model: tiny, base, small or medium. Bigger is more accurate and slower; isle-setup-voice downloads it.</description>
     </key>
     <key name="voice-language" type="s">
-      <default>'id,en'</default>
+      <default>''</default>
       <summary>Spoken language</summary>
       <description>A language code such as “id” or “en”, several (“id,en”) to tell them apart, or empty to detect any.</description>
     </key>
     <key name="voice-use-selection" type="b">
-      <default>true</default>
+      <default>false</default>
       <summary>Send the selected text to the voice assistant</summary>
       <description>So it can work on it ("make this shorter"). Never from terminals or apps kept out of the clipboard history.</description>
     </key>

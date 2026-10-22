@@ -59,13 +59,20 @@ Super+I:
 
 1. Install and sign in to one of Claude Code, Codex or Antigravity (the
    [README](../README.md#voice-assistant) says how; each uses your own plan).
-2. Set up speech recognition once, in a terminal. It needs Python's venv
-   (`sudo apt install python3-venv` on Ubuntu and Debian) and downloads about
-   0.5 GB:
+2. Set up speech recognition once, in a terminal. It downloads the speech
+   model picked in Settings → Voice (`small`, 265 MB, by default; or name
+   one: `isle-setup-voice base`) and needs nothing else installed. A graphics
+   card is used through Vulkan when there is one, else the processor:
 
    ```sh
    isle-setup-voice
    ```
+
+   Set up with an older Isle, speech recognition used a Python environment
+   of up to 3 GB; updating Isle with the installer downloads the new model
+   and deletes it by itself (`isle-setup-voice --remove-old` does the same by
+   hand). In the assistant, a **Set up** button opens a terminal that runs
+   `isle-setup-voice` for you.
 
 3. Pick the AI in Isle's Settings → Voice, or leave it on Automatic, and
    press Super+I.
@@ -77,7 +84,8 @@ any time:
 isled --doctor
 ```
 
-It lists speech recognition and each AI, where it is installed and whether
+It lists speech recognition (its models, and the GPU or processor it runs
+on) and each AI, where it is installed and whether
 you are signed in. Isle finds AIs installed with npm, nvm, volta, fnm, pnpm,
 bun or their own installers.
 
@@ -101,11 +109,10 @@ isle-uninstall
 ```
 
 This removes the extension, its programs, its service and its font, the
-voice assistant's speech recognition, Isle's caches, and a battery charge
-limit Isle set (asking for your password). Your tasks, calendar events,
-clipboard history and timer settings stay in `~/.local/share/isle`, and the
-downloaded speech model in `~/.cache/huggingface`; delete them too to remove
-everything.
+voice assistant's speech recognition and its models, Isle's caches, and a
+battery charge limit Isle set (asking for your password). Your tasks,
+calendar events, clipboard history and timer settings stay in
+`~/.local/share/isle`; delete it too to remove everything.
 
 ## Without internet on the computer
 
@@ -119,6 +126,60 @@ cd isle-*-x86_64-linux
 ./install.sh
 ```
 
+## Other ways to install
+
+### Ubuntu and Debian (.deb), Fedora (.rpm)
+
+Each [release](https://github.com/zickrian/isle/releases) also has
+system-wide packages, installed for every user of the computer with the
+system's package manager (so they update and uninstall with it):
+
+```sh
+sudo apt install ./isle_0.7.0_amd64.deb         # Ubuntu 24.04 and newer, Debian 13
+sudo dnf install ./isle-0.7.0-1.x86_64.rpm      # Fedora 40 and newer
+```
+
+They put the programs in `/usr/bin`, the extension in
+`/usr/share/gnome-shell/extensions`, and the rest where the system expects
+it. GNOME turns extensions on per user, so each user then runs this once and
+logs out and back in:
+
+```sh
+gnome-extensions enable isle@zickrian.github.io
+```
+
+`isled` starts on its own when the extension first calls it. The voice
+assistant is set up per user as above, with `isle-setup-voice`.
+
+### Arch Linux
+
+[`packaging/aur`](../packaging/aur) has a `PKGBUILD` for `isle-bin`, made
+from the release tarball. In that folder:
+
+```sh
+makepkg -si
+```
+
+### Both a package and the one-line install
+
+A copy installed with `get.sh`, in your home folder, takes precedence for
+you over a system-wide package: GNOME Shell, D-Bus and systemd all look in
+your home folder first. Run `isle-uninstall` to remove your own copy; the
+package's then takes over, with your settings and data kept. Remove the
+package itself with `sudo apt remove isle`, `sudo dnf remove isle` or
+`sudo pacman -R isle-bin`.
+
+### Checking a download
+
+Release files are built by GitHub Actions from the tagged source, with a
+build provenance attestation. With the [GitHub CLI](https://cli.github.com):
+
+```sh
+gh attestation verify isle-0.7.0-x86_64-linux.tar.gz --repo zickrian/isle
+```
+
+`get.sh` checks each download against its `.sha256` already.
+
 ## What the installer changes
 
 Everything goes in your home folder:
@@ -126,18 +187,19 @@ Everything goes in your home folder:
 | Where | What |
 |---|---|
 | `~/.local/share/gnome-shell/extensions/isle@zickrian.github.io` | The GNOME Shell extension |
-| `~/.local/bin` | `isled` (the background service), `isle-shelf` (drag and drop), `isle-uninstall`, `isle-setup-voice`, `isle-charge-limit` |
+| `~/.local/bin` | `isled` (the background service), `isle-shelf` (drag and drop), `isle-whisper` (speech recognition), `isle-uninstall`, `isle-setup-voice`, `isle-charge-limit` |
 | `~/.config/systemd/user`, `~/.local/share/dbus-1/services` | Starting `isled` with your session |
 | `~/.local/share/fonts/isle` | Inter, the island's typeface |
-| `~/.local/share/isle` | The speech helper (`isle-whisper.py`); later your data |
+| `~/.local/share/isle` | Your data, and the speech models `isle-setup-voice` downloads (`models`) |
 | `~/.local/share/doc/isle` | This README |
 
 On a first install only, it sets Isle's look (a slim glass top bar with the
-island in it) and turns off what would fight with the island: Blur my Shell's
-top bar blur (the rest of its blur stays) and extensions that take the same
-place in the top bar. Updates leave all of that as you have it. If GNOME's
-extensions were switched off altogether (the Extensions app's main switch),
-it switches them on.
+island in it); updates leave it as you have it. It never changes other
+extensions: when one would fight with the island (Blur my Shell's top bar
+blur, or an extension that takes the same place in the top bar, such as Hide
+Top Bar), it ends with a recommendation and the command to turn that off. If
+GNOME's extensions were switched off altogether (the Extensions app's main
+switch), it switches them on.
 
 ## If something goes wrong
 

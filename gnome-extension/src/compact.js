@@ -10,6 +10,7 @@ import St from 'gi://St';
 
 import * as Format from './format.js';
 import * as Playback from './playback.js';
+import {watchClock} from './wallClock.js';
 import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon} from './widgets.js';
 
 /** Sizes hanging below the top bar, and inside it with smaller text. */
@@ -55,6 +56,8 @@ export const CompactView = GObject.registerClass({
         // A call: a green phone, and on the right a red microphone while it is muted.
         this._phone = new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 15, style_class: 'isle-call-icon', y_align: Clutter.ActorAlign.CENTER});
         this._micOff = new St.Icon({gicon: icon('isle-mic-off-symbolic'), icon_size: 15, style_class: 'isle-call-muted', y_align: Clutter.ActorAlign.CENTER});
+        // isled is not running: what needs it cannot work (see the controller's service watch).
+        this._serviceDown = new St.Icon({gicon: icon('dialog-warning-symbolic'), icon_size: 15, style_class: 'isle-compact-warning', y_align: Clutter.ActorAlign.CENTER});
         // The assistant at work with the island closed: still, so it costs no frames.
         this._assistant = new St.Icon({gicon: icon('isle-mic-symbolic'), icon_size: 15, style_class: 'isle-compact-assistant', y_align: Clutter.ActorAlign.CENTER});
 
@@ -97,6 +100,7 @@ export const CompactView = GObject.registerClass({
                 this._refresh();
         });
         this._tickClock();
+        this._stopClock = watchClock(() => this._tickClock());
         this._refresh();
         this.connect('destroy', () => this._onDestroy());
     }
@@ -136,6 +140,18 @@ export const CompactView = GObject.registerClass({
         this._refresh();
     }
 
+    /** Shows that isled is not running, on the right before anything else. */
+    get serviceDown() {
+        return Boolean(this._isServiceDown);
+    }
+
+    set serviceDown(down) {
+        if (down === Boolean(this._isServiceDown))
+            return;
+        this._isServiceDown = down;
+        this._refresh();
+    }
+
     /** Shows that the assistant works on a request, on the right, first of all. */
     set assistantBusy(busy) {
         if (busy === Boolean(this._assistantBusy))
@@ -162,6 +178,11 @@ export const CompactView = GObject.registerClass({
     }
 
     /** While the user is away the music bars rest; nobody is watching them. */
+    /** Whether the user is away (no input for a while); the bars rest meanwhile. */
+    get idle() {
+        return this._idle;
+    }
+
     set idle(idle) {
         this._idle = idle;
         this._syncBars();
@@ -199,6 +220,8 @@ export const CompactView = GObject.registerClass({
             right = this._micOff;
         if (this._assistantBusy)
             right = this._assistant;
+        if (this._isServiceDown)
+            right = this._serviceDown;
         // On a call the green phone already says the microphone is on, as on an iPhone, unless another app records too.
         const privacy = this._showingPrivacy() ? this._privacy : {};
         const microphone = privacy.microphone && (!onCall || this._call.othersRecording);
@@ -301,10 +324,7 @@ export const CompactView = GObject.registerClass({
 
     /** Updates the clock, then sleeps until the minute changes. */
     _tickClock() {
-        const now = GLib.DateTime.new_now_local();
-        this._clock.text = Format.clockTime(now);
-        const msIntoMinute = now.get_second() * 1000 + Math.floor(now.get_microsecond() / 1000);
-        this._later('clock', 60000 - msIntoMinute + 20, () => this._tickClock());
+        this._clock.text = Format.clockTime();
     }
 
     _later(name, ms, callback) {
@@ -324,6 +344,7 @@ export const CompactView = GObject.registerClass({
     }
 
     _onDestroy() {
+        this._stopClock();
         for (const name of Object.keys(this._timeouts))
             this._cancel(name);
         this._daemon.disconnect(this._daemonChanged);
@@ -331,7 +352,7 @@ export const CompactView = GObject.registerClass({
         this._privacy.disconnect(this._privacyChanged);
         this._call.disconnect(this._callChanged);
         // Slots may hold actors that are not currently children.
-        for (const actor of [this._ring, this._art, this._dot, this._moon, this._recordingDot, this._bars, this._phone, this._micOff, this._assistant]) {
+        for (const actor of [this._ring, this._art, this._dot, this._moon, this._recordingDot, this._bars, this._phone, this._micOff, this._assistant, this._serviceDown]) {
             if (!actor.get_parent())
                 actor.destroy();
         }

@@ -162,11 +162,11 @@ impl ShelfWindow {
         let quit = glib::timeout_add_seconds_local_once(IDLE_QUIT_SECS, move || {
             let Some(inner) = weak.upgrade() else { return };
             inner.idle_quit.take();
-            if !inner.window.is_visible() {
-                if let Some(app) = inner.window.application() {
-                    log::info!("the shelf stayed hidden; quitting until it is needed");
-                    app.quit();
-                }
+            if !inner.window.is_visible()
+                && let Some(app) = inner.window.application()
+            {
+                log::info!("the shelf stayed hidden; quitting until it is needed");
+                app.quit();
             }
         });
         self.0.idle_quit.replace(Some(quit));

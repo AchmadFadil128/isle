@@ -595,11 +595,16 @@ fn cases() -> Vec<Case> {
                 "did not pause",
             )
         }),
+        // Files is open already (see WINDOWS): bringing it to the front does as well.
         case(&["buka file manager"], |a| {
-            ensure(
-                text(action(last(a), "open_app")?, "app").contains("files"),
-                "not Files",
-            )
+            let a = last(a);
+            let opened = actions(a, "open_app")
+                .iter()
+                .any(|x| text(x, "app").contains("files"));
+            let focused = actions(a, "window")
+                .iter()
+                .any(|x| text(x, "app").contains("files") && text(x, "command") == "focus");
+            ensure(opened || focused, "not Files")
         }),
         case(&["open youtube and search lo-fi music"], |a| {
             let a = last(a);
@@ -892,7 +897,8 @@ async fn run(case: &Case) -> Result<Vec<Answer>, String> {
         let data = format!("{facts}\n{}", agenda.summary());
         let prompt = session.prompt(turn, &data);
         // The agent loop, as isled runs it; the steps it shows are not checked here. Actions taken
-        // mid-way all "work", and count with the answer's own, in order.
+        // mid-way all "work", and count with the answer's own, in order; once run, those are not
+        // counted twice (as isled runs them once).
         let (activity, _steps) = tokio::sync::mpsc::unbounded_channel();
         let (desk, mut acts) = tokio::sync::mpsc::unbounded_channel::<agent::Act>();
         let taken = tokio::spawn(async move {
@@ -914,6 +920,9 @@ async fn run(case: &Case) -> Result<Vec<Answer>, String> {
         drop(desk);
         let taken = taken.await.unwrap_or_default();
         let answer = answer.map(|mut answer| {
+            if answer.checked {
+                answer.actions.retain(agent::after_close);
+            }
             answer.actions.splice(0..0, taken);
             answer
         });

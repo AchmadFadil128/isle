@@ -48,23 +48,10 @@ const PER_CONVERSATION: &[&str] = &[
 /// Where agy keeps its sign-in, under its home.
 pub const LOGIN: &str = ".gemini/antigravity-cli/antigravity-oauth-token";
 
-/// Links Isle's agy home to the user's agy sign-in, so signing in once (in `user`'s home) is enough.
-/// Relinked each start: agy may have replaced the link with a file when it refreshed the token.
+/// Links Isle's agy home to the user's agy sign-in, so signing in once (in `user`'s home) is enough
+/// (see sign_in.rs).
 fn link_login(user: &Path, isle: &Path) {
-    let (real, linked) = (user.join(LOGIN), isle.join(LOGIN));
-    if !real.exists() || std::fs::read_link(&linked).is_ok_and(|target| target == real) {
-        return;
-    }
-    let parent = linked.parent().expect("the sign-in sits in a folder");
-    let relinked = std::fs::create_dir_all(parent)
-        .and_then(|()| match std::fs::remove_file(&linked) {
-            Err(err) if err.kind() != std::io::ErrorKind::NotFound => Err(err),
-            _ => Ok(()),
-        })
-        .and_then(|()| std::os::unix::fs::symlink(&real, &linked));
-    if let Err(err) = relinked {
-        log::warn!("could not share agy's sign-in with Isle: {err}");
-    }
+    super::sign_in::share(&user.join(LOGIN), &isle.join(LOGIN));
 }
 
 /// Deletes the conversations last used before `today`, all of a conversation's files together.
@@ -119,13 +106,25 @@ fn remove(path: &PathBuf) {
     } else {
         std::fs::remove_file(path)
     };
-    if let Err(err) = removed {
+    // Already gone (agy cleaned up itself) is what was wanted.
+    if let Err(err) = removed
+        && err.kind() != std::io::ErrorKind::NotFound
+    {
         log::warn!("could not delete {}: {err}", path.display());
     }
 }
 
 /// Lines of agy's stderr kept to explain a failure (it prints sign-in problems there).
 const STDERR_LINES: usize = 20;
+
+impl Drop for Agy {
+    // Quitting, agy may have renewed its sign-in: the user's own agy gets it (see sign_in.rs).
+    fn drop(&mut self) {
+        if let Some(user) = dirs::home_dir() {
+            link_login(&user, &home());
+        }
+    }
+}
 
 pub struct Agy {
     _child: Group,
@@ -277,8 +276,9 @@ fn parse_result(result: &Value) -> anyhow::Result<Answer> {
         return Ok(answer);
     }
     // No structured output: the reply as said, without actions.
-    let response = result["response"].as_str().unwrap_or_default().trim();
-    Ok(serde_json::from_str(response).unwrap_or_else(|_| Answer::plain(response)))
+    Ok(super::answer::from_text(
+        result["response"].as_str().unwrap_or_default(),
+    ))
 }
 
 #[cfg(test)]
@@ -365,14 +365,22 @@ mod tests {
         std::fs::write(user.join(LOGIN), "token").unwrap();
         link_login(&user, &isle);
         assert_eq!(std::fs::read_to_string(isle.join(LOGIN)).unwrap(), "token");
-        // agy replaced the link with a stale copy: linked again.
+        // agy replaced the link with a copy older than the user's: linked again.
         std::fs::remove_file(isle.join(LOGIN)).unwrap();
         std::fs::write(isle.join(LOGIN), "stale").unwrap();
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
+        std::fs::File::options()
+            .write(true)
+            .open(isle.join(LOGIN))
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
         link_login(&user, &isle);
         assert_eq!(
             std::fs::read_link(isle.join(LOGIN)).unwrap(),
             user.join(LOGIN)
         );
+        assert_eq!(std::fs::read_to_string(user.join(LOGIN)).unwrap(), "token");
         std::fs::remove_dir_all(root).unwrap();
     }
 

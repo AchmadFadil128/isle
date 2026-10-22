@@ -60,16 +60,24 @@ export class TopBar extends Signals.EventEmitter {
         this._heightChanged = Main.panel.connect('notify::height', () => this.emit('height-changed'));
 
         // The calendar shortcut opens the island instead, and the menu is
-        // closed again should anything else open it.
-        Main.panel.toggleCalendar = () => this.emit('calendar-requested');
+        // closed again should anything else open it; unless Super+V is left to GNOME (Settings).
+        this._superVChanged = settings.connect('changed::super-v', () => this._syncCalendar());
+        this._syncCalendar();
         this._menuChanged = this._dateMenu.menu.connect('open-state-changed', (menu, open) => {
-            if (open)
+            if (open && this._settings.get_string('super-v') === 'isle')
                 menu.close();
         });
     }
 
     get height() {
         return Main.panel.height;
+    }
+
+    _syncCalendar() {
+        if (this._settings.get_string('super-v') === 'isle')
+            Main.panel.toggleCalendar = () => this.emit('calendar-requested');
+        else
+            delete Main.panel.toggleCalendar;
     }
 
     /** Whether the bar is as black as the island; otherwise the island hangs from the screen's top edge. */
@@ -80,6 +88,14 @@ export class TopBar extends Signals.EventEmitter {
     /** Keeps the top bar's centre clear for the island. */
     reserveWidth(width) {
         this._dateMenu.set_width(Math.ceil(width));
+    }
+
+    /** Shows GNOME's own clock in the top bar while the island is on another display. */
+    set clockShown(shown) {
+        this._dateMenu.opacity = shown ? 255 : 0;
+        this._dateMenu.reactive = shown;
+        if (shown)
+            this._dateMenu.set_width(-1);
     }
 
     _applyStyle() {
@@ -126,6 +142,7 @@ export class TopBar extends Signals.EventEmitter {
         Main.panel.disconnect(this._heightChanged);
         Main.panel.disconnect(this._styleChanged);
         this._dateMenu.menu.disconnect(this._menuChanged);
+        this._settings.disconnect(this._superVChanged);
         delete Main.panel.toggleCalendar;
 
         this._syncColor('theme');

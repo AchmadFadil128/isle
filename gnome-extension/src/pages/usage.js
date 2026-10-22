@@ -11,10 +11,11 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {VERTICAL} from '../compat.js';
+import * as Format from '../format.js';
 import {icon, label} from '../widgets.js';
 import {Page} from './page.js';
 
-/** A bar turns orange, then red, at these shares; Settings may move them (see `setMarks`). */
+/** A limit warns (an alert) and then turns red at these shares; Settings may move them (see `setMarks`). */
 const MARKS = {warn: 80, critical: 95};
 /** Each provider's colour, for its bars. */
 const ACCENTS = {claude: [0.85, 0.47, 0.34], codex: [0.06, 0.64, 0.5]};
@@ -52,7 +53,8 @@ const Bar = GObject.registerClass({
         this._share = share;
         this._sweep = 1;
         this._fill = new St.Widget({style_class: `isle-usage-fill ${level}`});
-        if (level === 'normal')
+        // In the plan's colour until nearly used up, then red.
+        if (level !== 'critical')
             this._fill.style = `background-color: ${css(accent)};`;
         this.add_child(this._fill);
     }
@@ -161,7 +163,9 @@ class UsagePage extends Page {
     _updateDots(count, index) {
         this._dots.destroy_all_children();
         this._dots.visible = count > 1;
-        for (let i = 0; i < count && count > 1; i++) {
+        if (count < 2)
+            return;
+        for (let i = 0; i < count; i++) {
             const dot = new St.Button({style_class: `isle-usage-dot${i === index ? ' shown' : ''}`, can_focus: true,
                 accessible_name: this._providers()[i].name});
             dot.connect('clicked', () => this._show(i));
@@ -314,6 +318,6 @@ function updated(ms, fromCodex) {
         return '';
     const at = GLib.DateTime.new_from_unix_local(Math.floor(ms / 1000));
     const today = GLib.DateTime.new_now_local().format('%F') === at.format('%F');
-    const when = today ? at.format('%H:%M') : at.format('%a %H:%M');
+    const when = today ? Format.timeOfDay(at) : `${at.format('%a')} ${Format.timeOfDay(at)}`;
     return fromCodex ? `From Codex, ${when}` : `Updated ${when}`;
 }

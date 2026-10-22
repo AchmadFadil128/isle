@@ -24,9 +24,6 @@ const OUT_OF_REACH = -10000;
 /** How long a tint takes to come and go: a wash, and a glow (which lingers out). */
 const TINT_FADE = {wash: [450, 450], glow: [380, 1100], siri: [300, 500]};
 
-/** The 'siri' tint's blobs of light: how fast each drifts, where it starts, and its width (of the island's). */
-const BLOBS = [[0.55, 0, 0.32], [0.8, 2.1, 0.26], [0.42, 4.2, 0.3], [0.95, 1.1, 0.22], [0.67, 3.3, 0.28]];
-
 /** The 'siri' glow is drawn at 1/this of the size and scaled up: it is soft, so it looks the same
  * with a quarter of the pixels to paint each frame. */
 const GLOW_SCALE = 2;
@@ -417,12 +414,11 @@ export const Island = GObject.registerClass({
         this._outlineBox = {left, right, top, radius};
     }
 
-    // Light inside the shape, as Siri's: a rim along the edges and soft blobs of colour drifting along
-    // the bottom, added up like light; they swell and brighten with `level` (the voice).
+    // Light from the edge inside the shape, as Siri's: brightest along the bottom and fading up the
+    // sides, its colours flowing; it swells and brightens with `level` (the voice).
     _paintRim(cr, left, right, top, height, radius) {
         const {time, level} = this._motion;
         const strength = this._tintStrength;
-        const width = right - left;
         const r = Math.max(0, radius);
         const sides = () => {
             cr.moveTo(left, top);
@@ -432,50 +428,40 @@ export const Island = GObject.registerClass({
             cr.arcNegative(right - r, height - r, r, Math.PI / 2, 0);
             cr.lineTo(right, top);
         };
+        cr.pushGroup();
         cr.setOperator(Cairo.Operator.ADD);
-        // Faint strokes, each narrower, so the edges glow softly; a crisp line of light at the very edge.
-        // Three, each twice as bright as six were: the same soft edge for half the work.
+        // Faint strokes, each narrower, so the edge glows softly inwards.
         const STEPS = 3;
-        cr.setSource(this._flow(left, right, time, (0.07 + 0.06 * level) * strength));
+        cr.setSource(this._flow(left, right, time, (0.09 + 0.07 * level) * strength));
         for (let i = 0; i < STEPS; i++) {
-            cr.setLineWidth((30 + 18 * level) * (1 - i / STEPS));
+            cr.setLineWidth((20 + 14 * level) * (1 - i / STEPS));
             sides();
             cr.stroke();
         }
-        cr.setSource(this._flow(left, right, time * 1.4, (0.4 + 0.25 * level) * strength));
-        cr.setLineWidth(3);
+        // A thin haze along the bottom, deeper as it swells: light, not shapes.
+        const rise = Math.min(46, Math.max(0, height - top) * 0.45) * (0.75 + 0.45 * level);
+        const haze = new Cairo.LinearGradient(0, height - rise, 0, height);
+        haze.addColorStopRGBA(0, 0, 0, 0, 0);
+        haze.addColorStopRGBA(1, 0, 0, 0, 1);
+        cr.setSource(this._flow(left, right, time * 0.8 + 2, (0.3 + 0.2 * level) * strength, true));
+        cr.mask(haze);
+        // A crisp line of light at the very edge.
+        cr.setSource(this._flow(left, right, time * 1.4, (0.42 + 0.25 * level) * strength, true));
+        cr.setLineWidth(2.5);
         sides();
         cr.stroke();
-
-        // Kept low, so text above stays easy to read.
-        const rise = Math.min(64, Math.max(0, height - top) * 0.5);
-        const colors = this._tint;
-        BLOBS.forEach(([speed, offset, size], i) => {
-            const [red, green, blue] = colors[i % colors.length];
-            // Each drifts to and fro at its own pace, and breathes.
-            const x = left + width * (0.5 + 0.42 * Math.sin(time * speed + offset));
-            const breath = 0.8 + 0.2 * Math.sin(time * speed * 1.1 + offset * 3);
-            const rx = width * size * (0.85 + 0.35 * level);
-            const ry = rise * breath * (0.7 + 0.6 * level);
-            const glow = new Cairo.RadialGradient(0, 0, 0, 0, 0, 1);
-            // Brightness changes little: the voice shows as size, which the eye reads as motion.
-            const alpha = (0.34 + 0.2 * level) * strength;
-            glow.addColorStopRGBA(0, red, green, blue, alpha);
-            glow.addColorStopRGBA(0.45, red, green, blue, alpha * 0.45);
-            glow.addColorStopRGBA(1, red, green, blue, 0);
-            cr.save();
-            cr.translate(x, height);
-            cr.scale(Math.max(1, rx), Math.max(1, ry));
-            cr.arc(0, 0, 1, 0, 2 * Math.PI);
-            cr.setSource(glow);
-            cr.fill();
-            cr.restore();
-        });
+        cr.popGroupToSource();
+        // Rising from the bottom: gone by the top of the sides.
+        const rising = new Cairo.LinearGradient(0, top, 0, height);
+        rising.addColorStopRGBA(0, 0, 0, 0, 0);
+        rising.addColorStopRGBA(0.55, 0, 0, 0, 0.35);
+        rising.addColorStopRGBA(1, 0, 0, 0, 1);
         cr.setOperator(Cairo.Operator.OVER);
+        cr.mask(rising);
     }
 
     /** A left-to-right gradient of the tint's colours, shifted by `time` so they flow. */
-    _flow(left, right, time, alpha) {
+    _flow(left, right, time, alpha, shimmer = false) {
         const colors = this._tint;
         const gradient = new Cairo.LinearGradient(left, 0, right, 0);
         const STOPS = 24;
@@ -485,8 +471,10 @@ export const Island = GObject.registerClass({
             const mix = at - index;
             const [r1, g1, b1] = colors[index % colors.length];
             const [r2, g2, b2] = colors[(index + 1) % colors.length];
+            // A slow swell of brightness travelling along, so the light moves, not only its hue.
+            const swell = shimmer ? 0.7 + 0.3 * Math.sin((i / STOPS) * 2 * Math.PI * 1.5 - time * 1.6) : 1;
             gradient.addColorStopRGBA(i / STOPS, r1 + (r2 - r1) * mix, g1 + (g2 - g1) * mix,
-                b1 + (b2 - b1) * mix, alpha);
+                b1 + (b2 - b1) * mix, alpha * swell);
         }
         return gradient;
     }

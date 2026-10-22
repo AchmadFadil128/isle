@@ -19,6 +19,7 @@ mod eval;
 mod files;
 mod mic;
 mod music;
+mod sign_in;
 mod system;
 mod whisper;
 
@@ -31,8 +32,9 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
+use zbus::message::Header;
 use zbus::object_server::{InterfaceRef, SignalEmitter};
-use zbus::{fdo, interface};
+use zbus::{Connection, fdo, interface};
 
 pub use self::agenda::Sources;
 use self::brain::{Brain, Failure, Provider};
@@ -107,6 +109,9 @@ struct State {
     /// Signing in to the AI would fix the error; `provider` is the one in use ("agy", "claude", "codex").
     sign_in: bool,
     provider: String,
+    /// Setting up speech recognition would fix the error (isle-setup-voice, with `model`).
+    set_up: bool,
+    model: String,
     /// The reply asks something back, so the extension listens again.
     listen: bool,
     /// The error is that nothing was said, which a follow-up need not show.
@@ -233,16 +238,30 @@ fn context(json: &str) -> fdo::Result<Context> {
     serde_json::from_str(json).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))
 }
 
+// Every method answers GNOME Shell only: the assistant types, opens and closes things on the user's behalf.
 #[interface(name = "io.github.zickrian.isle.Assistant1")]
 impl AssistantService {
     /// Records a request and answers it; `context` is JSON
     /// `{apps, provider, agy_model, claude_model, codex_model, whisper_model, language, selection, …}`.
-    fn listen(&self, context_json: &str) -> fdo::Result<()> {
+    async fn listen(
+        &self,
+        context_json: &str,
+        #[zbus(connection)] connection: &Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> fdo::Result<()> {
+        crate::caller::shell_only(connection, &header).await?;
         self.send(Command::Listen(Box::new(context(context_json)?)))
     }
 
     /// Answers a typed request.
-    fn ask(&self, text: &str, context_json: &str) -> fdo::Result<()> {
+    async fn ask(
+        &self,
+        text: &str,
+        context_json: &str,
+        #[zbus(connection)] connection: &Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> fdo::Result<()> {
+        crate::caller::shell_only(connection, &header).await?;
         self.send(Command::Ask(
             text.to_owned(),
             Box::new(context(context_json)?),
@@ -250,28 +269,50 @@ impl AssistantService {
     }
 
     /// Stops recording and answers what was said so far.
-    fn stop(&self) -> fdo::Result<()> {
+    async fn stop(
+        &self,
+        #[zbus(connection)] connection: &Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> fdo::Result<()> {
+        crate::caller::shell_only(connection, &header).await?;
         self.send(Command::Stop)
     }
 
     /// The island closed: listening stops, and the AI and the speech model quit. A request being answered
     /// carries on in the background and quits once answered (see `Cancel`).
-    fn end(&self) -> fdo::Result<()> {
+    async fn end(
+        &self,
+        #[zbus(connection)] connection: &Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> fdo::Result<()> {
+        crate::caller::shell_only(connection, &header).await?;
         self.send(Command::End)
     }
 
     /// What the actions handed out as `step` did: JSON `[{type, ok, detail}]`, one per action.
-    fn results(&self, step: u64, results_json: &str) -> fdo::Result<()> {
+    async fn results(
+        &self,
+        step: u64,
+        results_json: &str,
+        #[zbus(connection)] connection: &Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> fdo::Result<()> {
+        crate::caller::shell_only(connection, &header).await?;
         self.send(Command::Results(step, results_json.to_owned()))
     }
 
     /// Stops the request being answered; the AI quits.
-    fn cancel(&self) -> fdo::Result<()> {
+    async fn cancel(
+        &self,
+        #[zbus(connection)] connection: &Connection,
+        #[zbus(header)] header: Header<'_>,
+    ) -> fdo::Result<()> {
+        crate::caller::shell_only(connection, &header).await?;
         self.send(Command::Cancel)
     }
 
-    /// JSON `{phase, heard, reply, actions, error, hint, sign_in, listen, heard_nothing, activity, turn,
-    /// step}`.
+    /// JSON `{phase, heard, reply, actions, error, hint, sign_in, provider, set_up, model, listen,
+    /// heard_nothing, activity, turn, step}`.
     #[zbus(property)]
     fn state(&self) -> String {
         serde_json::to_string(&self.state).unwrap_or_default()
@@ -629,17 +670,16 @@ async fn turn(
     let text = match typed {
         Some(text) => text,
         None => {
+            let model = or(&session.context.whisper_model, "small").to_owned();
             if !whisper::installed() {
-                return fail(iface, NOT_SET_UP).await;
+                return fail(iface, set_up(NOT_SET_UP, &model)).await;
             }
-            let ctx = &session.context;
-            let model = or(&ctx.whisper_model, "small");
             if session.whisper.is_none() {
-                match Whisper::start(model, &ctx.language) {
+                match Whisper::start(&model, &session.context.language) {
                     Ok(whisper) => session.whisper = Some(whisper),
                     Err(err) => {
                         warn!("{err:#}");
-                        return fail(iface, NOT_SET_UP).await;
+                        return fail(iface, set_up(NOT_SET_UP, &model)).await;
                     }
                 }
             }
@@ -677,9 +717,9 @@ async fn turn(
                     return fail(
                         iface,
                         if missing {
-                            MODEL_MISSING
+                            set_up(MODEL_MISSING, &model)
                         } else {
-                            SPEECH_FAILED
+                            SPEECH_FAILED.into()
                         },
                     )
                     .await;
@@ -744,6 +784,10 @@ async fn turn(
             // to resume the conversation next time.
             if !(session.open && answer.listen) {
                 session.brain = None;
+            }
+            // Those that ran already (and worked) are not run again.
+            if answer.checked {
+                answer.actions.retain(agent::after_close);
             }
             music::check(&mut answer.actions).await;
             if session.drop_unrunnable(&mut answer.actions) {
@@ -856,6 +900,8 @@ async fn record(
     let mut endpointer = Endpointer::new();
     let mut audio = Vec::with_capacity(mic::RATE as usize * 8);
     let mut loudest = 0f32;
+    // Said once a recording, not twenty times a second.
+    let mut level_failed = false;
     loop {
         tokio::select! {
             chunk = mic.chunk() => {
@@ -863,7 +909,10 @@ async fn record(
                 let level = rms(&chunk);
                 loudest = loudest.max(level);
                 audio.extend_from_slice(&chunk);
-                if let Err(err) = AssistantService::level(iface.signal_emitter(), meter(level)).await {
+                if let Err(err) = AssistantService::level(iface.signal_emitter(), meter(level)).await
+                    && !level_failed
+                {
+                    level_failed = true;
                     warn!("could not send the microphone level: {err}");
                 }
                 match endpointer.push(level) {
@@ -910,7 +959,9 @@ async fn drive<T>(
             Some(step) = steps.recv() => {
                 publish(iface, |state| state.activity = step).await;
             }
-            Some(act) = acts.recv() => {
+            Some(mut act) = acts.recv() => {
+                // A song is checked to exist before it plays, as in an answer.
+                music::check(&mut act.actions).await;
                 let mut step = 0;
                 publish(iface, |state| {
                     state.phase = Phase::Acting;
@@ -936,7 +987,7 @@ async fn drive<T>(
                 }
                 Some(Command::End) => *open = false,
                 Some(Command::Cancel) | None => return Err(Command::End),
-                // A new request waits for this one (the extension shows it instead).
+                // The extension sends no new request while one runs (it reopens this one instead).
                 Some(_) => {}
             },
         }
@@ -962,7 +1013,10 @@ async fn until_cancelled<T>(
     }
 }
 
-const NOT_SET_UP: (&str, &str) = ("Voice isn't set up", "Run isle-setup-voice in a terminal.");
+const NOT_SET_UP: (&str, &str) = (
+    "Voice isn't set up",
+    "Set up downloads the speech model once (or run isle-setup-voice).",
+);
 const NOTHING_HEARD: (&str, &str) = ("Didn't catch that", "Press Super+I and speak again.");
 const MUTED: (&str, &str) = (
     "The microphone is muted",
@@ -970,8 +1024,17 @@ const MUTED: (&str, &str) = (
 );
 const MODEL_MISSING: (&str, &str) = (
     "Speech model not downloaded",
-    "Run isle-setup-voice with the model chosen in Settings, e.g. isle-setup-voice small.",
+    "Set up downloads the one chosen in Settings (or run isle-setup-voice).",
 );
+
+/// `failure`, fixed by setting up speech recognition with `model`.
+fn set_up(failure: (&str, &str), model: &str) -> Failure {
+    Failure {
+        set_up: true,
+        model: model.to_owned(),
+        ..failure.into()
+    }
+}
 const SPEECH_FAILED: (&str, &str) = (
     "Speech recognition failed",
     "Try again; if it keeps failing, run isle-setup-voice.",
@@ -993,6 +1056,8 @@ async fn fail(
         state.error = failure.error;
         state.hint = failure.hint;
         state.sign_in = failure.sign_in;
+        state.set_up = failure.set_up;
+        state.model = failure.model;
         state.heard_nothing = heard_nothing;
         state.activity.clear();
         state.reply.clear();
@@ -1012,11 +1077,7 @@ async fn publish(iface: &InterfaceRef<AssistantService>, update: impl FnOnce(&mu
 
 /// What `isled --doctor` says about the assistant: speech recognition, and each AI and its sign-in.
 pub fn report() -> String {
-    let mut lines = vec![if whisper::installed() {
-        "  Speech recognition: set up".to_owned()
-    } else {
-        "  Speech recognition: not set up (run isle-setup-voice)".to_owned()
-    }];
+    let mut lines = vec![whisper::report()];
     for provider in Provider::all() {
         let name = provider.name();
         lines.push(match provider.program() {

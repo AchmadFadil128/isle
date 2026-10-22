@@ -72,10 +72,10 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
                     if let Some(now) = changed.get("Connected").and_then(|v| bool::try_from(v).ok()) {
                         connection_changed(&system, &iface, &generations, path.to_owned(), now).await;
                     }
-                } else if interface == BATTERY {
-                    if let Some(percent) = changed.get("Percentage").and_then(|v| u8::try_from(v).ok()) {
-                        set_battery(&iface, path.as_str(), percent).await;
-                    }
+                } else if interface == BATTERY
+                    && let Some(percent) = changed.get("Percentage").and_then(|v| u8::try_from(v).ok())
+                {
+                    set_battery(&iface, path.as_str(), percent).await;
                 }
             }
             Some(signal) = added.next() => {

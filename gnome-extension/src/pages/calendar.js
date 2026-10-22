@@ -6,6 +6,7 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Gio from 'gi://Gio';
 import Pango from 'gi://Pango';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -51,7 +52,7 @@ function dateTime(date) {
 
 /** "09:30", or "9:30 AM" with a 12-hour clock. */
 function timeText(date) {
-    return dateTime(date).format(Format.uses12Hour() ? '%l:%M %p' : '%H:%M').trim();
+    return Format.timeOfDay(dateTime(date));
 }
 
 export const CalendarPage = GObject.registerClass(
@@ -104,11 +105,12 @@ class CalendarPage extends Page {
 
         const weekdays = new St.BoxLayout({style_class: 'isle-cal-weekdays'});
         this._weekStart = Shell.util_get_week_start();
+        this._weekend = Format.weekendDays(GLib.getenv('LC_ALL') || GLib.getenv('LC_TIME') || GLib.getenv('LANG') || '');
         for (let i = 0; i < 7; i++) {
             // 4 Jan 1970 was a Sunday.
             const day = new Date(1970, 0, 4 + (this._weekStart + i) % 7);
             const letter = dateTime(day).format('%a').slice(0, 1).toUpperCase();
-            const weekend = [0, 6].includes(day.getDay());
+            const weekend = this._weekend.includes(day.getDay());
             weekdays.add_child(label(letter, `isle-cal-weekday${weekend ? ' weekend' : ''}`, {x_align: Clutter.ActorAlign.CENTER}));
         }
         column.add_child(weekdays);
@@ -160,7 +162,17 @@ class CalendarPage extends Page {
         });
         this._scroll.set_child(this._list);
         listArea.add_child(this._scroll);
-        this._noEvents = label('No events', 'isle-cal-empty', {x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, x_expand: true, y_expand: true});
+        this._noEvents = new St.BoxLayout({...VERTICAL, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER,
+            x_expand: true, y_expand: true});
+        this._noEvents.add_child(label('No events', 'isle-cal-empty', {x_align: Clutter.ActorAlign.CENTER}));
+        // With no calendar account at all, where to add one.
+        this._noAccounts = new St.Button({style_class: 'isle-cal-accounts', label: 'Add calendars in Online Accounts',
+            can_focus: true, x_align: Clutter.ActorAlign.CENTER, visible: false});
+        this._noAccounts.connect('clicked', () => {
+            GLib.spawn_async(null, ['gnome-control-center', 'online-accounts'], null, GLib.SpawnFlags.SEARCH_PATH, null);
+            this.emit('request-close');
+        });
+        this._noEvents.add_child(this._noAccounts);
         listArea.add_child(this._noEvents);
         column.add_child(listArea);
         return column;
@@ -309,7 +321,7 @@ class CalendarPage extends Page {
     _dayCell(day, busy) {
         const today = day.getTime() === this._today.getTime();
         const selected = day.getTime() === this._selected.getTime();
-        const weekend = [0, 6].includes(day.getDay());
+        const weekend = this._weekend.includes(day.getDay());
         const classes = ['isle-cal-day'];
         if (today)
             classes.push('today');
@@ -363,6 +375,7 @@ class CalendarPage extends Page {
         for (const event of events)
             this._list.add_child(this._eventRow(event, now));
         this._noEvents.visible = events.length === 0;
+        this._noAccounts.visible = this._source?.hasCalendars === false;
         this._scroll.visible = events.length > 0;
     }
 
@@ -452,11 +465,17 @@ class CalendarPage extends Page {
             this.emit('request-keyboard', false);
     }
 
+    /** GNOME Calendar, else whatever app opens calendar files. */
     _openCalendarApp() {
         const app = Shell.AppSystem.get_default().lookup_app(CALENDAR_APP);
-        if (!app)
-            return;
-        app.activate();
+        if (app) {
+            app.activate();
+        } else {
+            const other = Gio.AppInfo.get_default_for_type('text/calendar', false);
+            if (!other)
+                return;
+            other.launch([], global.create_app_launch_context(0, -1));
+        }
         this.emit('request-close');
     }
 

@@ -10,6 +10,7 @@ mod mpris;
 
 use log::warn;
 use serde::Serialize;
+use tokio::sync::mpsc;
 use zbus::zvariant::OwnedObjectPath;
 use zbus::{fdo, interface};
 
@@ -71,12 +72,35 @@ impl NowPlaying {
     }
 }
 
+/// A player that runs, offered to pick from when there are several.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct PlayerChoice {
+    /// Its name on the bus, for `Choose`.
+    pub name: String,
+    pub identity: String,
+    pub desktop_entry: String,
+    pub playing: bool,
+    /// The one shown and controlled now.
+    pub active: bool,
+}
+
+/// What the user asked of the watcher (see mpris.rs).
+pub enum Wish {
+    /// Show and control this player, until another starts playing.
+    Player(String),
+    /// Look lyrics up online, or not.
+    Lyrics(bool),
+}
+
 #[derive(Default)]
 pub struct MediaService {
     now_playing: NowPlaying,
     lyrics: Lyrics,
+    players: Vec<PlayerChoice>,
     /// The active player and the id of its current track.
     active: Option<(PlayerProxy<'static>, Option<OwnedObjectPath>)>,
+    /// To the watcher, once it runs.
+    wishes: Option<mpsc::UnboundedSender<Wish>>,
 }
 
 impl MediaService {
@@ -137,6 +161,16 @@ impl MediaService {
         })
     }
 
+    /// Shows and controls the player named `name` (from `Players`), until another starts playing.
+    fn choose(&self, name: &str) -> fdo::Result<()> {
+        self.wish(Wish::Player(name.to_owned()))
+    }
+
+    /// Whether lyrics are looked up online (LRCLIB); off, the lyrics say so instead.
+    fn set_lyrics(&self, enabled: bool) -> fdo::Result<()> {
+        self.wish(Wish::Lyrics(enabled))
+    }
+
     /// Brings the player's window to the front.
     fn raise(&self) -> fdo::Result<()> {
         self.send("Raise", |player, _| async move {
@@ -159,6 +193,21 @@ impl MediaService {
     #[zbus(property)]
     fn lyrics(&self) -> String {
         serde_json::to_string(&self.lyrics).unwrap_or_default()
+    }
+
+    /// JSON `[PlayerChoice]`: the players that run, by name.
+    #[zbus(property)]
+    fn players(&self) -> String {
+        serde_json::to_string(&self.players).unwrap_or_default()
+    }
+}
+
+impl MediaService {
+    fn wish(&self, wish: Wish) -> fdo::Result<()> {
+        self.wishes
+            .as_ref()
+            .and_then(|wishes| wishes.send(wish).ok())
+            .ok_or_else(|| fdo::Error::Failed("media is not watched yet".into()))
     }
 }
 
