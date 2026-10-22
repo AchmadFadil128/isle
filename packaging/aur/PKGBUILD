@@ -3,7 +3,7 @@
 # `./update.sh <version>` sets the version and checksum here and in .SRCINFO.
 
 pkgname=isle-bin
-pkgver=0.7.2
+pkgver=0.7.3
 pkgrel=1
 pkgdesc='A dynamic island for the GNOME Shell top bar: music with synced lyrics, calls, a focus timer, a calendar, a file shelf and a voice assistant'
 arch=('x86_64')
@@ -16,7 +16,7 @@ conflicts=('isle')
 options=('!strip' '!debug')
 install=isle-bin.install
 source_x86_64=("https://github.com/zickrian/isle/releases/download/v$pkgver/isle-$pkgver-$CARCH-linux.tar.gz")
-sha256sums_x86_64=('00f9aee81c5bdadaac2fb9c059b705573566d81df938486f4e890721cd5987c0')
+sha256sums_x86_64=('f4d99d453c6726d4c6863107e2530778397cab7143894fa373c800e57064cf4a')
 
 package() {
   cd "isle-$pkgver-$CARCH-linux"
