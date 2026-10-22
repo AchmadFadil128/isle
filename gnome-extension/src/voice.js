@@ -18,7 +18,7 @@ import {describeActions, failed, outcomeOf, slotsFor, TILES} from './actionRules
 import {isTerminal} from './clipboard.js';
 import {VERTICAL} from './compat.js';
 import {plainBody} from './notifications.js';
-import {icon, iconButton, pillButton} from './widgets.js';
+import {icon, iconButton, pillButton, wrapLines} from './widgets.js';
 
 /** Three calm colours, violet to blue to cyan, that light the island while it is open (see island.js). */
 export const SIRI_COLORS = [[0.56, 0.4, 1], [0.27, 0.56, 1], [0.22, 0.84, 0.96]];
@@ -274,11 +274,8 @@ export const VoiceView = GObject.registerClass({
         this._heard.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this._text = new St.Label({style_class: 'isle-voice-text'});
         this._hint = new St.Label({style_class: 'isle-voice-hint'});
-        for (const label of [this._text, this._hint]) {
-            label.clutter_text.line_wrap = true;
-            label.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
-            label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
-        }
+        for (const label of [this._text, this._hint])
+            wrapLines(label);
         // Not wider than its label, at the start of the line.
         this._signIn = pillButton('Sign in', 'isle-pill-small isle-voice-sign-in', () => this.emit('sign-in'));
         this._signIn.x_align = Clutter.ActorAlign.START;

@@ -7,6 +7,7 @@ import GdkPixbuf from 'gi://GdkPixbuf';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 let iconDir = null;
@@ -31,6 +32,26 @@ export function icon(name) {
 
 export function label(text, styleClass, props = {}) {
     return new St.Label({text, style_class: styleClass, y_align: Clutter.ActorAlign.CENTER, ...props});
+}
+
+/** Wraps a label over lines, breaking a long word where it must, with no hyphen added ("example.co-m"). */
+export function wrapLines(label, ellipsize = Pango.EllipsizeMode.NONE) {
+    const text = label.clutter_text;
+    text.line_wrap = true;
+    text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+    text.ellipsize = ellipsize;
+    // St sets the text's attributes again from the style each time it changes; ours goes on top.
+    let ours = null;
+    const noHyphens = () => {
+        const current = text.get_attributes();
+        if (ours && current?.equal(ours))
+            return;
+        ours = current?.copy() ?? new Pango.AttrList();
+        ours.insert(Pango.attr_insert_hyphens_new(false));
+        text.set_attributes(ours);
+    };
+    label.connect_after('style-changed', noHyphens);
+    noHyphens();
 }
 
 /**

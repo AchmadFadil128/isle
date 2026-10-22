@@ -13,7 +13,7 @@ import St from 'gi://St';
 
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
-import {icon, iconButton, label} from '../widgets.js';
+import {icon, iconButton, label, wrapLines} from '../widgets.js';
 import {SHELF_CAPACITY} from './files.js';
 
 /** isled keeps 20 recent items and up to 10 pinned ones. */
@@ -395,9 +395,7 @@ export const ClipsView = GObject.registerClass({
             const host = label(hostOf(link), 'isle-clip-host');
             host.clutter_text.ellipsize = Pango.EllipsizeMode.END;
             const url = label(link.replace(/^https?:\/\//i, ''), 'isle-clip-url');
-            url.clutter_text.line_wrap = true;
-            url.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
-            url.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            wrapLines(url, Pango.EllipsizeMode.END);
             box.add_child(host);
             box.add_child(url);
             return box;
@@ -408,9 +406,7 @@ export const ClipsView = GObject.registerClass({
             // Leading blank lines and long runs of spaces waste the card.
             const shown = code ? item.preview.replace(/^\s*\n/, '') : item.preview.replace(/\s+/g, ' ').trim();
             const text = label(shown.slice(0, 160), code ? 'isle-clip-text isle-clip-code' : 'isle-clip-text');
-            text.clutter_text.line_wrap = true;
-            text.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
-            text.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            wrapLines(text, Pango.EllipsizeMode.END);
             box.add_child(text);
             return box;
         }

@@ -5,12 +5,11 @@
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
-import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {VERTICAL} from '../compat.js';
 import * as Playback from '../playback.js';
-import {icon, label} from '../widgets.js';
+import {icon, label, wrapLines} from '../widgets.js';
 
 /** Where the current line sits in the view, from the top. */
 const ANCHOR = 0.36;
@@ -201,9 +200,7 @@ class LyricsPane extends St.Widget {
                 text: words || '♪',
                 style_class: this._synced ? 'isle-lyric-line' : 'isle-lyric-line plain',
             });
-            row.clutter_text.line_wrap = true;
-            row.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
-            row.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+            wrapLines(row);
         }
         if (this._synced) {
             row.reactive = true;
