@@ -541,6 +541,10 @@
   color: #ffffff !important;
   background-color: transparent !important;
   box-shadow: none !important;
+  caret-color: #ffffff;
+  /* Not the theme's accent (orange on Ubuntu): a quiet selection, as the assistant's field has. */
+  selection-background-color: rgba(255, 255, 255, 0.28);
+  selected-color: #ffffff;
 }
 
 /* GNOME indents the placeholder (more since 49); here it lines up with the titles above. */

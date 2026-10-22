@@ -81,7 +81,8 @@ class TasksPage extends Page {
 
     // The last row: a faint ring and a field, where typing a title and Enter adds it.
     _buildNewRow() {
-        const row = new St.BoxLayout({style_class: 'isle-reminder isle-reminder-new'});
+        // Never y_expand: its column fills the row, and that would pass up (see `_row`).
+        const row = new St.BoxLayout({style_class: 'isle-reminder isle-reminder-new', y_expand: false});
         row.add_child(new St.Widget({style_class: 'isle-reminder-check faint', y_align: Clutter.ActorAlign.CENTER}));
         const column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true});
         this._entry = new St.Entry({style_class: 'isle-reminder-field', hint_text: 'New Reminder', can_focus: true, x_expand: true});
@@ -192,7 +193,9 @@ class TasksPage extends Page {
     }
 
     _row(task) {
-        const row = new St.BoxLayout({style_class: 'isle-reminder', reactive: true, track_hover: true});
+        // Never y_expand: its column fills it, and once a child changes (a rename) the row would ask to
+        // expand too and take all the list's room.
+        const row = new St.BoxLayout({style_class: 'isle-reminder', reactive: true, track_hover: true, y_expand: false});
 
         // The tick box: a ring, and a dot that pops into it when ticked.
         const dot = new St.Widget({style_class: 'isle-reminder-dot', scale_x: 0, scale_y: 0, x_expand: true, y_expand: true});
