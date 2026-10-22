@@ -6,6 +6,15 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-22
+
+### Fixed
+
+- The files tray's helper (`isle-shelf`) stayed in memory, about 130 MB,
+  when something other than opening the tray started it (a drag passing
+  the island, at login): it now quits a minute after starting unless the
+  tray is shown, as it does after the tray closes.
+
 ## [0.7.1] - 2026-10-22
 
 ### Changed

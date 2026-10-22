@@ -122,6 +122,8 @@ impl ShelfWindow {
         shelf.connect_daemon();
 
         shelf.render();
+        // Started hidden (by any call, not only Show): it quits unless shown within `IDLE_QUIT_SECS`.
+        shelf.hide();
         shelf
     }
 
