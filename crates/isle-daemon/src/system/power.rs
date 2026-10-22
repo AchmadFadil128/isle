@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::collections::HashMap;
+use std::time::Duration;
+
+use tokio::time::Instant;
 
 use zbus::Connection;
 use zbus::fdo::PropertiesProxy;
@@ -15,6 +18,10 @@ const DESTINATION: &str = "org.freedesktop.UPower";
 /// UPower's combined view of all batteries.
 const PATH: &str = "/org/freedesktop/UPower/devices/DisplayDevice";
 const INTERFACE: &str = "org.freedesktop.UPower.Device";
+
+/// Plugged in and out again within this, as a charge limit can make the battery seem to (pending-charge,
+/// discharging, pending-charge…), alerts only once.
+const FLAP_WINDOW: Duration = Duration::from_secs(30);
 
 /// Percentages at which a low-battery warning is shown, once each.
 const LOW_LEVELS: [f64; 3] = [20.0, 10.0, 5.0];
@@ -34,6 +41,7 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
         .await?;
     let mut changes = properties.receive_properties_changed().await?;
     let mut previous: Option<(Battery, bool)> = None;
+    let mut last_power_alert: Option<Instant> = None;
 
     loop {
         let all = properties
@@ -43,7 +51,9 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
 
         let event = match (&previous, &current) {
             (Some((before, _)), Some((now, _))) if before.plugged != now.plugged => {
-                Some(SystemEvent::Power {
+                let flapping = last_power_alert.is_some_and(|at| at.elapsed() < FLAP_WINDOW);
+                last_power_alert = Some(Instant::now());
+                (!flapping).then_some(SystemEvent::Power {
                     plugged: now.plugged,
                     percent: now.percent,
                 })

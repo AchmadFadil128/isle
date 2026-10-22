@@ -48,20 +48,43 @@ impl Provider {
         }
     }
 
-    /// The CLI on the PATH, else where its installer puts it (isled's PATH may lack ~/.local/bin).
+    /// The CLI on the PATH, else where an installer or Node version manager puts it: isled starts from
+    /// systemd, whose PATH lacks what a shell's profile adds (~/.local/bin, nvm's current Node…).
     pub fn program(self) -> Option<PathBuf> {
         let name = self.command();
         let home = dirs::home_dir().unwrap_or_default();
         std::env::var_os("PATH")
             .into_iter()
             .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
-            .chain([
-                home.join(".local/bin"),
-                home.join(".npm-global/bin"),
-                home.join(".bun/bin"),
-            ])
+            .chain(install_dirs(&home))
             .map(|dir| dir.join(name))
             .find(|path| path.is_file())
+    }
+
+    /// Whether the user signed in to it, as far as its sign-in file tells.
+    pub fn signed_in(self) -> bool {
+        let home = dirs::home_dir().unwrap_or_default();
+        match self {
+            Provider::Agy => home.join(agy::LOGIN).exists(),
+            Provider::Claude => std::env::var_os("CLAUDE_CONFIG_DIR")
+                .map_or_else(|| home.join(".claude"), PathBuf::from)
+                .join(".credentials.json")
+                .exists(),
+            Provider::Codex => home.join(".codex/auth.json").exists(),
+        }
+    }
+
+    /// How to sign in to it, in a terminal.
+    pub fn sign_in_command(self) -> &'static str {
+        match self {
+            Provider::Agy => "agy",
+            Provider::Claude => "claude",
+            Provider::Codex => "codex login",
+        }
+    }
+
+    pub fn all() -> [Provider; 3] {
+        AUTO
     }
 
     /// `wanted` ("agy", "claude", "codex" or "auto"), if installed; else the first installed for "auto".
@@ -72,6 +95,38 @@ impl Provider {
             None => AUTO.into_iter().find(installed),
         }
     }
+}
+
+/// Where installers and Node version managers put CLIs, beyond the PATH: the newest of nvm's Nodes first.
+fn install_dirs(home: &Path) -> Vec<PathBuf> {
+    let mut nvm: Vec<PathBuf> = std::fs::read_dir(home.join(".nvm/versions/node"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path().join("bin"))
+        .collect();
+    // "v22.11.0" after "v9.0.0": by each number, not by text.
+    let version = |path: &PathBuf| -> Vec<u64> {
+        let name = path.parent().and_then(Path::file_name).unwrap_or_default();
+        name.to_string_lossy()
+            .trim_start_matches('v')
+            .split('.')
+            .map(|part| part.parse().unwrap_or(0))
+            .collect()
+    };
+    nvm.sort_by_key(|path| std::cmp::Reverse(version(path)));
+    [
+        home.join(".local/bin"),
+        home.join(".npm-global/bin"),
+        home.join(".bun/bin"),
+        home.join(".volta/bin"),
+        home.join(".local/share/pnpm"),
+        home.join(".local/share/fnm/aliases/default/bin"),
+    ]
+    .into_iter()
+    .chain(nvm)
+    .chain([PathBuf::from("/usr/local/bin")])
+    .collect()
 }
 
 pub enum Brain {
@@ -309,6 +364,30 @@ mod tests {
             explain(Provider::Codex, "account not eligible").error,
             "Codex isn't available"
         );
+    }
+
+    #[test]
+    fn finds_the_newest_nvm_node_first() {
+        let home = std::env::temp_dir().join(format!("isle-nvm-{}", std::process::id()));
+        for version in ["v9.0.0", "v22.11.0", "v18.2.1"] {
+            std::fs::create_dir_all(home.join(".nvm/versions/node").join(version).join("bin"))
+                .unwrap();
+        }
+        let dirs = install_dirs(&home);
+        let nvm: Vec<_> = dirs
+            .iter()
+            .filter(|d| d.starts_with(home.join(".nvm")))
+            .map(|d| {
+                d.parent()
+                    .unwrap()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        assert_eq!(nvm, ["v22.11.0", "v18.2.1", "v9.0.0"]);
+        std::fs::remove_dir_all(&home).ok();
     }
 
     #[test]

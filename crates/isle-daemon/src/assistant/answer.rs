@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! What every AI answers with, whichever the user picked: a JSON object of what to say, the actions
-//! Isle runs, and whether to listen again.
+//! Isle runs, whether it is done or wants to see what they did first, and whether to listen again.
 
 use serde::Deserialize;
 use serde_json::Value;
 
 /// What the model must answer with; the extension runs the actions.
 pub const SCHEMA: &str = r#"{"type":"object","required":["say","actions"],"properties":{
-"say":{"type":"string"},"listen":{"type":"boolean"},
+"say":{"type":"string"},"listen":{"type":"boolean"},"done":{"type":"boolean"},
 "actions":{"type":"array","items":{"type":"object","required":["type"],"properties":{
 "type":{"type":"string","enum":["open_url","open_app","media","focus","add_task","add_event",
 "volume","wifi","bluetooth","dnd","remind","settings","terminal","close_app","open_folder","brightness","dark_mode","night_light","done_task","remove_task","cancel_reminder","remove_event","play_music","window","find_files","list_folder","recent_files","read_text","find_apps","top_processes","chrome_profiles","open_file","reveal_file","chrome_profile","notifications","screenshot","lock","write","arrange"]},
@@ -27,7 +27,27 @@ pub struct Answer {
     /// The answer asks the user something, so Isle listens again at once.
     #[serde(default)]
     pub listen: bool,
+    /// False while the AI wants its actions run and their results back before it goes on.
+    #[serde(default = "yes")]
+    pub done: bool,
     /// The tools isled ran for this answer, in order (see agent.rs).
     #[serde(skip)]
     pub tools: Vec<String>,
+}
+
+impl Answer {
+    /// Just words: what an AI said without the JSON asked for, or an error.
+    pub fn plain(say: impl Into<String>) -> Self {
+        Self {
+            say: say.into(),
+            actions: Vec::new(),
+            listen: false,
+            done: true,
+            tools: Vec::new(),
+        }
+    }
+}
+
+fn yes() -> bool {
+    true
 }

@@ -3,6 +3,7 @@
 // Integration with GNOME Shell itself: the top bar, the volume/brightness
 // OSD and keyboard state. Everything here is undone in `destroy()`.
 
+import GLib from 'gi://GLib';
 import PangoCairo from 'gi://PangoCairo';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -12,6 +13,9 @@ import {clutterBackend} from './compat.js';
 
 // Isle's top bar colour per `top-bar-style`, added to the bar's inline style so other extensions keep
 // theirs, and re-added when one replaces it (Blur my Shell does). Glass has no colour of its own.
+/** More changes of the bar's style than this in a second are a fight with another extension. */
+const MAX_RESTYLES_PER_SECOND = 5;
+
 const BAR_STYLES = {
     black: 'background-color: #000000;',
     glass: 'background-color: transparent;',
@@ -43,6 +47,7 @@ export class TopBar extends Signals.EventEmitter {
 
         this._settingsChanged = [
             settings.connect('changed::top-bar-style', () => {
+                this._yielded = false;
                 this._applyStyle();
                 this.emit('style-changed');
             }),
@@ -50,7 +55,7 @@ export class TopBar extends Signals.EventEmitter {
             settings.connect('changed::island-in-top-bar', () => this._applyStyle()),
         ];
         this._applyStyle();
-        this._styleChanged = Main.panel.connect('notify::style', () => this._syncColor());
+        this._styleChanged = Main.panel.connect('notify::style', () => this._onPanelStyle());
 
         this._heightChanged = Main.panel.connect('notify::height', () => this.emit('height-changed'));
 
@@ -84,6 +89,22 @@ export class TopBar extends Signals.EventEmitter {
         toggleStyleClass(Main.panel, NOTCH_BAR_CLASS, this._settings.get_boolean('island-in-top-bar'));
         toggleStyleClass(Main.panel, GLASS_BAR_CLASS, this._settings.get_string('top-bar-style') === 'glass');
         toggleStyleClass(Main.panel, SF_PRO_CLASS, hasSfPro());
+    }
+
+    // Another extension that sets the bar's style too would undo Isle's rule each time Isle set it, in a
+    // loop that keeps the shell busy: past a few times a second, Isle gives way until the setting changes.
+    _onPanelStyle() {
+        if (this._yielded)
+            return;
+        const now = GLib.get_monotonic_time();
+        this._restyles = (this._restyles ?? []).filter(at => now - at < 1e6);
+        this._restyles.push(now);
+        if (this._restyles.length > MAX_RESTYLES_PER_SECOND) {
+            this._yielded = true;
+            console.warn('Isle: another extension keeps changing the top bar\'s style; Isle stops setting its colour');
+            return;
+        }
+        this._syncColor();
     }
 
     /** Sets Isle's colour rule, leaving the rest of the style alone. */

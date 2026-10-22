@@ -18,6 +18,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Check the version
+        if: github.ref_type == 'tag'
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          grep -q "^version = \"$version\"" Cargo.toml || { echo "Cargo.toml is not at $version"; exit 1; }
+          grep -q "\"version-name\": \"$version\"" gnome-extension/metadata.json ||
+            { echo "metadata.json is not at $version"; exit 1; }
+          grep -q "^## \[$version\]" CHANGELOG.md || { echo "CHANGELOG.md has no $version"; exit 1; }
       - name: Install GTK 4
         run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
       - uses: dtolnay/rust-toolchain@stable
@@ -37,6 +45,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="$GITHUB_REF_NAME"
-          gh release view "$tag" >/dev/null 2>&1 ||
-            gh release create "$tag" --title "Isle ${tag#v}" --generate-notes
-          gh release upload "$tag" dist/*.tar.gz dist/*.sha256 --clobber
+          # The version's own section of the changelog.
+          awk -v v="${tag#v}" 'index($0, "## [" v "]") == 1 {on = 1; next} /^## \[/ {on = 0} on' CHANGELOG.md > notes.md
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/*.tar.gz dist/*.sha256 --clobber
+          else
+            # Made with its files in one go: get.sh never finds a release without them.
+            gh release create "$tag" dist/*.tar.gz dist/*.sha256 --title "Isle ${tag#v}" --notes-file notes.md
+          fi

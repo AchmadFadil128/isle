@@ -9,11 +9,12 @@ use std::process::Stdio;
 use anyhow::{Context, bail};
 use chrono::{DateTime, Local, NaiveDate};
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::answer::{Answer, SCHEMA};
+use super::child;
 
 /// Fast answers for a voice assistant; the user's own Codex settings are not used.
 const EFFORT: &str = "model_reasoning_effort=\"low\"";
@@ -118,25 +119,29 @@ impl Codex {
         }
         // The prompt goes on stdin ("-"): on the command line, any user could read it in /proc, and a
         // long one would not fit.
-        let mut child = command
+        command
             .arg("-")
             .env("CODEX_HOME", home())
             .current_dir(&self.workspace)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .context("could not start codex; is Codex installed?")?;
+            .stderr(Stdio::piped());
+        let mut child =
+            child::spawn(&mut command).context("could not start codex; is Codex installed?")?;
         let mut stdin = child.stdin.take().expect("piped stdin");
         stdin.write_all(prompt.as_bytes()).await.ok();
         drop(stdin);
-        // Read as it comes, so a chatty stderr never fills its pipe and stalls Codex.
-        let mut stderr = child.stderr.take().expect("piped stderr");
+        // Read as it comes, so a chatty stderr never fills its pipe and stalls Codex; only its last
+        // line is kept, to explain a failure.
+        let mut stderr = BufReader::new(child.stderr.take().expect("piped stderr")).lines();
         let errors = tokio::spawn(async move {
-            let mut errors = String::new();
-            stderr.read_to_string(&mut errors).await.ok();
-            errors
+            let mut last = String::new();
+            while let Ok(Some(line)) = stderr.next_line().await {
+                if !line.trim().is_empty() {
+                    last = line;
+                }
+            }
+            last
         });
         let mut events = BufReader::new(child.stdout.take().expect("piped stdout")).lines();
         let mut answer = None;
@@ -174,10 +179,7 @@ impl Codex {
         match (answer, failure) {
             (Some(text), _) => parse_answer(&text),
             (None, Some(reason)) => bail!("{reason}"),
-            (None, None) => bail!(
-                "codex stopped: {}",
-                errors.lines().last().unwrap_or_default()
-            ),
+            (None, None) => bail!("codex stopped: {errors}"),
         }
     }
 }
@@ -196,7 +198,10 @@ fn step(item: &Value) -> Option<String> {
 fn parse_answer(text: &str) -> anyhow::Result<Answer> {
     let mut value: Value =
         serde_json::from_str(text.trim()).context("codex answered without the JSON asked for")?;
-    // Its schema has every field, unused ones null; the actions keep only what was given.
+    // Its schema has every field, unused ones null: only what was given is kept.
+    if let Some(answer) = value.as_object_mut() {
+        answer.retain(|_, field| !field.is_null());
+    }
     if let Some(actions) = value["actions"].as_array_mut() {
         for action in actions.iter_mut().filter_map(Value::as_object_mut) {
             action.retain(|_, field| !field.is_null());
@@ -257,17 +262,25 @@ fn strict(schema: &str) -> anyhow::Result<String> {
     Ok(value.to_string())
 }
 
-/// The model in the user's own ~/.codex/config.toml, so Isle uses the same one unless told otherwise.
+/// The model in the user's own ~/.codex/config.toml, so Isle uses the same one unless told otherwise:
+/// its top-level `model`, not a profile's.
 fn user_model() -> Option<String> {
     let config = std::fs::read_to_string(dirs::home_dir()?.join(".codex/config.toml")).ok()?;
-    config.lines().find_map(|line| {
-        let value = line
-            .trim()
-            .strip_prefix("model")?
-            .trim_start()
-            .strip_prefix('=')?;
-        Some(value.trim().trim_matches('"').to_owned())
-    })
+    top_level_model(&config)
+}
+
+fn top_level_model(config: &str) -> Option<String> {
+    config
+        .lines()
+        .take_while(|line| !line.trim_start().starts_with('['))
+        .find_map(|line| {
+            let value = line
+                .trim()
+                .strip_prefix("model")?
+                .trim_start()
+                .strip_prefix('=')?;
+            Some(value.trim().trim_matches('"').to_owned())
+        })
 }
 
 /// Links Isle's Codex home to the user's sign-in (`auth.json`), relinked if Codex replaced the link.
@@ -354,6 +367,15 @@ mod tests {
             item["properties"]["terms"]["type"],
             serde_json::json!(["array", "null"])
         );
+    }
+
+    #[test]
+    fn takes_only_the_top_level_model() {
+        assert_eq!(
+            top_level_model("model = \"gpt-5.5\"\n[profiles.fast]\nmodel = \"mini\"\n").as_deref(),
+            Some("gpt-5.5")
+        );
+        assert_eq!(top_level_model("[profiles.fast]\nmodel = \"mini\"\n"), None);
     }
 
     #[test]

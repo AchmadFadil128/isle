@@ -327,18 +327,40 @@ const AI_PROVIDERS = [
     },
 ];
 
-/** `command` on the PATH or where installers put it, else null. */
+/** `command` on the PATH or where installers and Node version managers put it, as isled looks; else null. */
 function findProgram(command) {
     const home = GLib.get_home_dir();
-    return GLib.find_program_in_path(command) ?? ['.local/bin', '.npm-global/bin', '.bun/bin']
-        .map(dir => GLib.build_filenamev([home, dir, command]))
+    const dirs = ['.local/bin', '.npm-global/bin', '.bun/bin', '.volta/bin', '.local/share/pnpm',
+        '.local/share/fnm/aliases/default/bin'].map(dir => GLib.build_filenamev([home, dir]));
+    return GLib.find_program_in_path(command) ?? [...dirs, ...nvmBins(home), '/usr/local/bin']
+        .map(dir => GLib.build_filenamev([dir, command]))
         .find(path => GLib.file_test(path, GLib.FileTest.IS_EXECUTABLE)) ?? null;
+}
+
+/** nvm's Nodes' bin folders, newest first. */
+function nvmBins(home) {
+    const root = GLib.build_filenamev([home, '.nvm', 'versions', 'node']);
+    const versions = [];
+    try {
+        const children = Gio.File.new_for_path(root).enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
+        for (let info = children.next_file(null); info; info = children.next_file(null))
+            versions.push(info.get_name());
+    } catch {
+        return [];
+    }
+    const parts = name => name.replace(/^v/, '').split('.').map(Number);
+    versions.sort((a, b) => {
+        const [x, y] = [parts(a), parts(b)];
+        const differ = x.findIndex((n, i) => n !== y[i]);
+        return differ < 0 ? 0 : (y[differ] ?? 0) - (x[differ] ?? 0);
+    });
+    return versions.map(name => GLib.build_filenamev([root, name, 'bin']));
 }
 
 /** The models Codex lists, from the cache it keeps (Isle's own home for it, else the user's). */
 function codexModels() {
     const home = GLib.get_home_dir();
-    for (const dir of [[home, '.local', 'share', 'isle', 'codex'], [home, '.codex']]) {
+    for (const dir of [[GLib.get_user_data_dir(), 'isle', 'codex'], [home, '.codex']]) {
         try {
             const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([...dir, 'models_cache.json']));
             const models = JSON.parse(new TextDecoder().decode(bytes)).models ?? [];

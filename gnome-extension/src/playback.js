@@ -56,6 +56,8 @@ export function msUntilLine(nowPlaying, lines, index) {
 
 /** The playing app per player, looked up once: `desktop_entry|identity`. */
 const playerApps = new Map();
+/** Players remembered at most; the oldest goes first. */
+const MAX_PLAYER_APPS = 20;
 
 /** The playing app, from the player's desktop entry or else its name (Chrome gives only "Chrome"); or null. */
 export function playerApp({desktop_entry: entry, identity}) {
@@ -72,6 +74,8 @@ export function playerApp({desktop_entry: entry, identity}) {
             if (app)
                 break;
         }
+        if (playerApps.size >= MAX_PLAYER_APPS)
+            playerApps.delete(playerApps.keys().next().value);
         playerApps.set(key, app);
     }
     return playerApps.get(key);

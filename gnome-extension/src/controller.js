@@ -44,8 +44,10 @@ const REST_DISTANCE_PX = 10;
 /** The views and pages are laid out ahead this long after starting, a step at a time (see `_warmUp`). */
 const WARM_START_MS = 3000;
 const WARM_STEP_MS = 60;
-/** And again this long after the island closes, or a page changes out of sight, while it stays closed. */
+/** And again this long after the island closes, or a page changes out of sight, while it stays closed... */
 const WARM_AFTER_CLOSE_MS = 1500;
+/** ...but for changes, at most this often: a notification updating every second (a download) costs little. */
+const WARM_GAP_MS = 10000;
 /** Outside an island that shrank under it, the pointer is checked this often, and left this long. */
 const MOVE_CHECK_MS = 250;
 const STILL_OUTSIDE_MS = 30000;
@@ -55,8 +57,9 @@ const COLLAPSE_DELAY_MS = 300;
 const PAGE_MEMORY_MS = 5 * 60 * 1000;
 /** An alert's width is checked again this soon after it shows. */
 const ALERT_FIT_DELAY_MS = 60;
-/** Without input for this long, the user is away and animations rest. */
+/** Without input for this long, the user is away and animations rest; sooner on battery. */
 const IDLE_MS = 60 * 1000;
+const IDLE_ON_BATTERY_MS = 15 * 1000;
 
 // Corner and shoulder ("ear") radii per presentation; the shoulders grow with the island.
 // The compact island hangs 30 px by default, with a 16 px corner and a 10 px shoulder.
@@ -85,6 +88,8 @@ const VOICE_READ_MS = {base: 3000, perChar: 45, max: 12000};
 const VOICE_ERROR_MS = 4000;
 /** Once read with the pointer on it, an answer goes this soon after the pointer leaves. */
 const VOICE_LEAVE_MS = 1200;
+/** isled's phases while it works on a request: with the island closed, it carries on in the background. */
+const VOICE_WORKING = ['transcribing', 'thinking', 'acting'];
 
 // Pages that open by default when they have something to show, best first, unless one was picked
 // by hand lately. Notifications count only when some arrived unseen (others were shown as alerts).
@@ -112,8 +117,11 @@ export class Controller {
         /** Counts `_listen` calls, so only the latest sends its request. */
         this._listenRequest = 0;
         this._voiceCloseMs = VOICE_ERROR_MS;
-        /** The last answer whose actions ran. */
+        /** The last answer whose actions ran, and the last batch of actions run mid-way (see isled's `step`). */
         this._voiceTurn = 0;
+        this._voiceStep = 0;
+        /** A request carries on after the island closed; its answer comes as an alert. */
+        this._voiceInBackground = false;
         /** Times in a row it listened again by itself; see `VOICE_MAX_AUTO_LISTENS`. */
         this._autoListens = 0;
         /** The window in front when the assistant opened, for it to write into. */
@@ -280,13 +288,18 @@ export class Controller {
         daemon.connect('usage-alert', (_daemon, provider, window, percent, resetsAt) =>
             this._post(Alerts.usage(provider, window, percent, resetsAt, this._settings.get_int('usage-critical'))));
         // isled forgets the settings when it restarts; they are sent again whenever it appears.
-        daemon.connect('changed', (_daemon, key) => {
-            if (key === 'usage' && this._daemon.state.usage === null)
-                this._usageSent = false;
-            if (key === 'usage' && !this._usageSent)
+        daemon.connect('appeared', (_daemon, name) => {
+            if (name === 'usage')
                 this._syncUsage();
         });
         this._voice.connect('orb-clicked', () => this._onVoiceKey());
+        this._voice.connect('stop', () => {
+            this._daemon.call('assistant', 'Cancel');
+            this.collapse();
+            // Stopped, not left to carry on.
+            this._voiceInBackground = false;
+            this._syncAssistantBusy();
+        });
         // An AI's CLI signs in from a terminal; the island gets out of its way.
         this._voice.connect('sign-in', () => {
             if (openSignIn(this._daemon.state.assistant?.provider))
@@ -328,6 +341,8 @@ export class Controller {
     }
 
     _render() {
+        if (this._destroying)
+            return;
         const presentation = this._voiceOpen ? 'voice'
             : this._expandWanted ? 'expanded' : this._alert ? 'peek' : 'compact';
         this._presentation = presentation;
@@ -398,8 +413,10 @@ export class Controller {
         if (!island.mapped)
             return;
         const pages = expanded.pages.filter(page => page.cold);
+        // The voice view only while the assistant is turned on.
         const steps = all
-            ? [...this._peeks, this._voice].map(view => () => island.warmView(view, true) && island.warmView(view, false))
+            ? [...this._peeks, ...this._voiceBound ? [this._voice] : []]
+                .map(view => () => island.warmView(view, true) && island.warmView(view, false))
             : [];
         if (pages.length || all) {
             steps.push(() => {
@@ -423,10 +440,12 @@ export class Controller {
                 return;
             }
             steps.shift()?.();
-            if (steps.length)
+            if (steps.length) {
                 this._later('warm', WARM_STEP_MS, next);
-            else
-                this._scheduleWarm();
+                return;
+            }
+            this._warmedAt = GLib.get_monotonic_time() / 1000;
+            this._scheduleWarm();
         };
         next();
     }
@@ -442,9 +461,11 @@ export class Controller {
 
     /** Lays out the pages that changed out of sight, once the island has rested closed a while. */
     _scheduleWarm() {
-        if (this._presentation === 'compact' && this._island.mapped && !this._timeouts.has('warm') &&
-            this._expanded.pages.some(page => page.cold))
-            this._later('warm', WARM_AFTER_CLOSE_MS, () => this._warmUp(false));
+        if (this._presentation !== 'compact' || !this._island.mapped || this._timeouts.has('warm') ||
+            !this._expanded.pages.some(page => page.cold))
+            return;
+        const sinceLast = GLib.get_monotonic_time() / 1000 - (this._warmedAt ?? -Infinity);
+        this._later('warm', Math.max(WARM_AFTER_CLOSE_MS, WARM_GAP_MS - sinceLast), () => this._warmUp(false));
     }
 
     _syncTint() {
@@ -534,6 +555,11 @@ export class Controller {
                 this._dismissAlert(true);
                 return Clutter.EVENT_STOP;
             }
+            // The assistant still at work: its progress, rather than the pages.
+            if (!this._expandWanted && this._voiceWorking) {
+                this._reopenVoice();
+                return Clutter.EVENT_STOP;
+            }
             if (!this._expandWanted) {
                 this.expand();
                 return Clutter.EVENT_STOP;
@@ -563,6 +589,9 @@ export class Controller {
 
     /** Opens the island, on `pageName` or the most useful page. */
     expand(pageName = null) {
+        // An action finishing after Isle was turned off.
+        if (this._destroying)
+            return;
         this._cancel('expand');
         if (this._voiceOpen)
             this._closeVoice();
@@ -576,6 +605,8 @@ export class Controller {
     }
 
     collapse() {
+        if (this._destroying)
+            return;
         this._cancel('collapse');
         this._setKeyboard(false);
         // Once closed and settled, what changed meanwhile is laid out for next time (see `_warmUp`).
@@ -752,7 +783,6 @@ export class Controller {
             critical: this._settings.get_int('usage-critical'),
         };
         this._expanded.pageNamed('usage')?.setMarks(config.warn, config.critical);
-        this._usageSent = true;
         this._daemon.call('usage', 'SetConfig', JSON.stringify(config));
     }
 
@@ -778,7 +808,11 @@ export class Controller {
     // and once answered it listens again for a follow-up.
     _onVoiceKey() {
         if (!this._voiceOpen) {
-            this._openVoice();
+            // A request still at work shows its progress; a new one waits until it is done.
+            if (this._voiceWorking)
+                this._reopenVoice();
+            else
+                this._openVoice();
             return;
         }
         // isled's phase, not the view's: the view says listening before isled has started.
@@ -805,9 +839,41 @@ export class Controller {
             this._queue.unshift(this._alert);
         this._dismissAlert(false);
         this._voiceOpen = true;
+        this._voiceInBackground = false;
         this._voiceTurn = this._daemon.state.assistant?.turn ?? 0;
+        this._voiceStep = this._daemon.state.assistant?.step ?? 0;
         this._autoListens = 0;
         this._listen({greet: true});
+    }
+
+    /** Shows the assistant again as it is (at work, or with the answer it came to), without listening. */
+    _reopenVoice() {
+        const state = this._daemon.state.assistant;
+        if (!this._voiceBound || !state)
+            return;
+        this._cancel('expand');
+        this._cancel('collapse');
+        this._expandWanted = false;
+        this._voiceOpen = true;
+        this._voiceInBackground = false;
+        this._voiceTarget = global.display.focus_window;
+        this._voice.followUp = null;
+        this._voice.greeting = null;
+        this._voice.setState(state);
+        this._syncAssistantBusy();
+        this._render();
+        if (this._voiceAnswered)
+            this._scheduleVoiceClose(VOICE_READ_MS.max);
+    }
+
+    /** Whether the assistant works on a request with the island closed. */
+    get _voiceWorking() {
+        return this._voiceInBackground && VOICE_WORKING.includes(this._daemon.state.assistant?.phase);
+    }
+
+    /** The closed island shows the assistant at work. */
+    _syncAssistantBusy() {
+        this._compact.assistantBusy = this._voiceWorking;
     }
 
     async _listen({greet = false} = {}) {
@@ -845,7 +911,22 @@ export class Controller {
 
     _onAssistant() {
         const state = this._daemon.state.assistant;
-        if (!this._voiceOpen || !state || state.phase === 'idle')
+        if (!state)
+            return;
+        const ours = this._voiceOpen || this._voiceInBackground;
+        // Actions it takes mid-way, open or closed: each batch once, and what they did goes back.
+        if (ours && state.phase === 'acting' && state.step !== this._voiceStep) {
+            this._voiceStep = state.step;
+            const step = state.step;
+            runActions(state.actions, this._voiceActions()).then(results =>
+                this._daemon.call('assistant', 'Results', step, JSON.stringify(results)));
+        }
+        this._syncAssistantBusy();
+        if (!this._voiceOpen) {
+            this._onAssistantInBackground(state);
+            return;
+        }
+        if (state.phase === 'idle')
             return;
         // Nothing said back to a follow-up: it just closes, no error.
         if (state.phase === 'error' && state.heard_nothing && this._voice.followUp) {
@@ -883,6 +964,22 @@ export class Controller {
         }
     }
 
+    // Answered with the island closed: its actions run, and the answer (or what went wrong) shows as an
+    // alert, which opens it in full.
+    _onAssistantInBackground(state) {
+        if (!this._voiceInBackground)
+            return;
+        if (state.phase === 'reply' && state.turn !== this._voiceTurn) {
+            this._voiceTurn = state.turn;
+            runActions(state.actions, this._voiceActions());
+        } else if (state.phase !== 'error') {
+            return;
+        }
+        this._voiceInBackground = false;
+        this._syncAssistantBusy();
+        this._post(Alerts.assistant(state, () => this._reopenVoice()));
+    }
+
     /** An answer or an error is on show, no longer listening or thinking. */
     get _voiceAnswered() {
         return ['reply', 'error'].includes(this._voice.phase);
@@ -891,7 +988,14 @@ export class Controller {
     // isled restarted (an update) or stopped while listening or thinking: it will never answer, so
     // the island says so rather than wait forever.
     _onAssistantLost() {
-        if (!this._voiceOpen || !['listening', 'transcribing', 'thinking'].includes(this._voice.phase))
+        if (this._voiceInBackground) {
+            this._voiceInBackground = false;
+            this._syncAssistantBusy();
+            this._post(Alerts.assistant({phase: 'error', error: 'Isle restarted', hint: 'Press Super+I to ask again.'},
+                () => this._openVoice()));
+            return;
+        }
+        if (!this._voiceOpen || !['listening', ...VOICE_WORKING].includes(this._voice.phase))
             return;
         this._voice.setState({phase: 'error', error: 'Isle restarted', hint: 'Press Super+I to ask again.'});
         this._setKeyboard(false);
@@ -938,7 +1042,9 @@ export class Controller {
         this._cancel('voice-listen');
         this._cancel('voice-page');
         this._voiceOpen = false;
-        this._voiceTarget = null;
+        // Still at work: it carries on, and its answer comes as an alert.
+        this._voiceInBackground = VOICE_WORKING.includes(this._daemon.state.assistant?.phase);
+        this._syncAssistantBusy();
         this._daemon.call('assistant', 'End');
     }
 
@@ -951,7 +1057,7 @@ export class Controller {
 
     _watchIdle() {
         const monitor = global.backend.get_core_idle_monitor();
-        this._idleWatch = monitor.add_idle_watch(IDLE_MS, () => {
+        const rest = () => {
             this._compact.idle = true;
             if (!this._activeWatch) {
                 this._activeWatch = monitor.add_user_active_watch(() => {
@@ -959,6 +1065,12 @@ export class Controller {
                     this._compact.idle = false;
                 });
             }
+        };
+        this._idleWatch = monitor.add_idle_watch(IDLE_MS, rest);
+        this._batteryIdleWatch = monitor.add_idle_watch(IDLE_ON_BATTERY_MS, () => {
+            const battery = this._daemon.state.system?.battery;
+            if (battery && !battery.plugged)
+                rest();
         });
     }
 
@@ -1000,6 +1112,8 @@ export class Controller {
         const monitor = global.backend.get_core_idle_monitor();
         if (this._idleWatch)
             monitor.remove_watch(this._idleWatch);
+        if (this._batteryIdleWatch)
+            monitor.remove_watch(this._batteryIdleWatch);
         if (this._activeWatch)
             monitor.remove_watch(this._activeWatch);
 

@@ -55,6 +55,8 @@ export const CompactView = GObject.registerClass({
         // A call: a green phone, and on the right a red microphone while it is muted.
         this._phone = new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 15, style_class: 'isle-call-icon', y_align: Clutter.ActorAlign.CENTER});
         this._micOff = new St.Icon({gicon: icon('isle-mic-off-symbolic'), icon_size: 15, style_class: 'isle-call-muted', y_align: Clutter.ActorAlign.CENTER});
+        // The assistant at work with the island closed: still, so it costs no frames.
+        this._assistant = new St.Icon({gicon: icon('isle-mic-symbolic'), icon_size: 15, style_class: 'isle-compact-assistant', y_align: Clutter.ActorAlign.CENTER});
 
         const center = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true});
         this._clock = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
@@ -134,6 +136,14 @@ export const CompactView = GObject.registerClass({
         this._refresh();
     }
 
+    /** Shows that the assistant works on a request, on the right, first of all. */
+    set assistantBusy(busy) {
+        if (busy === Boolean(this._assistantBusy))
+            return;
+        this._assistantBusy = busy;
+        this._refresh();
+    }
+
     /** Fits the view inside the top bar, like a MacBook's notch, or below it. */
     set inBar(inBar) {
         if (inBar === this._inBar)
@@ -187,6 +197,8 @@ export const CompactView = GObject.registerClass({
         let right = hasTrack ? this._bars : null;
         if (onCall && this._call.muted)
             right = this._micOff;
+        if (this._assistantBusy)
+            right = this._assistant;
         // On a call the green phone already says the microphone is on, as on an iPhone, unless another app records too.
         const privacy = this._showingPrivacy() ? this._privacy : {};
         const microphone = privacy.microphone && (!onCall || this._call.othersRecording);
@@ -319,7 +331,7 @@ export const CompactView = GObject.registerClass({
         this._privacy.disconnect(this._privacyChanged);
         this._call.disconnect(this._callChanged);
         // Slots may hold actors that are not currently children.
-        for (const actor of [this._ring, this._art, this._dot, this._moon, this._recordingDot, this._bars, this._phone, this._micOff]) {
+        for (const actor of [this._ring, this._art, this._dot, this._moon, this._recordingDot, this._bars, this._phone, this._micOff, this._assistant]) {
             if (!actor.get_parent())
                 actor.destroy();
         }

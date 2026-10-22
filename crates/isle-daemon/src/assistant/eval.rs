@@ -115,6 +115,7 @@ const QUICK: &[&str] = &[
     "kenapa laptop aku lemot ya",
     "tutup jendela youtube",
     "split chrome sama vscode 50 50",
+    "buka firefox terus taruh di sebelah kiri layar",
     "ingetin aku angkat jemuran 10 menit lagi",
     "ringkas teks ini",
 ];
@@ -437,6 +438,33 @@ fn cases() -> Vec<Case> {
                 "did not close this window",
             )
         }),
+        case(&["buka firefox terus taruh di sebelah kiri layar"], |a| {
+            let actions = &last(a).actions;
+            let opened = actions
+                .iter()
+                .position(|x| x["type"] == "open_app" && text(x, "app").contains("firefox"));
+            let placed = actions.iter().position(|x| {
+                (x["type"] == "window" && text(x, "command") == "left")
+                    || (x["type"] == "arrange"
+                        && x["apps"].to_string().to_lowercase().contains("firefox"))
+            });
+            ensure(
+                matches!((opened, placed), (Some(o), Some(p)) if o < p),
+                "did not open Firefox, then put it on the left",
+            )
+        }),
+        case(
+            &["buka spotify, putar lagu jazz, terus kecilin volume ke 30 persen"],
+            |a| {
+                let a = last(a);
+                ensure(
+                    !actions(a, "play_music").is_empty() || !actions(a, "media").is_empty(),
+                    "did not play music",
+                )?;
+                let volume = action(a, "volume")?;
+                ensure(volume["level"].as_f64() == Some(30.0), "volume not 30")
+            },
+        ),
         case(&["split chrome sama vscode 50 50"], |a| {
             let arrange = action(last(a), "arrange")?;
             let apps = arrange["apps"].to_string().to_lowercase();
@@ -863,11 +891,32 @@ async fn run(case: &Case) -> Result<Vec<Answer>, String> {
     for turn in case.turns {
         let data = format!("{facts}\n{}", agenda.summary());
         let prompt = session.prompt(turn, &data);
-        // The agent loop, as isled runs it; the steps it shows are not checked here.
+        // The agent loop, as isled runs it; the steps it shows are not checked here. Actions taken
+        // mid-way all "work", and count with the answer's own, in order.
         let (activity, _steps) = tokio::sync::mpsc::unbounded_channel();
-        let answer = agent::think(&mut agy, &prompt, &activity)
+        let (desk, mut acts) = tokio::sync::mpsc::unbounded_channel::<agent::Act>();
+        let taken = tokio::spawn(async move {
+            let mut taken = Vec::new();
+            while let Some(act) = acts.recv().await {
+                let results = act
+                    .actions
+                    .iter()
+                    .map(|a| serde_json::json!({"type": a["type"], "ok": true}))
+                    .collect();
+                act.results.send(results).ok();
+                taken.extend(act.actions);
+            }
+            taken
+        });
+        let answer = agent::think(&mut agy, &prompt, &activity, &desk)
             .await
             .map_err(|err| format!("{err:#}"));
+        drop(desk);
+        let taken = taken.await.unwrap_or_default();
+        let answer = answer.map(|mut answer| {
+            answer.actions.splice(0..0, taken);
+            answer
+        });
         session.sent_data = Some(data);
         match answer {
             Ok(mut answer) => {
@@ -877,12 +926,7 @@ async fn run(case: &Case) -> Result<Vec<Answer>, String> {
             }
             Err(err) => {
                 answers.clear();
-                answers.push(Answer {
-                    say: err,
-                    actions: Vec::new(),
-                    listen: false,
-                    tools: Vec::new(),
-                });
+                answers.push(Answer::plain(err));
                 break;
             }
         }

@@ -8,9 +8,17 @@ use chrono::{Local, NaiveDate, TimeZone};
 
 use tokio::sync::Notify;
 
-/// Longest single sleep. Tokio sleeps on the monotonic clock, which stops
-/// during suspend, so long waits are split up and the wall clock re-checked.
-const MAX_NAP: Duration = Duration::from_secs(30);
+/// Longest single sleep. Tokio sleeps on the monotonic clock, which stops during suspend: waits are
+/// re-checked on waking from it (`resumed`), and at least this often in case that was missed.
+const MAX_NAP: Duration = Duration::from_secs(60 * 60);
+
+/// Wakes every wait to re-check the wall clock.
+static RESUMED: Notify = Notify::const_new();
+
+/// The computer woke from suspend: deadlines passed meanwhile are due now.
+pub fn resumed() {
+    RESUMED.notify_waiters();
+}
 
 /// Milliseconds since the Unix epoch.
 pub fn now_ms() -> i64 {
@@ -34,6 +42,7 @@ pub async fn wait_until(deadline: Option<i64>, wake: &Notify) -> bool {
     let nap = Duration::from_millis(remaining as u64).min(MAX_NAP);
     tokio::select! {
         () = tokio::time::sleep(nap) => now_ms() >= deadline,
+        () = RESUMED.notified() => now_ms() >= deadline,
         () = notified => false,
     }
 }

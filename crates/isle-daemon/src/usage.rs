@@ -19,10 +19,20 @@ use crate::clock::now_ms;
 use crate::store::Store;
 
 /// Codex's logs are looked at this often (cheap, local); Claude is asked this often (one request),
-/// and after a failure ever less often, up to `CLAUDE_BACKOFF`, so its server is never pressed.
+/// and after its server failed ever less often, up to `CLAUDE_BACKOFF`, so it is never pressed. Off,
+/// or with no AI signed in, nothing runs until Settings or the page asks.
 const LOCAL_EVERY: Duration = Duration::from_secs(60);
 const CLAUDE_EVERY: Duration = Duration::from_secs(10 * 60);
 const CLAUDE_BACKOFF: Duration = Duration::from_secs(60 * 60);
+/// With no AI signed in, the sign-in files are looked for this often.
+const NOTHING_SIGNED_IN_EVERY: Duration = Duration::from_secs(30 * 60);
+/// Offline (as at login, before the network is up), Claude is asked again after these, then as usual.
+const OFFLINE_RETRIES: [Duration; 4] = [
+    Duration::from_secs(30),
+    Duration::from_secs(60),
+    Duration::from_secs(2 * 60),
+    Duration::from_secs(5 * 60),
+];
 /// Only the end of a Codex log is read: its newest limits are written last.
 const CODEX_TAIL: u64 = 256 * 1024;
 /// Asked to refresh (the page opened), Claude is asked again only after this long.
@@ -143,14 +153,26 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
     let mut claude: Option<Provider> = None;
     let mut asked_claude: Option<Instant> = None;
     let mut claude_wait = CLAUDE_EVERY;
+    // Failures in a row, and whether the last was the server's (then the page cannot hurry it).
+    let mut failures = 0;
+    let mut server_failing = false;
     let mut codex = CodexReader::default();
+    // Until Settings sends its config, and while usage is off, no timer at all: `None`.
+    let mut next = None;
     loop {
-        let forced = tokio::select! {
-            () = tokio::time::sleep(LOCAL_EVERY) => false,
-            () = refresh.notified() => true,
+        let forced = match next {
+            None => {
+                refresh.notified().await;
+                true
+            }
+            Some(wait) => tokio::select! {
+                () = tokio::time::sleep(wait) => false,
+                () = refresh.notified() => true,
+            },
         };
         let config = iface.get().await.config.clone();
         if !config.enabled {
+            next = None;
             publish(&iface, Usage::default()).await;
             continue;
         }
@@ -158,35 +180,39 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
         let mut providers = Vec::new();
         if config.claude && home.join(CLAUDE_SIGN_IN).exists() {
             let due = |every| asked_claude.is_none_or(|at: Instant| at.elapsed() >= every);
-            // Opening the page asks sooner, but never while Claude is being given time after a failure.
-            let failing = claude_wait > CLAUDE_EVERY;
-            if (forced && !failing && due(CLAUDE_AT_MOST)) || due(claude_wait) {
+            // Opening the page asks sooner, but never while Claude's server is given time after failing.
+            if (forced && !server_failing && due(OFFLINE_RETRIES[0].min(CLAUDE_AT_MOST)))
+                || due(claude_wait)
+            {
                 asked_claude = Some(Instant::now());
                 let at = home.clone();
                 let fresh = tokio::task::spawn_blocking(move || read_claude(&at))
                     .await
                     .ok();
-                claude_wait = match &fresh {
-                    Some(Ok(_)) => CLAUDE_EVERY,
-                    // Only the sign-in file was read: look again soon, for Claude Code renewing it.
-                    Some(Err(note)) if note == NEEDS_REFRESH => CLAUDE_AT_MOST,
-                    _ => (claude_wait * 2).min(CLAUDE_BACKOFF),
+                failures = if matches!(fresh, Some(Ok(_))) {
+                    0
+                } else {
+                    failures + 1
                 };
+                server_failing = matches!(fresh, Some(Err(ClaudeError::Busy)));
+                claude_wait = wait_after(fresh.as_ref().map(|r| r.as_ref().map(|_| ())), failures);
                 claude = match (fresh, claude.take()) {
                     (Some(Ok(fresh)), _) => Some(fresh),
                     // The last numbers stay, saying why they are old.
-                    (Some(Err(note)), Some(mut last)) => Some(Provider {
-                        note,
+                    (Some(Err(why)), Some(mut last)) => Some(Provider {
+                        note: why.note().into(),
                         ..std::mem::take(&mut last)
                     }),
-                    (Some(Err(note)), None) => Some(Provider {
-                        note,
+                    (Some(Err(why)), None) => Some(Provider {
+                        note: why.note().into(),
                         ..claude_shell(&home)
                     }),
                     (None, last) => last,
                 };
             }
             providers.extend(claude.clone());
+        } else {
+            claude = None;
         }
         if config.codex {
             // Reading logs is file work: done on a blocking thread, as Claude's request is.
@@ -217,8 +243,42 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
                 warn!("could not send a usage alert: {err}");
             }
         }
+        // Nothing signed in: only now and then, for a sign-in to come.
+        next = Some(
+            if providers.is_empty() && !(config.codex && codex_signed_in(&home)) {
+                NOTHING_SIGNED_IN_EVERY
+            } else if claude.is_some() {
+                claude_wait.min(LOCAL_EVERY)
+            } else {
+                LOCAL_EVERY
+            },
+        );
         publish(&iface, Usage { providers }).await;
     }
+}
+
+/// How long until Claude is asked again after `outcome` (`None` when the read itself broke), the
+/// `failures`th failure in a row.
+fn wait_after(outcome: Option<Result<(), &ClaudeError>>, failures: usize) -> Duration {
+    match outcome {
+        Some(Ok(())) => CLAUDE_EVERY,
+        // Only the sign-in file was read: look again soon, for Claude Code renewing it.
+        Some(Err(ClaudeError::NeedsRefresh)) => CLAUDE_AT_MOST,
+        Some(Err(ClaudeError::Offline)) => OFFLINE_RETRIES
+            .get(failures.saturating_sub(1))
+            .copied()
+            .unwrap_or(CLAUDE_EVERY),
+        Some(Err(ClaudeError::SignIn)) => CLAUDE_EVERY,
+        Some(Err(ClaudeError::Busy)) | None => {
+            let doubled = 2u32.saturating_pow(u32::try_from(failures).unwrap_or(u32::MAX));
+            CLAUDE_EVERY.saturating_mul(doubled).min(CLAUDE_BACKOFF)
+        }
+    }
+}
+
+/// Whether Codex is signed in, so its logs may yet bring limits worth a look each minute.
+fn codex_signed_in(home: &Path) -> bool {
+    home.join(".codex/auth.json").exists()
 }
 
 async fn publish(iface: &InterfaceRef<UsageService>, usage: Usage) {
@@ -283,8 +343,30 @@ fn marks_passed(
     passed
 }
 
-/// Said when the sign-in has run out; Claude Code renews it once opened.
-const NEEDS_REFRESH: &str = "Open Claude Code to refresh its sign-in";
+/// Why Claude's limits could not be read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClaudeError {
+    /// The sign-in ran out; Claude Code renews it once opened.
+    NeedsRefresh,
+    /// No sign-in, or the server turned it down.
+    SignIn,
+    /// No network (yet).
+    Offline,
+    /// The server failed or answered in a way not understood.
+    Busy,
+}
+
+impl ClaudeError {
+    /// What the page says, under the last numbers.
+    fn note(self) -> &'static str {
+        match self {
+            ClaudeError::NeedsRefresh => "Open Claude Code to refresh its sign-in",
+            ClaudeError::SignIn => "Sign in again with Claude Code",
+            ClaudeError::Offline => "Offline; showing the last numbers",
+            ClaudeError::Busy => "Could not reach Claude; showing the last numbers",
+        }
+    }
+}
 
 /// Where Claude Code keeps its sign-in.
 const CLAUDE_SIGN_IN: &str = ".claude/.credentials.json";
@@ -310,20 +392,17 @@ fn claude_shell(home: &Path) -> Provider {
 }
 
 /// Claude's limits now, with Claude Code's sign-in (read, never refreshed: that is Claude Code's to do).
-fn read_claude(home: &Path) -> Result<Provider, String> {
-    let text = std::fs::read_to_string(home.join(CLAUDE_SIGN_IN))
-        .map_err(|_| "Sign in with Claude Code".to_owned())?;
-    let sign_in: Value =
-        serde_json::from_str(&text).map_err(|_| "Sign in with Claude Code".to_owned())?;
+fn read_claude(home: &Path) -> Result<Provider, ClaudeError> {
+    let text =
+        std::fs::read_to_string(home.join(CLAUDE_SIGN_IN)).map_err(|_| ClaudeError::SignIn)?;
+    let sign_in: Value = serde_json::from_str(&text).map_err(|_| ClaudeError::SignIn)?;
     let oauth = &sign_in["claudeAiOauth"];
-    let token = oauth["accessToken"]
-        .as_str()
-        .ok_or("Sign in with Claude Code")?;
+    let token = oauth["accessToken"].as_str().ok_or(ClaudeError::SignIn)?;
     if oauth["expiresAt"]
         .as_i64()
         .is_some_and(|expires| expires <= now_ms())
     {
-        return Err(NEEDS_REFRESH.into());
+        return Err(ClaudeError::NeedsRefresh);
     }
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(CLAUDE_TIMEOUT))
@@ -339,7 +418,11 @@ fn read_claude(home: &Path) -> Result<Provider, String> {
         .and_then(|mut reply| reply.body_mut().read_json())
         .map_err(|err| {
             warn!("could not read Claude's usage: {err}");
-            "Could not reach Claude; showing the last numbers".to_owned()
+            match err {
+                ureq::Error::StatusCode(401 | 403) => ClaudeError::SignIn,
+                ureq::Error::StatusCode(_) | ureq::Error::Json(_) => ClaudeError::Busy,
+                _ => ClaudeError::Offline,
+            }
         })?;
     Ok(Provider {
         windows: claude_windows(&response),
@@ -541,6 +624,21 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn offline_is_tried_again_soon_and_a_failing_server_ever_later() {
+        let offline = Some(Err(&ClaudeError::Offline));
+        let waits: Vec<u64> = (1..=6).map(|n| wait_after(offline, n).as_secs()).collect();
+        assert_eq!(waits, [30, 60, 120, 300, 600, 600]);
+        let busy = Some(Err(&ClaudeError::Busy));
+        assert_eq!(wait_after(busy, 1), CLAUDE_EVERY * 2);
+        assert_eq!(wait_after(busy, 9), CLAUDE_BACKOFF);
+        assert_eq!(wait_after(Some(Ok(())), 0), CLAUDE_EVERY);
+        assert_eq!(
+            wait_after(Some(Err(&ClaudeError::NeedsRefresh)), 3),
+            CLAUDE_AT_MOST
+        );
+    }
 
     #[test]
     fn reads_claudes_limits_whatever_the_plan_has() {

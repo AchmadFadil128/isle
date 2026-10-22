@@ -20,6 +20,8 @@ const SHELF_INTERFACE: &str = "io.github.zickrian.isle.Shelf1";
 const SHELF_ICON: &[u8] = include_bytes!("../../../gnome-extension/icons/isle-shelf.svg");
 /// isled keeps this many files; a full shelf turns drops away.
 const CAPACITY: usize = 6;
+/// Hidden this long, the helper quits, its memory freed; the extension's next Show starts it again.
+const IDLE_QUIT_SECS: u32 = 60;
 
 /// One file on the shelf, as isled describes it.
 #[derive(Debug, Clone, Deserialize)]
@@ -51,6 +53,8 @@ struct Inner {
     near: Cell<bool>,
     /// A file is being dragged over this window.
     over: Cell<bool>,
+    /// Quits the helper once hidden for `IDLE_QUIT_SECS`.
+    idle_quit: RefCell<Option<glib::SourceId>>,
 }
 
 impl ShelfWindow {
@@ -104,6 +108,7 @@ impl ShelfWindow {
             slot: tile::slot(),
             near: Cell::default(),
             over: Cell::default(),
+            idle_quit: RefCell::default(),
         }));
         shelf.accept_drops();
         let weak = Rc::downgrade(&shelf.0);
@@ -122,6 +127,9 @@ impl ShelfWindow {
 
     /// Shows the window over the given area of the screen (logical pixels).
     pub fn show_at(&self, x: i32, y: i32, width: i32, height: i32) {
+        if let Some(quit) = self.0.idle_quit.take() {
+            quit.remove();
+        }
         self.0.area.set(Some((x, y, width, height)));
         let window = &self.0.window;
         window.set_default_size(width, height);
@@ -147,6 +155,21 @@ impl ShelfWindow {
 
     pub fn hide(&self) {
         self.0.window.set_visible(false);
+        if self.0.idle_quit.borrow().is_some() {
+            return;
+        }
+        let weak = Rc::downgrade(&self.0);
+        let quit = glib::timeout_add_seconds_local_once(IDLE_QUIT_SECS, move || {
+            let Some(inner) = weak.upgrade() else { return };
+            inner.idle_quit.take();
+            if !inner.window.is_visible() {
+                if let Some(app) = inner.window.application() {
+                    log::info!("the shelf stayed hidden; quitting until it is needed");
+                    app.quit();
+                }
+            }
+        });
+        self.0.idle_quit.replace(Some(quit));
     }
 
     /// Whether a file is being dragged towards the island: the shelf then

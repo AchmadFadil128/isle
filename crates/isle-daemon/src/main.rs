@@ -16,10 +16,11 @@ mod system;
 mod todo;
 mod usage;
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use futures_util::StreamExt;
 use log::{info, warn};
 use zbus::connection;
+use zbus::fdo::{DBusProxy, RequestNameFlags, RequestNameReply};
 
 use crate::assistant::AssistantService;
 use crate::calendar::CalendarService;
@@ -37,9 +38,36 @@ const OBJECT_PATH: &str = "/io/github/zickrian/isle/Daemon";
 /// Songs whose cover and lyrics stay cached.
 const CACHED_SONGS: usize = 500;
 
+const HELP: &str = "isled: the Isle background service (started by systemd or D-Bus, not by hand)
+
+Usage: isled [--version | --doctor | --help]
+  --version  print the version
+  --doctor   check the service, speech recognition and each AI's install and sign-in
+  --help     print this";
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
+    match std::env::args().nth(1).as_deref() {
+        None => {}
+        Some("--version" | "-V") => {
+            println!("isled {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        Some("--help" | "-h") => {
+            println!("{HELP}");
+            return Ok(());
+        }
+        Some("--doctor") => {
+            doctor().await;
+            return Ok(());
+        }
+        Some(other) => bail!("unknown option {other}; see isled --help"),
+    }
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // A second isled (started by hand) leaves the running one alone, before it opens or prunes anything.
+    if running().await {
+        bail!("isled is already running");
+    }
     // The clipboard history lives here; keep it from other users, including
     // folders made by older versions.
     if let Err(err) = store::create_private_dir(&store::data_dir()) {
@@ -100,11 +128,14 @@ async fn main() -> anyhow::Result<()> {
         Err(err) => warn!("no system bus, so no battery, network or Bluetooth status: {err}"),
     }
 
-    // Claim the name last, so callers never see a half-initialised service.
-    session
-        .request_name(BUS_NAME)
+    // Claim the name last, so callers never see a half-initialised service; never taking it from another.
+    let claimed = session
+        .request_name_with_flags(BUS_NAME, RequestNameFlags::DoNotQueue.into())
         .await
-        .with_context(|| format!("could not own {BUS_NAME}; is isled already running?"))?;
+        .with_context(|| format!("could not own {BUS_NAME}"))?;
+    if claimed != RequestNameReply::PrimaryOwner {
+        bail!("isled is already running");
+    }
     info!("isled is running as {BUS_NAME}");
     // Started only now: a restored phase that ran out while isled was down finishes at once,
     // and clients only see its PhaseFinished signal if it comes from the claimed name.
@@ -125,4 +156,32 @@ async fn main() -> anyhow::Result<()> {
         None => info!("the session bus went away; stopping"),
     }
     Ok(())
+}
+
+/// Whether an isled already owns the name on this session's bus.
+async fn running() -> bool {
+    let Ok(bus) = zbus::Connection::session().await else {
+        return false;
+    };
+    let Ok(dbus) = DBusProxy::new(&bus).await else {
+        return false;
+    };
+    match BUS_NAME.try_into() {
+        Ok(name) => dbus.name_has_owner(name).await.unwrap_or(false),
+        Err(_) => false,
+    }
+}
+
+/// `isled --doctor`: what works and what to do about what does not.
+async fn doctor() {
+    println!("isled {}", env!("CARGO_PKG_VERSION"));
+    println!(
+        "Service: {}",
+        if running().await {
+            "running"
+        } else {
+            "not running (systemctl --user restart isled)"
+        }
+    );
+    println!("Voice assistant:\n{}", assistant::report());
 }

@@ -47,6 +47,8 @@ const HEAD_RADIUS = 15;
 const EYE_WIDTH = 5.8;
 const EYE_HEIGHT = 11.5;
 const EYE_SPACING = 5.1;
+/** An app just opened gets this long (ms) to show its window before the next step goes on without it. */
+const WINDOW_WAIT_MS = 5000;
 /** A player just opened gets this long (ms) to appear before a media command is dropped. */
 const PLAYER_WAIT_MS = 12000;
 /** Spotify's name on the session bus, for its MPRIS player. */
@@ -212,6 +214,8 @@ export const VoiceView = GObject.registerClass({
         'orb-clicked': {},
         // The Sign in button, shown when the AI is signed out.
         'sign-in': {},
+        // The Stop button, while a request is being worked on.
+        'stop': {},
         // Each frame: the animation's time (s) and level, to move the island's edge glow with.
         'frame': {param_types: [GObject.TYPE_DOUBLE, GObject.TYPE_DOUBLE]},
     },
@@ -251,10 +255,15 @@ export const VoiceView = GObject.registerClass({
         // Not wider than its label, at the start of the line.
         this._signIn = pillButton('Sign in', 'isle-pill-small isle-voice-sign-in', () => this.emit('sign-in'));
         this._signIn.x_align = Clutter.ActorAlign.START;
+        this._stop = pillButton('Stop', 'isle-pill-small isle-voice-sign-in', () => this.emit('stop'));
+        this._stop.x_align = Clutter.ActorAlign.START;
+        /** The steps of the request being worked on, done ones first. */
+        this._steps = [];
         this._texts.add_child(this._heard);
         this._texts.add_child(this._text);
         this._texts.add_child(this._hint);
         this._texts.add_child(this._signIn);
+        this._texts.add_child(this._stop);
         row.add_child(this._texts);
         this.add_child(row);
 
@@ -267,17 +276,20 @@ export const VoiceView = GObject.registerClass({
         this.setState({phase: 'listening'});
     }
 
-    /** Shows `state` from isled: {phase, heard, reply, error, hint, sign_in}. */
+    /** Shows `state` from isled: {phase, heard, reply, error, hint, sign_in, activity, actions}. */
     setState(state) {
         this._phase = state.phase;
         this._exchange = {heard: state.heard ?? '', reply: clip(state.reply ?? '')};
         const heard = state.heard ? `“${state.heard}”` : '';
+        const step = state.phase === 'acting' ? describeActions(state.actions) : state.activity || '';
+        this._noteStep(state.phase, step);
         const [top, main, dim] = {
             // The first time it opens it greets you, as Siri does.
             listening: [this.followUp ?? '', this.greeting ?? 'Listening…', !this.greeting],
             transcribing: [this.followUp ?? '', 'One moment…', true],
             // An agent's step as it happens ("Searching ~/Downloads for “ttd”…"), else thinking.
-            thinking: [heard, state.activity || 'Thinking…', true],
+            thinking: [heard, step || 'Thinking…', true],
+            acting: [heard, step, true],
             reply: [heard, clip(state.reply ?? ''), false],
             error: [heard, state.error || 'Something went wrong', false],
         }[state.phase] ?? ['', '', true];
@@ -288,13 +300,28 @@ export const VoiceView = GObject.registerClass({
             this._text.add_style_class_name('isle-voice-text-dim');
         else
             this._text.remove_style_class_name('isle-voice-text-dim');
-        const hint = state.phase === 'error' ? state.hint ?? '' : '';
+        const working = WORKING.includes(state.phase);
+        // While it works, the steps already done, dimmed below the current one.
+        const hint = state.phase === 'error' ? state.hint ?? ''
+            : working ? this._steps.slice(0, -1).slice(-MAX_DONE_STEPS).map(done => `✓ ${done}`).join('\n') : '';
         this._hint.text = hint;
         this._hint.visible = Boolean(hint);
         this._signIn.visible = state.phase === 'error' && Boolean(state.sign_in);
-        const searching = state.phase === 'thinking' && Boolean(state.activity);
+        this._stop.visible = working && state.phase !== 'transcribing';
+        const searching = (state.phase === 'thinking' && Boolean(state.activity)) || state.phase === 'acting';
         const form = searching ? 'searching' : {transcribing: 'thinking'}[state.phase] ?? state.phase;
         this._face.setForm(form, this._face.time);
+    }
+
+    /** Keeps the steps of the request being worked on; a new request starts the list over. */
+    _noteStep(phase, step) {
+        if (!WORKING.includes(phase)) {
+            if (phase === 'listening')
+                this._steps = [];
+            return;
+        }
+        if (step && this._steps.at(-1) !== step)
+            this._steps.push(step.replace(/…$/, ''));
     }
 
     /** The microphone's level (0..1). */
@@ -321,7 +348,7 @@ export const VoiceView = GObject.registerClass({
     fit() {
         const width = this.preferredWidth - TEXT_INSET;
         // Measured per label: the box's own answer is the size set below.
-        const natural = [this._heard, this._text, this._hint, this._signIn].filter(part => part.visible)
+        const natural = [this._heard, this._text, this._hint, this._signIn, this._stop].filter(part => part.visible)
             .reduce((sum, part) => sum + part.get_preferred_height(width)[1], 0);
         // Set outright: the row kept an earlier, shorter height for them.
         this._texts.set_size(width, Math.min(natural, MAX_HEIGHT - ROW_PADDING));
@@ -356,6 +383,7 @@ export const VoiceView = GObject.registerClass({
             listening: this._mic,
             transcribing: 0.28 + 0.05 * Math.sin(t * 2),
             thinking: 0.32 + 0.08 * Math.sin(t * 1.8),
+            acting: 0.32 + 0.08 * Math.sin(t * 1.8),
             reply: 0.12 + 0.03 * Math.sin(t * 1.2),
         }[this._phase] ?? 0.05;
         this._level += (target - this._level) * (1 - Math.exp(-dt * LEVEL_RATE));
@@ -363,11 +391,35 @@ export const VoiceView = GObject.registerClass({
         this._face.step(t);
         this._face.queue_repaint();
         // A little faster while it thinks; summed up, so a change of speed never makes the glow jump.
-        const speed = this._phase === 'thinking' || this._phase === 'transcribing' ? 1.6 : 1;
+        const speed = WORKING.includes(this._phase) ? 1.6 : 1;
         this._flow += dt * speed;
         this.emit('frame', this._flow, this._level);
     }
 });
+
+/** The phases in which a request is being worked on. */
+const WORKING = ['transcribing', 'thinking', 'acting'];
+/** How many done steps show below the current one. */
+const MAX_DONE_STEPS = 3;
+
+/** What actions run mid-way do, for the island: "Opening Files…", or how many there are. */
+function describeActions(actions = []) {
+    const [first] = actions;
+    if (!first)
+        return 'Working…';
+    const what = {
+        open_app: `Opening ${first.app ?? 'the app'}…`,
+        open_url: 'Opening the page…',
+        open_file: 'Opening the file…',
+        open_folder: 'Opening the folder…',
+        window: 'Moving the window…',
+        arrange: 'Arranging the windows…',
+        play_music: 'Playing music…',
+        media: 'Controlling the music…',
+        close_app: `Closing ${first.app ?? 'the app'}…`,
+    }[first.type] ?? 'Working on it…';
+    return actions.length > 1 ? `${what.replace(/…$/, '')} and ${actions.length - 1} more…` : what;
+}
 
 function clip(text) {
     const trimmed = text.trim();
@@ -530,17 +582,24 @@ function primarySelection() {
 
 // What each action the AI may answer with does; see `Session::prompt` in isled. `isle` holds the daemon, audio,
 // notifications, the window in front when asked (`target`), its `writer` and `closeThen(callback)`.
+// Each returns what it did, for the AI to go on from (see `runActions`).
 const ACTIONS = {
     open_url: ({url}) => {
-        if (/^(https?|mailto):/i.test(url ?? ''))
-            openUri(url);
+        if (!/^(https?|mailto):/i.test(url ?? ''))
+            return failed('not a web address');
+        openUri(url);
+        return 'opened in the browser';
     },
-    open_app: ({app}, isle) => {
+    open_app: async ({app}, isle) => {
         const found = findApp(app ?? '');
+        if (!found)
+            return failed(`no app called ${app}`);
         // Not running yet: a media command after it waits for its player.
-        if (found && found.get_state() !== Shell.AppState.RUNNING)
+        if (found.get_state() !== Shell.AppState.RUNNING)
             isle.launched = found;
-        found?.activate();
+        found.activate();
+        // What comes next (placing its window) needs the window there.
+        return await windowOf(found, WINDOW_WAIT_MS) ? `${found.get_name()} is open` : `${found.get_name()} is starting`;
     },
     media: ({command}, {daemon, launched}) => {
         const method = {play_pause: 'PlayPause', next: 'Next', previous: 'Previous'}[command];
@@ -568,20 +627,37 @@ const ACTIONS = {
     },
     wifi: ({on}) => spawn(['nmcli', 'radio', 'wifi', on === false ? 'off' : 'on']),
     bluetooth: ({on}) => setBluetooth(on !== false),
-    dnd: ({on}, {notifications}) => (notifications.dnd = on !== false),
+    dnd: ({on}, {notifications}) => {
+        notifications.dnd = on !== false;
+    },
     notifications: (_action, {showNotifications}) => showNotifications(),
     play_music: ({query, uri}) => playMusic(query ?? '', uri),
     window: ({command, title, app}, {target}) => {
         const window = title ? windowTitled(title)
             : app ? findApp(app, Shell.AppSystem.get_default().get_running())?.get_windows()[0] : target;
-        if (window)
-            WINDOW_COMMANDS[command]?.(window);
+        // The window in front when asked may have closed since.
+        if (!window?.get_compositor_private())
+            return failed('no such window is open');
+        if (!WINDOW_COMMANDS[command])
+            return failed(`no window command ${command}`);
+        WINDOW_COMMANDS[command](window);
+        return `${command}: ${window.title ?? 'the window'}`;
     },
-    arrange: ({layout, apps}) => arrangeWindows(layout, Array.isArray(apps) ? apps : []),
-    open_file: ({path}) => withFile(path, file => openUri(file.get_uri()), {opening: true}),
-    reveal_file: ({path}) => withFile(path, file => revealFile(file)),
+    arrange: ({layout, apps}) => {
+        const count = arrangeWindows(layout, Array.isArray(apps) ? apps : []);
+        return count ? `${count} windows arranged` : failed('no matching windows are open');
+    },
+    open_file: ({path}) => withFile(path, file => openUri(file.get_uri()), {opening: true})
+        ? 'opened' : failed('not found, or not allowed'),
+    reveal_file: ({path}) => withFile(path, file => revealFile(file)) ? 'shown in Files' : failed('not found, or not allowed'),
     chrome_profile: ({profile}) => openChromeProfile(profile ?? ''),
-    close_app: ({app}) => findApp(app ?? '', Shell.AppSystem.get_default().get_running())?.request_quit(),
+    close_app: ({app}) => {
+        const running = findApp(app ?? '', Shell.AppSystem.get_default().get_running());
+        if (!running)
+            return failed(`${app} is not open`);
+        running.request_quit();
+        return `${running.get_name()} closed`;
+    },
     open_folder: ({path}) => openFolder(path ?? ''),
     brightness: ({level, command}) => setBrightness(level, command),
     dark_mode: ({on}) => setDarkMode(on !== false),
@@ -601,6 +677,8 @@ const ACTIONS = {
 // What the actions are still waiting on (a player to appear, a moment to pass), each with how to stop it;
 // all stopped when the extension is turned off (`stopPending`).
 const pending = new Set();
+/** Counts `stopPending` calls: actions started before one never go on after it. */
+let generation = 0;
 
 /** Calls `callback` after `ms`, unless stopped first; returns the stop. */
 function after(ms, callback) {
@@ -618,8 +696,9 @@ function after(ms, callback) {
     return entry.stop;
 }
 
-/** Stops everything the actions still wait on. */
+/** Stops everything the actions still wait on, and the actions still to run. */
 export function stopPending() {
+    generation++;
     for (const entry of [...pending])
         entry.stop();
 }
@@ -712,7 +791,7 @@ function tile(window, [x, y, width, height]) {
 }
 
 // Tiles windows on this workspace: those of `apps` in that order (one each, or every window of a single
-// app), else the ones in front; as many as `layout` holds, and the first of them is focused.
+// app), else the ones in front; as many as `layout` holds, and the first of them is focused. Returns how many.
 function arrangeWindows(layout, apps) {
     const workspace = global.workspace_manager.get_active_workspace();
     // Windows of their own, which a dialog with no parent window is too.
@@ -731,9 +810,11 @@ function arrangeWindows(layout, apps) {
         windows = [...new Set(windows)];
     }
     const slots = slotsFor(layout, windows.length);
-    windows.slice(0, slots.length).forEach((window, i) => tile(window, slots[i]));
-    if (windows.length > 0)
-        Main.activateWindow(windows[0]);
+    const placed = windows.slice(0, slots.length);
+    placed.forEach((window, i) => tile(window, slots[i]));
+    if (placed.length > 0)
+        Main.activateWindow(placed[0]);
+    return placed.length;
 }
 
 // Plays `uri` (a Spotify link isled checked) in Spotify, started first if need be; without one, Spotify
@@ -797,29 +878,29 @@ const RUNS = /x-desktop|java-archive|executable|x-sharedlib|x-msdownload|x-ms-do
 /**
  * Runs `callback` with `path` (from ~, or absolute) as a Gio.File if it is there and allowed: in the home
  * folder (not a hidden part of it) or on a removable drive, and not a link; `opening` also refuses
- * anything that would run.
+ * anything that would run. Returns whether it ran.
  */
 function withFile(path, callback, {opening = false} = {}) {
     if (typeof path !== 'string' || !path.trim())
-        return;
+        return false;
     const home = GLib.get_home_dir();
     const expanded = path.trim().replace(/^~(?=\/|$)/, home);
     const file = Gio.File.new_for_path(GLib.canonicalize_filename(expanded, home));
     const where = file.get_path();
     const inHome = where.startsWith(`${home}/`);
     if (!inHome && !FILE_ROOTS.some(root => where.startsWith(root)))
-        return;
+        return false;
     if (inHome && where.slice(home.length + 1).split('/').some(part => part.startsWith('.')))
-        return;
+        return false;
     let info;
     try {
         info = file.query_info('standard::is-symlink,standard::content-type,access::can-execute',
             Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
     } catch {
-        return; // not there
+        return false; // not there
     }
     if (info.get_is_symlink())
-        return;
+        return false;
     if (opening) {
         const type = info.get_content_type() ?? '';
         const mime = Gio.content_type_get_mime_type(type) ?? '';
@@ -829,9 +910,10 @@ function withFile(path, callback, {opening = false} = {}) {
             /pdf|opendocument|officedocument|msword|ms-excel|ms-powerpoint|epub/.test(mime);
         const runnable = Gio.content_type_can_be_executable(type) || info.get_attribute_boolean('access::can-execute');
         if (RUNS.test(mime) || (!viewed && runnable))
-            return;
+            return false;
     }
     callback(file);
+    return true;
 }
 
 /** Shows `file` selected in the file manager, as "Show in Files" does. */
@@ -948,15 +1030,62 @@ export function actionTypes() {
     return Object.keys(ACTIONS);
 }
 
-/** Runs the AI's actions; `isle` is what they act on (see `ACTIONS`). */
-export function runActions(actions, isle) {
+/** Runs the AI's actions in order; `isle` is what they act on (see `ACTIONS`). Resolves to what each did,
+ * as `{type, ok, detail}`, for the AI to take its next step from. */
+export async function runActions(actions, isle) {
+    const results = [];
+    const started = generation;
     for (const action of actions ?? []) {
+        // Isle turned off meanwhile: nothing more runs.
+        if (generation !== started)
+            break;
+        let outcome;
         try {
-            ACTIONS[action.type]?.(action, isle);
+            outcome = ACTIONS[action.type] ? await ACTIONS[action.type](action, isle) : failed('unknown action');
         } catch (e) {
             console.warn(`Isle: voice action ${action.type} failed: ${e.message}`);
+            outcome = failed(e.message);
         }
+        results.push({type: action.type, ...outcomeOf(outcome)});
     }
+    return results;
+}
+
+/** An action that could not be done, and why. */
+function failed(detail) {
+    return {ok: false, detail};
+}
+
+// What an action returned, as {ok, detail}: nothing (or a call's reply) is done, a string says what it
+// did, and false, '' or null (a failed call) is not done.
+function outcomeOf(outcome) {
+    if (outcome?.ok === false)
+        return outcome;
+    if (typeof outcome === 'string' && outcome)
+        return {ok: true, detail: outcome};
+    return {ok: outcome === undefined || outcome === true || Array.isArray(outcome), detail: ''};
+}
+
+/** Resolves once `app` has a window (true), or after `ms` (false). */
+function windowOf(app, ms) {
+    if (app.get_windows().length > 0)
+        return Promise.resolve(true);
+    return new Promise(resolve => {
+        const entry = {};
+        const changed = app.connect('windows-changed', () => {
+            if (app.get_windows().length > 0)
+                entry.stop(true);
+        });
+        const giveUp = after(ms, () => entry.stop(false));
+        entry.stop = (found = false) => {
+            if (!pending.delete(entry))
+                return;
+            app.disconnect(changed);
+            giveUp();
+            resolve(found);
+        };
+        pending.add(entry);
+    });
 }
 
 /** The app called `name` among `running` (Shell.Apps), else installed: by exact name, then by part of its name or id. */

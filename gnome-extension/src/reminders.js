@@ -28,6 +28,8 @@ export class ReminderWatcher {
             this._timeout = 0;
         }
         const items = this._daemon.state.reminders ?? [];
+        // Only those isled still has: the rest were dismissed for good.
+        this._shown = new Set([...this._shown].filter(id => items.some(item => item.id === id)));
         const now = Date.now();
         for (const item of items) {
             // Dismissing takes a round trip; don't show it twice meanwhile.

@@ -1101,6 +1101,7 @@ dependencies = [
  "image",
  "inotify",
  "isle-core",
+ "libc",
  "log",
  "serde",
  "serde_json",

@@ -238,6 +238,7 @@
 .isle-voice-text-dim { color: rgba(255, 255, 255, 0.6); font-weight: 600; }
 .isle-voice-hint { font-size: 12px; color: rgba(255, 255, 255, 0.55); padding-top: 3px; }
 .isle-voice-sign-in { margin-top: 8px; }
+.isle-compact-assistant { color: #8f66ff; }
 .isle-header-mic { padding: 4px; color: rgba(255, 255, 255, 0.75); }
 
 /* ── Expanded: frame ──────────────────────────────────── */

@@ -20,6 +20,15 @@ trap 'rm -rf "$WORK"' EXIT
 
 step() { printf '\033[1m==> %s\033[0m\n' "$*"; }
 
+[ "$(id -u)" -ne 0 ] || { echo "Run this as yourself, without sudo: Isle installs to your own home folder." >&2; exit 1; }
+VERSION="$(grep -oE '"version-name": *"[^"]*"' gnome-extension/metadata.json | cut -d'"' -f4)"
+# An update keeps the user's choices; only a first install sets Isle's look.
+if [ -d "$DATA/gnome-shell/extensions/$UUID" ] || [ -x "$BINDIR/isled" ]; then
+    FIRST=0
+else
+    FIRST=1
+fi
+
 # Installs a service file from data/, pointing it at the installed binaries.
 install_service() {
     sed "s|@BINDIR@|$BINDIR|" "data/$1" > "$WORK/$1"
@@ -100,7 +109,9 @@ busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DB
 # own when the extension first calls it.
 if systemctl --user daemon-reload 2>/dev/null; then
     systemctl --user enable isled.service >/dev/null 2>&1
-    systemctl --user restart isled.service
+    # A failure here is reported, not fatal: the extension still goes in, and isled starts once called.
+    systemctl --user restart isled.service ||
+        echo "isled did not start; see 'journalctl --user -u isled' (the island still works without it, minus its services)."
 fi
 
 # A running GNOME Shell on Wayland does not know a new extension until the
@@ -114,9 +125,17 @@ if ! gnome-extensions enable "$UUID" 2>/dev/null; then
     esac
 fi
 
+# GNOME runs no user extensions at all while this is on (Extensions → "Use Extensions" off).
+if [ "$(gsettings get org.gnome.shell disable-user-extensions 2>/dev/null)" = "true" ]; then
+    gsettings set org.gnome.shell disable-user-extensions false
+    echo "Turned extensions on (they were all switched off in the Extensions app)."
+fi
+
+if [ "$FIRST" = 1 ]; then
 step "Setting up the top bar"
 # Isle's look is the same everywhere: a slim glass top bar with the island
-# hanging from the top of the screen like a MacBook's notch.
+# hanging from the top of the screen like a MacBook's notch. Only on a first
+# install: an update keeps what the user chose since.
 gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle top-bar-style glass
 gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle compact-top-bar true
 gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle island-in-top-bar true
@@ -146,10 +165,17 @@ for uuid in dynamic-island@bjagetic hidetopbar@mathieu.bidon.ca; do
         echo "Turned off $uuid, which would cover the island."
     fi
 done
+fi
 
-step "Done"
-if [ "${XDG_SESSION_TYPE:-}" = "wayland" ]; then
-    echo "Log out and back in once so GNOME Shell loads the extension."
+if [ "$FIRST" = 1 ]; then
+    step "Isle $VERSION is installed"
 else
+    step "Isle is updated to $VERSION"
+fi
+SHELL_VERSION="$(gnome-shell --version 2>/dev/null | grep -oE '[0-9]+' | head -n1 || true)"
+# Only an X11 session of GNOME 48 or older restarts the shell in place; Wayland needs a new login.
+if [ "${XDG_SESSION_TYPE:-}" = "x11" ] && [ -n "$SHELL_VERSION" ] && [ "$SHELL_VERSION" -le 48 ]; then
     echo "Press Alt+F2, type 'r' and Enter to restart GNOME Shell."
+else
+    echo "Log out and back in once so GNOME Shell loads the new extension."
 fi

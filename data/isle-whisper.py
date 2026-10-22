@@ -39,6 +39,8 @@ def reply(**message):
 
 
 DEVICES = (("cuda", "int8_float16"), ("cpu", "int8"))
+# isled passes half the cores, so transcribing never takes the whole computer; 0 lets CTranslate2 pick.
+THREADS = int(os.environ.get("ISLE_WHISPER_THREADS", "0") or 0)
 
 
 def load(name, devices=DEVICES):
@@ -46,7 +48,8 @@ def load(name, devices=DEVICES):
     for device, compute in devices:
         try:
             # Only from disk: a download here would leave the island waiting with no word why.
-            return WhisperModel(name, device=device, compute_type=compute, local_files_only=True), device
+            return WhisperModel(name, device=device, compute_type=compute, local_files_only=True,
+                                cpu_threads=THREADS), device
         except Exception as err:  # noqa: BLE001 (CUDA fails in many ways)
             last = err
     raise last

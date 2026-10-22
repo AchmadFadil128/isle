@@ -13,10 +13,11 @@ use chrono::{DateTime, Local, NaiveDate};
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
-use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::process::{ChildStdin, ChildStdout, Command};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::answer::{Answer, SCHEMA};
+use super::child::{self, Group};
 
 /// agy may only search the web and read pages; commands and file changes go through Isle's actions,
 /// which the user sees (agy's own settings may let it run anything without asking). The hook gets
@@ -45,7 +46,7 @@ const PER_CONVERSATION: &[&str] = &[
 ];
 
 /// Where agy keeps its sign-in, under its home.
-const LOGIN: &str = ".gemini/antigravity-cli/antigravity-oauth-token";
+pub const LOGIN: &str = ".gemini/antigravity-cli/antigravity-oauth-token";
 
 /// Links Isle's agy home to the user's agy sign-in, so signing in once (in `user`'s home) is enough.
 /// Relinked each start: agy may have replaced the link with a file when it refreshed the token.
@@ -127,7 +128,7 @@ fn remove(path: &PathBuf) {
 const STDERR_LINES: usize = 20;
 
 pub struct Agy {
-    _child: Child,
+    _child: Group,
     stdin: ChildStdin,
     events: Lines<BufReader<ChildStdout>>,
     stderr: Arc<Mutex<VecDeque<String>>>,
@@ -159,14 +160,13 @@ impl Agy {
         if let Some(id) = resume {
             command.args(["--conversation", id]);
         }
-        let mut child = command
+        command
             .current_dir(workspace)
             .env("HOME", home())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
+            .stderr(Stdio::piped());
+        let mut child = child::spawn(&mut command)
             .context("could not start agy; is the Antigravity CLI installed?")?;
         let stdin = child.stdin.take().expect("piped stdin");
         let events = BufReader::new(child.stdout.take().expect("piped stdout")).lines();
@@ -278,12 +278,7 @@ fn parse_result(result: &Value) -> anyhow::Result<Answer> {
     }
     // No structured output: the reply as said, without actions.
     let response = result["response"].as_str().unwrap_or_default().trim();
-    Ok(serde_json::from_str(response).unwrap_or_else(|_| Answer {
-        say: response.to_owned(),
-        actions: Vec::new(),
-        listen: false,
-        tools: Vec::new(),
-    }))
+    Ok(serde_json::from_str(response).unwrap_or_else(|_| Answer::plain(response)))
 }
 
 #[cfg(test)]

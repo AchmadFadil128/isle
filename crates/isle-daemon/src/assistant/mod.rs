@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The voice assistant: records a request, turns it into text and asks the AI the user picked (agy,
-//! Claude Code or Codex) what to do. The extension shows each step and runs the actions it answers with.
+//! Claude Code or Codex) what to do. It works as an agent, step by step, and carries on in the background
+//! once the island closes; the extension shows each step and runs the desktop actions it asks for. The AI
+//! and speech recognition run only while needed: nothing is left running between requests.
 
 mod agenda;
 mod agent;
@@ -9,6 +11,7 @@ mod agy;
 mod answer;
 mod apps;
 mod brain;
+mod child;
 mod claude;
 mod codex;
 #[cfg(test)]
@@ -27,7 +30,7 @@ use isle_core::voice::{Endpointer, Verdict, meter, rms};
 use log::warn;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use zbus::object_server::{InterfaceRef, SignalEmitter};
 use zbus::{fdo, interface};
 
@@ -37,8 +40,9 @@ use self::mic::Mic;
 use self::whisper::Whisper;
 use crate::store::data_dir;
 
-/// A turn the AI takes longer than this has failed (searches included; most take 5 to 20 s).
-const THINK_TIMEOUT: Duration = Duration::from_secs(60);
+/// A request taking longer than this, all its steps together, has failed (each answer has its own limit,
+/// see agent.rs).
+const RUN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 /// Loading the speech model and transcribing take longer than this only when stuck.
 const TRANSCRIBE_TIMEOUT: Duration = Duration::from_secs(60);
 /// A conversation this long starts over, so it never grows heavy; it also starts over each day.
@@ -75,9 +79,6 @@ fn action_kinds() -> &'static [String] {
 /// Said instead when the answer needed actions the running extension cannot do.
 const NEEDS_RELOGIN: &str =
     "I can't do that yet: Isle was updated, and the update starts once you log out and back in.";
-/// The AI stays running this long after the island closes: its first turn takes seconds longer than the
-/// next. The speech model quits at once, as it loads (~2 s) while the user is still speaking.
-const WARM_FOR: Duration = Duration::from_secs(10 * 60);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -87,6 +88,8 @@ enum Phase {
     Listening,
     Transcribing,
     Thinking,
+    /// The extension runs the actions in `actions` mid-way and reports what they did (see `Results`).
+    Acting,
     Reply,
     Error,
 }
@@ -112,6 +115,8 @@ struct State {
     activity: String,
     /// Counts replies, so each one's actions run once.
     turn: u64,
+    /// Counts the batches of actions run mid-way, so each runs once and its results find their way back.
+    step: u64,
 }
 
 /// What the extension knows that isled does not, sent with each request.
@@ -195,6 +200,9 @@ pub enum Command {
     Ask(String, Box<Context>),
     Stop,
     End,
+    /// What the actions handed out as `step` did, as JSON `[{type, ok, detail}]`.
+    Results(u64, String),
+    Cancel,
 }
 
 pub struct AssistantService {
@@ -246,12 +254,24 @@ impl AssistantService {
         self.send(Command::Stop)
     }
 
-    /// Ends the conversation: the AI and the speech model quit.
+    /// The island closed: listening stops, and the AI and the speech model quit. A request being answered
+    /// carries on in the background and quits once answered (see `Cancel`).
     fn end(&self) -> fdo::Result<()> {
         self.send(Command::End)
     }
 
-    /// JSON `{phase, heard, reply, actions, error, hint, sign_in, listen, heard_nothing, turn}`.
+    /// What the actions handed out as `step` did: JSON `[{type, ok, detail}]`, one per action.
+    fn results(&self, step: u64, results_json: &str) -> fdo::Result<()> {
+        self.send(Command::Results(step, results_json.to_owned()))
+    }
+
+    /// Stops the request being answered; the AI quits.
+    fn cancel(&self) -> fdo::Result<()> {
+        self.send(Command::Cancel)
+    }
+
+    /// JSON `{phase, heard, reply, actions, error, hint, sign_in, listen, heard_nothing, activity, turn,
+    /// step}`.
     #[zbus(property)]
     fn state(&self) -> String {
         serde_json::to_string(&self.state).unwrap_or_default()
@@ -276,23 +296,17 @@ struct Session {
     /// The day the conversation began, and its answered turns.
     day: Option<NaiveDate>,
     turns: u32,
-    /// When the island closed with the AI still running; see `WARM_FOR`.
-    idle_since: Option<tokio::time::Instant>,
+    /// Whether the island shows the assistant; closed, a request is answered in the background.
+    open: bool,
 }
 
 impl Session {
-    /// The island closed: the speech model quits, the AI stays a while (see `WARM_FOR`), the
-    /// conversation all day.
+    /// The island closed: the AI and the speech model quit; the conversation is kept all day, to be resumed.
     fn end(&mut self) {
         self.context = Context::default();
         self.whisper = None;
-        self.idle_since = Some(tokio::time::Instant::now());
-    }
-
-    /// The AI quits, after the island stayed closed for `WARM_FOR`.
-    fn cool(&mut self) {
         self.brain = None;
-        self.idle_since = None;
+        self.open = false;
     }
 
     /// Starts a new conversation on a new day, or after `MAX_TURNS`.
@@ -351,7 +365,7 @@ impl Session {
              - When no action can do it, take the closest one (the right app, settings panel or website) and say \
              the next step.\n\
              - Ask back only when you cannot tell what is wanted, and then set listen to true.\n\
-             To act on the desktop, list actions; Isle runs them right after your answer:\n\
+             To act on the desktop, list actions; Isle runs them in order:\n\
              - open_url {{url}}: a website, or a search such as https://www.google.com/search?q=...\n\
              - open_app {{app}}: launch an installed app by its name\n\
              - media {{command: play_pause | next | previous}}: the music player; asked to play music with no \
@@ -392,7 +406,7 @@ impl Session {
              - open_file {{path}}: open a file in its app; reveal_file {{path}}: show it selected in Files\n\
              - chrome_profile {{profile}}: open Chrome in a profile, by its folder (\"Profile 2\")\n\
              You are an agent: to look something up on this computer, search it yourself with these, which \
-             return their results to you (send them alone, without other actions or a final answer):\n\
+             return their results to you:\n\
              - find_files {{terms, in, kind}}: files and folders whose names contain any of terms. Give several \
              (both languages, synonyms, short forms: \"ttd\", \"tanda tangan\", \"signature\", \"sign\"); \
              in is where to look (\"~/Downloads\", default ~); kind is image, document, video, audio or folder\n\
@@ -417,6 +431,12 @@ impl Session {
              - write {{text}}: type text where the user's cursor is, when they ask you to write, draft, reply or \
              fill in something in the app they are in, or to change the selected text. Put only the finished text \
              in it. A plain question (\"translate this\", \"what is\") is answered in say only.\n\
+             Work step by step when a request needs several steps that depend on each other (\"buka Files \
+             terus taruh di kiri\", \"find my CV and open it\", \"open Spotify, then play jazz\"): send the first \
+             actions with done false; Isle runs them and tells you what each did, then you take the next step. \
+             Send done true (or leave it out) with the answer that finishes the request; its actions run then. \
+             Independent actions go together in one answer. The user may close the island meanwhile: carry on \
+             until the request is done.\n\
              Set listen to true only when your answer asks the user a question; Isle then listens for the reply.\n\
              Never claim to have done something no action does. You cannot run commands or change files \
              yourself (only web search and reading pages work): use the facts below or the terminal action, and \
@@ -552,7 +572,6 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
     let mut next = None;
     new_day(&mut session);
     loop {
-        let cool_at = session.idle_since.map(|since| since + WARM_FOR);
         let command = match next.take() {
             Some(command) => command,
             None => tokio::select! {
@@ -564,29 +583,19 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                     new_day(&mut session);
                     continue;
                 }
-                () = async {
-                    match cool_at {
-                        Some(at) => tokio::time::sleep_until(at).await,
-                        None => std::future::pending().await,
-                    }
-                } => {
-                    session.cool();
-                    continue;
-                }
             },
         };
-        if !matches!(command, Command::End) {
-            session.idle_since = None;
-        }
         next = match command {
             Command::Listen(context) => {
                 session.resume(today());
                 session.adopt(*context);
+                session.open = true;
                 turn(&iface, &data, &mut session, None, &mut commands).await
             }
             Command::Ask(text, context) => {
                 session.resume(today());
                 session.adopt(*context);
+                session.open = true;
                 turn(&iface, &data, &mut session, Some(text), &mut commands).await
             }
             Command::End => {
@@ -596,13 +605,15 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 publish(&iface, |state| {
                     *state = State {
                         turn: state.turn,
+                        step: state.step,
                         ..State::default()
                     }
                 })
                 .await;
                 None
             }
-            Command::Stop => None,
+            // Nothing being answered, so nothing to stop or report to.
+            Command::Stop | Command::Results(..) | Command::Cancel => None,
         };
     }
 }
@@ -655,11 +666,13 @@ async fn turn(
             publish(iface, |state| state.phase = Phase::Transcribing).await;
             let whisper = session.whisper.as_mut().expect("started above");
             let transcribed = tokio::time::timeout(TRANSCRIBE_TIMEOUT, whisper.transcribe(&audio));
-            match until_ended(transcribed, commands).await {
+            let transcribed = until_cancelled(transcribed, commands, &mut session.open).await;
+            // Done with it: the speech model quits, its memory freed while the AI works.
+            session.whisper = None;
+            match transcribed {
                 Ok(Ok(Ok(text))) => text,
                 Ok(Ok(Err(err))) => {
                     warn!("speech recognition failed: {err:#}");
-                    session.whisper = None;
                     let missing = format!("{err:#}").contains("not downloaded");
                     return fail(
                         iface,
@@ -671,15 +684,8 @@ async fn turn(
                     )
                     .await;
                 }
-                Ok(Err(_)) => {
-                    session.whisper = None;
-                    return fail(iface, SPEECH_FAILED).await;
-                }
-                // Cut off mid-way, it may still answer; a fresh one is started next time.
-                Err(command) => {
-                    session.whisper = None;
-                    return Some(command);
-                }
+                Ok(Err(_)) => return fail(iface, SPEECH_FAILED).await,
+                Err(command) => return Some(command),
             }
         }
     };
@@ -715,12 +721,30 @@ async fn turn(
     let brain = session.brain.as_mut().expect("started above");
     let provider = brain.provider();
     let (activity, mut steps) = mpsc::unbounded_channel();
-    let asked = tokio::time::timeout(THINK_TIMEOUT, agent::think(brain, &prompt, &activity));
-    let result = until_ended_showing(asked, commands, &mut steps, iface).await;
+    let (desk, mut acts) = mpsc::unbounded_channel();
+    let asked = tokio::time::timeout(RUN_TIMEOUT, agent::think(brain, &prompt, &activity, &desk));
+    let result = drive(
+        asked,
+        commands,
+        &mut steps,
+        &mut acts,
+        iface,
+        &mut session.open,
+    )
+    .await;
     session.conversation = session.brain.as_ref().and_then(Brain::conversation);
+    let too_long = || {
+        let error = format!("{} took too long", provider.name());
+        Failure::from((error.as_str(), "Try again, or ask for less at once."))
+    };
     match result {
         Ok(Ok(Ok(mut answer))) => {
             session.answered(data, today());
+            // Nothing more for it to do unless it asked something back on the open island: it quits now,
+            // to resume the conversation next time.
+            if !(session.open && answer.listen) {
+                session.brain = None;
+            }
             music::check(&mut answer.actions).await;
             if session.drop_unrunnable(&mut answer.actions) {
                 answer.say = NEEDS_RELOGIN.into();
@@ -736,6 +760,10 @@ async fn turn(
             .await;
             None
         }
+        Ok(Ok(Err(err))) if err.is::<agent::TooLong>() => {
+            session.brain = None;
+            fail(iface, too_long()).await
+        }
         Ok(Ok(Err(err))) => {
             warn!("{} failed: {err:#}", provider.name());
             session.brain = None;
@@ -749,14 +777,9 @@ async fn turn(
         }
         Ok(Err(_)) => {
             session.brain = None;
-            let error = format!("{} took too long", provider.name());
-            fail(
-                iface,
-                (error.as_str(), "Try again, or ask something shorter."),
-            )
-            .await
+            fail(iface, too_long()).await
         }
-        // Cut off mid-turn, the AI would answer into the next one: a fresh one is started next time.
+        // Stopped mid-turn, the AI would answer into the next one: a fresh one is started next time.
         Err(command) => {
             session.brain = None;
             Some(command)
@@ -854,7 +877,7 @@ async fn record(
                 // Tapped to finish: answer what was said, if anything was.
                 Some(Command::Stop) if endpointer.heard_speech() => break,
                 Some(Command::Stop) => return Ok(Recorded::Nothing),
-                Some(Command::End) | None => return Err(Command::End),
+                Some(Command::End | Command::Cancel) | None => return Err(Command::End),
                 // The extension sends no other request mid-turn; one that comes is dropped.
                 Some(_) => {}
             },
@@ -867,39 +890,72 @@ async fn record(
     })
 }
 
-/// As `until_ended`, showing each step the AI takes meanwhile on the island.
-async fn until_ended_showing<T>(
+/// Waits for the AI's answer, showing each step it takes on the island and handing the extension the
+/// desktop actions it takes mid-way (see `Results`). The island closing (End) leaves it to carry on;
+/// only Cancel stops it, and comes back as End, which ends the conversation's turn.
+async fn drive<T>(
     future: impl Future<Output = T>,
     commands: &mut Commands,
     steps: &mut mpsc::UnboundedReceiver<String>,
+    acts: &mut mpsc::UnboundedReceiver<agent::Act>,
     iface: &InterfaceRef<AssistantService>,
+    open: &mut bool,
 ) -> Result<T, Command> {
     tokio::pin!(future);
+    // The batch the extension is running, and where its results go.
+    let mut waiting: Option<(u64, oneshot::Sender<Vec<Value>>)> = None;
     loop {
         tokio::select! {
             output = &mut future => return Ok(output),
             Some(step) = steps.recv() => {
                 publish(iface, |state| state.activity = step).await;
             }
+            Some(act) = acts.recv() => {
+                let mut step = 0;
+                publish(iface, |state| {
+                    state.phase = Phase::Acting;
+                    state.actions = act.actions;
+                    state.activity.clear();
+                    state.step += 1;
+                    step = state.step;
+                })
+                .await;
+                waiting = Some((step, act.results));
+            }
             command = commands.recv() => match command {
-                Some(Command::End) | None => return Err(Command::End),
+                Some(Command::Results(step, json)) => {
+                    if waiting.as_ref().is_some_and(|(asked, _)| *asked == step) {
+                        let (_, results) = waiting.take().expect("checked above");
+                        results.send(serde_json::from_str(&json).unwrap_or_default()).ok();
+                        publish(iface, |state| {
+                            state.phase = Phase::Thinking;
+                            state.actions.clear();
+                        })
+                        .await;
+                    }
+                }
+                Some(Command::End) => *open = false,
+                Some(Command::Cancel) | None => return Err(Command::End),
+                // A new request waits for this one (the extension shows it instead).
                 Some(_) => {}
             },
         }
     }
 }
 
-/// Waits for `future` unless the conversation is ended first; other commands are dropped.
-async fn until_ended<T>(
+/// Waits for `future` unless the request is cancelled; the island closing (End) leaves it running.
+async fn until_cancelled<T>(
     future: impl Future<Output = T>,
     commands: &mut Commands,
+    open: &mut bool,
 ) -> Result<T, Command> {
     tokio::pin!(future);
     loop {
         tokio::select! {
             output = &mut future => return Ok(output),
             command = commands.recv() => match command {
-                Some(Command::End) | None => return Err(Command::End),
+                Some(Command::End) => *open = false,
+                Some(Command::Cancel) | None => return Err(Command::End),
                 Some(_) => {}
             },
         }
@@ -952,6 +1008,30 @@ async fn publish(iface: &InterfaceRef<AssistantService>, update: impl FnOnce(&mu
     if let Err(err) = service.state_changed(iface.signal_emitter()).await {
         warn!("could not publish the assistant state: {err}");
     }
+}
+
+/// What `isled --doctor` says about the assistant: speech recognition, and each AI and its sign-in.
+pub fn report() -> String {
+    let mut lines = vec![if whisper::installed() {
+        "  Speech recognition: set up".to_owned()
+    } else {
+        "  Speech recognition: not set up (run isle-setup-voice)".to_owned()
+    }];
+    for provider in Provider::all() {
+        let name = provider.name();
+        lines.push(match provider.program() {
+            None => format!("  {name}: not installed"),
+            Some(path) if provider.signed_in() => {
+                format!("  {name}: {} (signed in)", path.display())
+            }
+            Some(path) => format!(
+                "  {name}: {} (not signed in: run `{}`)",
+                path.display(),
+                provider.sign_in_command()
+            ),
+        });
+    }
+    lines.join("\n")
 }
 
 fn or<'a>(value: &'a str, fallback: &'a str) -> &'a str {

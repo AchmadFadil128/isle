@@ -442,7 +442,7 @@ class CalendarPage extends Page {
             return;
         const result = await this.daemon.call('calendar', 'Add', dayKey(this._selected), text);
         // Kept for another try if it was refused (say, a time alone).
-        if (result)
+        if (result && !this._destroyed)
             this._entry.text = '';
     }
 

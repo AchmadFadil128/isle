@@ -202,7 +202,10 @@ function watchWithdrawal(item) {
     if (watched.has(item))
         return;
     watched.add(item);
-    item.connect('destroy', () => withdrawn.add(item));
+    const id = item.connect('destroy', () => {
+        withdrawn.add(item);
+        item.disconnect(id);
+    });
 }
 
 /** A GNOME notification, shown in place of GNOME's own banner. */
@@ -270,6 +273,23 @@ export function reminder({id, text}) {
         subtitle: 'Reminder',
         tone: 'warn',
         duration: REMINDER_DURATION,
+    };
+}
+
+/** The voice assistant finished a request the island closed on: its answer, or what went wrong. `open`
+ * shows it in full. */
+export function assistant(state, open) {
+    const failed = state.phase === 'error';
+    const text = failed ? state.error || 'Something went wrong' : state.reply || 'Done';
+    return {
+        key: 'assistant',
+        icon: failed ? 'dialog-warning-symbolic' : 'isle-mic-symbolic',
+        title: text,
+        subtitle: failed ? state.hint ?? '' : 'Isle Assistant',
+        tone: failed ? 'bad' : 'good',
+        // Long enough to read, as the open island gives it.
+        duration: Math.min(REMINDER_DURATION + 4000, STATUS_DURATION + 45 * text.length),
+        onActivate: open,
     };
 }
 

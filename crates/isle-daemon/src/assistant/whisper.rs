@@ -8,12 +8,13 @@ use std::process::Stdio;
 use anyhow::{Context, bail};
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
-use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::process::{ChildStdin, ChildStdout, Command};
 
+use super::child::{self, Group};
 use crate::store::{data_dir, write_private};
 
 pub struct Whisper {
-    _child: Child,
+    _child: Group,
     stdin: ChildStdin,
     lines: Lines<BufReader<ChildStdout>>,
     ready: bool,
@@ -32,20 +33,26 @@ pub fn installed() -> bool {
     helper().is_some()
 }
 
+/// The threads speech recognition may use: half the cores, at least one.
+fn threads() -> usize {
+    std::thread::available_parallelism().map_or(1, |n| (n.get() / 2).max(1))
+}
+
 impl Whisper {
     /// Starts the helper; it loads the model while the user is still speaking.
     pub fn start(model: &str, language: &str) -> anyhow::Result<Self> {
         let (python, script) = helper().context("speech recognition is not set up")?;
-        let mut child = Command::new(python)
+        let mut command = Command::new(python);
+        command
             .arg("-I")
             .arg(script)
             .args(["--model", model, "--language", language])
+            // Half the cores at most: transcribing never takes the whole computer.
+            .env("ISLE_WHISPER_THREADS", threads().to_string())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .spawn()
-            .context("could not start speech recognition")?;
+            .stderr(Stdio::null());
+        let mut child = child::spawn(&mut command).context("could not start speech recognition")?;
         let stdin = child.stdin.take().expect("piped stdin");
         let lines = BufReader::new(child.stdout.take().expect("piped stdout")).lines();
         // A private folder: the session's runtime directory, else Isle's own data folder.

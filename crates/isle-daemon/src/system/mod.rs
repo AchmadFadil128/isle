@@ -7,6 +7,7 @@ mod bluetooth;
 mod camera;
 mod network;
 mod power;
+mod sleep;
 
 use std::time::Duration;
 
@@ -112,6 +113,8 @@ pub fn spawn_watchers(system: Connection, iface: InterfaceRef<SystemService>) {
     supervise("network", move || {
         network::watch(bus.clone(), state.clone())
     });
+    let bus = system.clone();
+    supervise("sleep", move || sleep::watch(bus.clone()));
     let state = iface.clone();
     supervise("bluetooth", move || {
         bluetooth::watch(system.clone(), state.clone())

@@ -316,6 +316,21 @@ const COVER_SIZE = 256;
 /** Copies kept; none on screen is that many songs old (see `memoByFile`). */
 const COVERS_KEPT = 30;
 const coversMade = [];
+let oldCoversCleared = false;
+
+/** Copies an earlier GNOME Shell left (this list starts empty with it) go on first use: they live in RAM. */
+function clearOldCovers(dir) {
+    if (oldCoversCleared)
+        return;
+    oldCoversCleared = true;
+    try {
+        const children = Gio.File.new_for_path(dir).enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
+        for (let info = children.next_file(null); info; info = children.next_file(null))
+            children.get_child(info).delete(null);
+    } catch {
+        // None yet.
+    }
+}
 
 /**
  * A small copy of the cover at `path`, decoded and saved off the main thread, or null: St decodes a background
@@ -324,6 +339,7 @@ const coversMade = [];
 export const smallCover = memoByFile(async path => {
     if (!path)
         return null;
+    let copy = null;
     try {
         const pixbuf = await new Promise((resolve, reject) => {
             const stream = Gio.File.new_for_path(path).read(null);
@@ -337,8 +353,9 @@ export const smallCover = memoByFile(async path => {
             });
         });
         const dir = GLib.build_filenamev([GLib.get_user_runtime_dir(), 'isle-covers']);
+        clearOldCovers(dir);
         GLib.mkdir_with_parents(dir, 0o700);
-        const copy = GLib.build_filenamev([dir, `${GLib.uuid_string_random()}.png`]);
+        copy = GLib.build_filenamev([dir, `${GLib.uuid_string_random()}.png`]);
         const out = Gio.File.new_for_path(copy).replace(null, false, Gio.FileCreateFlags.PRIVATE, null);
         await new Promise((resolve, reject) => {
             pixbuf.save_to_streamv_async(out, 'png', [], [], null, (_source, result) => {
@@ -355,6 +372,9 @@ export const smallCover = memoByFile(async path => {
             GLib.unlink(coversMade.shift());
         return copy;
     } catch {
+        // Nothing half written is left behind.
+        if (copy)
+            GLib.unlink(copy);
         return null;
     }
 });
@@ -380,7 +400,12 @@ export const Art = GObject.registerClass({
             style_class: 'isle-art-placeholder',
         });
         this.setPath('');
-        this.connect('destroy', () => (this._destroyed = true));
+        this.connect('destroy', () => {
+            this._destroyed = true;
+            // Not a child while a cover shows.
+            if (!this._placeholder.get_parent())
+                this._placeholder.destroy();
+        });
     }
 
     /** Resizes the art; `radius` is its new corner radius. */
@@ -512,6 +537,11 @@ export const Slider = GObject.registerClass({
         this._value = 0;
         this._grab = null;
         this.connect('notify::hover', () => this._syncKnob());
+        // Gone mid-drag (the screen locked): the pointer is let go.
+        this.connect('destroy', () => {
+            this._grab?.dismiss();
+            this._grab = null;
+        });
     }
 
     get value() {

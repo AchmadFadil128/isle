@@ -63,9 +63,10 @@ your windows uncovered.
 - **GNOME Shell 46 to 51** (Ubuntu 24.04 to 26.10, Fedora 40 to 45,
   Debian 13, …), on a 64-bit Intel or AMD PC (x86_64). Check with
   `gnome-shell --version`.
-- `curl`, which most systems have.
+- `curl`, which most systems have. Install as yourself, not with `sudo`.
 - For the voice assistant (optional): a microphone, Python 3 with venv, and
-  one of Claude Code, Codex or Antigravity signed in; see
+  one of Claude Code, Codex or Antigravity signed in (Codex and the npm
+  install of Claude Code need Node.js 18 or newer); see
   [Voice assistant](#voice-assistant).
 
 ## Installation
@@ -82,7 +83,7 @@ your windows uncovered.
 
 That's all. The script downloads the latest release, checks it, and installs
 it for your user only: no root, no compiler and no cloning needed. Run the
-same command again to update.
+same command again to update; your settings stay as you set them.
 
 The [installation guide](docs/install.md) goes through it step by step, with
 updating, uninstalling, installing offline and what to do if the island does
@@ -163,6 +164,15 @@ listens until you pause, turns your words into text **on this computer**,
 then asks the AI you picked; it shows each step ("Searching ~/Downloads for
 “signature”…") and does what the answer asks.
 
+It works as an **agent**: a request with several steps ("open Firefox, then
+put it on the left", "find my CV and open it", "open Spotify, play some
+jazz and turn the volume down to 30") is done one step after another, each
+step seeing what the last one did (whether the app opened, which windows
+are there). You can **close the island while it works**: it carries on in
+the background, with a small mic in the closed island, and the answer comes
+as an alert; click the island or press Super+I to watch it, and **Stop** to
+end it.
+
 **What it does:** music (play, pause, a given song on Spotify), apps and
 windows (open, switch to, close, minimize, fullscreen, put side by side or
 in a 2×2 grid: "split Chrome and VS Code 50/50"), files and folders
@@ -180,7 +190,7 @@ midnight.
 
    | AI | Install | Sign in | Notes |
    |---|---|---|---|
-   | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `npm i -g @anthropic-ai/claude-code` | run `claude` | Uses your Claude plan; Sonnet by default; Haiku is the fastest but follows the request's language and tools less reliably |
+   | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `curl -fsSL https://claude.ai/install.sh \| bash` (or `npm i -g @anthropic-ai/claude-code`) | run `claude` | Uses your Claude plan; Sonnet by default; Haiku is the fastest but follows the request's language and tools less reliably |
    | [Codex](https://github.com/openai/codex) | `npm i -g @openai/codex` | `codex login` | Uses your ChatGPT plan, with the model your Codex uses |
    | [Antigravity](https://antigravity.google) | its installer | run `agy` | Its terms bar third-party tools from the service; Isle only runs the official `agy`, at your own risk |
 
@@ -191,6 +201,10 @@ midnight.
    lighter one); the GPU is used when there is one. It needs Python's venv:
    `sudo apt install python3-venv` on Ubuntu and Debian.
 3. Pick the AI in **Settings → Voice**, or leave it on Automatic.
+4. Check with `isled --doctor`: it lists speech recognition and each AI, where
+   it is installed and whether you are signed in, as Isle itself sees them.
+   Isle finds AIs installed with npm, nvm, volta, fnm, pnpm, bun or their own
+   installers.
 
 Without any of them, Super+I says what to install, and the rest of Isle works
 as before.
@@ -208,11 +222,13 @@ with the command typed in, which runs only when you press Enter. Text from
 other apps (your selection, notifications, window titles) is passed as data,
 never as instructions.
 
-**Resources:** the speech model runs only while you speak and quits when the
-island closes. The AI stays ready for ten minutes after you ask (about
-200 MB for agy), so a follow-up takes a few seconds, then quits. Its chats
-are kept apart from your own (in `~/.local/share/isle`) and deleted at
-midnight.
+**Resources:** nothing of the assistant runs while you are not asking. The
+speech model runs only while you speak (on at most half the processor's
+cores) and quits once your words are text; the AI runs only while it works
+on a request and quits as soon as it is done, taking anything it started with
+it. Both run at a lower priority than your apps, so the desktop stays smooth
+while they work. A follow-up resumes the same conversation. Its chats are
+kept apart from your own (in `~/.local/share/isle`) and deleted at midnight.
 
 ## AI usage
 
@@ -224,8 +240,10 @@ you are not signed in to does not show at all.
 
 Claude's numbers come from the same page Claude Code's `/usage` reads; it is
 not a documented API, so it may change. Isle asks it every ten minutes (at
-most every two while the Usage page is open), waits longer after any
-failure, and never signs in or refreshes a sign-in itself. ChatGPT's numbers
+most every two while the Usage page is open). Offline, as at login before the
+network is up, it tries again within a minute; when Claude's server fails it
+waits longer each time. It never signs in or refreshes a sign-in itself, and
+with usage turned off it asks nothing at all. ChatGPT's numbers
 are read from Codex's own logs, with no network at all, so they are as of
 your last use of Codex.
 
@@ -290,6 +308,9 @@ drag-and-drop helper; when building from source, install `libgtk-4-dev`
 top bar (Dash to Panel, Hide Top Bar, other islands) can get in the way;
 turn them off in the Extensions app.
 
+**The voice assistant does not answer.** Run `isled --doctor`: it says what
+is missing (speech recognition, an AI, or its sign-in) and what to run.
+
 **Something else.** GNOME Shell's log shows extension errors:
 `journalctl -f -o cat /usr/bin/gnome-shell`. Please
 [open an issue](../../issues) with what you see.
@@ -301,10 +322,11 @@ isle-uninstall
 ```
 
 (or `./uninstall.sh` from the release package or the source folder). This
-removes the extension, the programs, the service and the font. Your
-tasks, calendar events, clipboard history, shelf and timer settings, and the
-voice assistant's speech model (about 0.5 GB), stay in `~/.local/share/isle`
-until you delete that folder.
+removes the extension, the programs, the service, the font, the voice
+assistant's speech recognition and Isle's caches, and lifts a battery charge
+limit Isle set. Your tasks, calendar events, clipboard history, shelf and
+timer settings stay in `~/.local/share/isle`, and the speech model in
+`~/.cache/huggingface`, until you delete them.
 
 ## How it works
 

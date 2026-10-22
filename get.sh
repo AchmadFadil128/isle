@@ -2,54 +2,104 @@
 # Installs the latest Isle release for the current user, with no building:
 #   curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash
 #
-# ISLE_VERSION=0.1.1 picks a release; ISLE_PACKAGE=path/to/isle-….tar.gz
-# installs a package already downloaded.
+# ISLE_VERSION=0.1.1 picks a release; ISLE_PACKAGE=path/to/isle-….tar.gz installs a package already
+# downloaded; ISLE_FORCE=1 installs on a GNOME Shell version Isle was not made for.
 set -euo pipefail
 
 REPO="zickrian/isle"
 ARCH="$(uname -m)"
+# A release just tagged may take a few minutes to get its files.
+RETRIES=6
+RETRY_WAIT=20
 
 say() { printf '\033[1m==> %s\033[0m\n' "$*"; }
 fail() { printf 'Isle: %s\n' "$*" >&2; exit 1; }
 
-for tool in curl tar sha256sum; do
-    command -v "$tool" >/dev/null || fail "please install $tool first."
-done
-command -v gnome-shell >/dev/null || fail "GNOME Shell was not found; Isle is a GNOME Shell extension."
-SHELL_VERSION="$(gnome-shell --version | grep -oE '[0-9]+' | head -n1)"
-[ "$SHELL_VERSION" -ge 46 ] && [ "$SHELL_VERSION" -le 51 ] ||
-    echo "Note: Isle is made for GNOME Shell 46 to 51, and this is GNOME Shell $SHELL_VERSION; it may not load."
+check() {
+    # Everything goes to your own home folder: sudo would put it in root's, where your desktop never looks.
+    [ "$(id -u)" -ne 0 ] || fail "run this as yourself, without sudo; Isle installs to your own home folder."
+    local tool
+    for tool in curl tar sha256sum gsettings glib-compile-schemas; do
+        command -v "$tool" >/dev/null || fail "please install $tool first."
+    done
+    command -v gnome-shell >/dev/null || fail "GNOME Shell was not found; Isle is a GNOME Shell extension."
+    case "${XDG_CURRENT_DESKTOP:-}" in
+        *GNOME*) ;;
+        *) echo "Note: this session's desktop is '${XDG_CURRENT_DESKTOP:-unknown}', not GNOME; Isle shows up once you log in to GNOME." ;;
+    esac
+    local version
+    version="$(gnome-shell --version 2>/dev/null | grep -oE '[0-9]+' | head -n1 || true)"
+    if [ -z "$version" ] || [ "$version" -lt 46 ] || [ "$version" -gt 51 ]; then
+        [ "${ISLE_FORCE:-}" = 1 ] ||
+            fail "Isle is made for GNOME Shell 46 to 51, and this is GNOME Shell ${version:-unknown}. Nothing was changed. (ISLE_FORCE=1 installs anyway.)"
+        echo "Note: GNOME Shell ${version:-unknown} is not one Isle was made for; installing anyway."
+    fi
+}
 
-WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
-
-if [ -n "${ISLE_PACKAGE:-}" ]; then
-    cp "$ISLE_PACKAGE" "$WORK/isle.tar.gz"
-else
+# The release's download for this computer, waiting a little for one just published.
+find_package() {
+    local api reply url attempt
     if [ -n "${ISLE_VERSION:-}" ]; then
         api="https://api.github.com/repos/$REPO/releases/tags/v$ISLE_VERSION"
     else
         api="https://api.github.com/repos/$REPO/releases/latest"
     fi
-    say "Finding the release"
-    url="$(curl -fsSL "$api" |
-        grep -oE "\"browser_download_url\": *\"[^\"]*-$ARCH-linux\\.tar\\.gz\"" |
-        cut -d'"' -f4 | head -n1)" || true
-    [ -n "$url" ] || fail "no release for $ARCH was found at github.com/$REPO/releases."
+    for attempt in $(seq "$RETRIES"); do
+        if ! reply="$(curl -sSL -w '\n%{http_code}' "$api" 2>&1)"; then
+            fail "could not reach GitHub ($reply); check the internet connection and try again."
+        fi
+        case "${reply##*$'\n'}" in
+            200) ;;
+            403 | 429) fail "GitHub limits how often it is asked; try again in an hour." ;;
+            404) fail "no release ${ISLE_VERSION:+v$ISLE_VERSION }was found at github.com/$REPO/releases." ;;
+            *) fail "GitHub answered ${reply##*$'\n'}; try again later." ;;
+        esac
+        url="$(printf '%s' "$reply" |
+            grep -oE "\"browser_download_url\": *\"[^\"]*-$ARCH-linux\\.tar\\.gz\"" |
+            cut -d'"' -f4 | head -n1 || true)"
+        if [ -n "$url" ]; then
+            printf '%s\n' "$url"
+            return
+        fi
+        # x86_64 is always built: a release without it is still getting its files.
+        [ "$ARCH" = x86_64 ] && [ "$attempt" -lt "$RETRIES" ] || break
+        echo "The release is still being published; trying again in $RETRY_WAIT s." >&2
+        sleep "$RETRY_WAIT"
+    done
+    fail "no ready-built Isle for $ARCH; build it from source instead (see github.com/$REPO#from-source)."
+}
 
-    say "Downloading $(basename "$url")"
-    curl -fsSL "$url" -o "$WORK/isle.tar.gz"
-    curl -fsSL "$url.sha256" -o "$WORK/isle.tar.gz.sha256"
-    expected="$(cut -d' ' -f1 "$WORK/isle.tar.gz.sha256")"
-    actual="$(sha256sum "$WORK/isle.tar.gz" | cut -d' ' -f1)"
-    [ "$expected" = "$actual" ] || fail "the download is damaged (checksum mismatch); please try again."
-fi
+main() {
+    check
+    WORK="$(mktemp -d)"
+    trap 'rm -rf "$WORK"' EXIT
 
-tar -C "$WORK" -xzf "$WORK/isle.tar.gz"
-PACKAGE="$(find "$WORK" -mindepth 1 -maxdepth 1 -type d -name 'isle-*' | head -n1)"
-[ -n "$PACKAGE" ] || fail "the package has an unexpected layout."
-"$PACKAGE/install.sh"
+    if [ -n "${ISLE_PACKAGE:-}" ]; then
+        cp "$ISLE_PACKAGE" "$WORK/isle.tar.gz"
+    else
+        say "Finding the release"
+        local url expected actual
+        url="$(find_package)"
+        say "Downloading $(basename "$url")"
+        curl -fsSL "$url" -o "$WORK/isle.tar.gz" || fail "the download failed; please try again."
+        curl -fsSL "$url.sha256" -o "$WORK/isle.tar.gz.sha256" || fail "the download failed; please try again."
+        expected="$(cut -d' ' -f1 "$WORK/isle.tar.gz.sha256")"
+        actual="$(sha256sum "$WORK/isle.tar.gz" | cut -d' ' -f1)"
+        [ "$expected" = "$actual" ] || fail "the download is damaged (checksum mismatch); please try again."
+    fi
 
-# The package's uninstaller stays around as a command.
-install -Dm755 "$PACKAGE/uninstall.sh" "$HOME/.local/bin/isle-uninstall"
-echo "To remove Isle later, run: isle-uninstall"
+    tar -C "$WORK" -xzf "$WORK/isle.tar.gz"
+    local package
+    package="$(find "$WORK" -mindepth 1 -maxdepth 1 -type d -name 'isle-*' | head -n1)"
+    [ -n "$package" ] || fail "the package has an unexpected layout."
+    "$package/install.sh"
+
+    # The package's uninstaller stays around as a command.
+    install -Dm755 "$package/uninstall.sh" "$HOME/.local/bin/isle-uninstall"
+    echo
+    echo "Voice assistant (optional): run ~/.local/bin/isle-setup-voice once, then press Super+I."
+    echo "To check it, run ~/.local/bin/isled --doctor; to remove Isle, run ~/.local/bin/isle-uninstall."
+}
+
+# All read before anything runs: a download cut short never runs half a script.
+main "$@"

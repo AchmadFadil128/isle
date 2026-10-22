@@ -15,7 +15,7 @@ use zbus::names::{InterfaceName, OwnedBusName};
 use zbus::object_server::InterfaceRef;
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
-use zbus::{Connection, proxy};
+use zbus::{Connection, MatchRule, MessageStream, proxy};
 
 use super::gap::GapBridge;
 use super::lyrics::{self, Lyrics, LyricsStatus, TrackQuery};
@@ -26,6 +26,9 @@ const NAME_PREFIX: &str = "org.mpris.MediaPlayer2.";
 /// playerctld re-exports other players; listening to it would duplicate them.
 const IGNORED: &[&str] = &["org.mpris.MediaPlayer2.playerctld"];
 const OBJECT_PATH: &str = "/org/mpris/MediaPlayer2";
+/// A player sets its properties one by one when a song changes: those coming this close together are read
+/// once.
+const BURST: Duration = Duration::from_millis(40);
 const APP_INTERFACE: &str = "org.mpris.MediaPlayer2";
 const PLAYER_INTERFACE: &str = "org.mpris.MediaPlayer2.Player";
 /// The bus connection has no method timeout, and a hung player would
@@ -140,8 +143,15 @@ struct Watcher {
 /// Runs forever, keeping `iface` in sync with the active player.
 pub async fn watch(conn: Connection, iface: InterfaceRef<MediaService>) -> anyhow::Result<()> {
     let dbus = DBusProxy::new(&conn).await?;
-    // Subscribe before listing, so no player can slip in between.
-    let mut owners = dbus.receive_name_owner_changed().await?;
+    // Subscribe before listing, so no player can slip in between; only players' names, not every app's.
+    let owners_rule = MatchRule::builder()
+        .msg_type(zbus::message::Type::Signal)
+        .sender("org.freedesktop.DBus")?
+        .interface("org.freedesktop.DBus")?
+        .member("NameOwnerChanged")?
+        .arg0ns(NAME_PREFIX.trim_end_matches('.'))?
+        .build();
+    let mut owners = MessageStream::for_match_rule(owners_rule, &conn, None).await?;
     let (events, mut received) = mpsc::unbounded_channel();
     let mut watcher = Watcher {
         conn,
@@ -167,14 +177,17 @@ pub async fn watch(conn: Connection, iface: InterfaceRef<MediaService>) -> anyho
 
     loop {
         tokio::select! {
-            Some(signal) = owners.next() => {
-                let Ok(args) = signal.args() else { continue };
-                if !is_player(args.name().as_str()) {
+            Some(Ok(signal)) = owners.next() => {
+                let Ok((name, _old, new)) = signal.body().deserialize::<(String, String, String)>()
+                else {
+                    continue;
+                };
+                if !is_player(&name) {
                     continue;
                 }
-                let name = OwnedBusName::from(args.name().to_owned());
+                let Ok(name) = OwnedBusName::try_from(name) else { continue };
                 watcher.players.remove(&name);
-                if args.new_owner().is_some() {
+                if !new.is_empty() {
                     watcher.add(name).await;
                 }
             }
@@ -260,6 +273,16 @@ impl Watcher {
                     Some(_) = changed.next() => {}
                     Some(_) = seeked.next() => {}
                     else => break,
+                }
+                // The rest of a burst comes with it, and the player is read once.
+                let quiet = tokio::time::sleep(BURST);
+                tokio::pin!(quiet);
+                loop {
+                    tokio::select! {
+                        () = &mut quiet => break,
+                        Some(_) = changed.next() => {}
+                        Some(_) = seeked.next() => {}
+                    }
                 }
                 if events.send(Event::Player(name.clone())).is_err() {
                     break;

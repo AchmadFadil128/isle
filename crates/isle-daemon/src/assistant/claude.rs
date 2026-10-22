@@ -13,10 +13,11 @@ use chrono::{DateTime, Local, NaiveDate};
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
-use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::process::{ChildStdin, ChildStdout, Command};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::answer::{Answer, SCHEMA};
+use super::child::{self, Group};
 
 /// Claude Code's own coding-agent prompt is replaced by this; the job comes with the first request.
 const SYSTEM: &str = "You are Isle, a voice assistant on the user's Linux desktop, not a coding agent. Follow \
@@ -26,7 +27,7 @@ const TOOLS: &str = "WebSearch,WebFetch";
 const STDERR_LINES: usize = 20;
 
 pub struct Claude {
-    _child: Child,
+    _child: Group,
     stdin: ChildStdin,
     events: Lines<BufReader<ChildStdout>>,
     stderr: Arc<Mutex<VecDeque<String>>>,
@@ -61,13 +62,12 @@ impl Claude {
         if let Some(id) = resume {
             command.args(["--resume", id]);
         }
-        let mut child = command
+        command
             .current_dir(workspace)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
+            .stderr(Stdio::piped());
+        let mut child = child::spawn(&mut command)
             .context("could not start claude; is Claude Code installed?")?;
         let stdin = child.stdin.take().expect("piped stdin");
         let events = BufReader::new(child.stdout.take().expect("piped stdout")).lines();
@@ -183,12 +183,7 @@ fn parse_result(event: &Value) -> anyhow::Result<Answer> {
         return Ok(answer);
     }
     let text = event["result"].as_str().unwrap_or_default().trim();
-    Ok(serde_json::from_str(text).unwrap_or_else(|_| Answer {
-        say: text.to_owned(),
-        actions: Vec::new(),
-        listen: false,
-        tools: Vec::new(),
-    }))
+    Ok(serde_json::from_str(text).unwrap_or_else(|_| Answer::plain(text)))
 }
 
 /// Where Claude Code keeps the conversations it had in Isle's workspace (and only those).

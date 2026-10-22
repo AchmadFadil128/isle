@@ -106,6 +106,8 @@ const INTERFACES = {
             <method name="Ask"><arg name="text" type="s" direction="in"/><arg name="context" type="s" direction="in"/></method>
             <method name="Stop"/>
             <method name="End"/>
+            <method name="Results"><arg name="step" type="t" direction="in"/><arg name="results" type="s" direction="in"/></method>
+            <method name="Cancel"/>
             <signal name="Level"><arg name="level" type="d"/></signal>
             <property name="State" type="s" access="read"/>`),
         properties: {State: 'assistant'},
@@ -115,7 +117,8 @@ const INTERFACES = {
 // Signals: `changed` (key): `state[key]` is new; `pomodoro-finished` (finished, next): phase names;
 // `system-event` (event): see `SystemEvent` in the daemon; `voice-level` (level): the mic, 0..1;
 // `usage-alert` (provider, window, percent, resets_at_ms): an AI plan limit nears its end;
-// `assistant-lost`: isled stopped or restarted, so a request in flight will not be answered.
+// `assistant-lost`: isled stopped or restarted, so a request in flight will not be answered;
+// `appeared` (name): interface `name` can be called now (isled started, or started again).
 export class Daemon extends Signals.EventEmitter {
     constructor() {
         super();
@@ -175,12 +178,18 @@ export class Daemon extends Signals.EventEmitter {
             });
             // The daemon restarted (or stopped): re-read everything.
             proxy.connect('notify::g-name-owner', refresh);
+            proxy.connect('notify::g-name-owner', () => {
+                if (proxy.g_name_owner)
+                    this.emit('appeared', name);
+            });
             // Whatever it was doing for the voice assistant is lost with it.
             if (name === 'assistant')
                 proxy.connect('notify::g-name-owner', () => this.emit('assistant-lost'));
             proxy.connect('g-signal', (_proxy, _sender, signal, parameters) =>
                 this._onSignal(signal, parameters.deep_unpack()));
             refresh();
+            if (proxy.g_name_owner)
+                this.emit('appeared', name);
         }, this._cancellable, Gio.DBusProxyFlags.DO_NOT_AUTO_START_AT_CONSTRUCTION);
     }
 
