@@ -15,11 +15,14 @@ concurrency:
 jobs:
   rust:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       # GTK 4 for isle-shelf; cmake, libclang, the Vulkan headers and glslc for isle-whisper (whisper.cpp).
       - name: Install build dependencies
         run: |
+          # man-db's index rebuild can stall apt for many minutes on the runners; nothing here needs it.
+          sudo rm -f /var/lib/man-db/auto-update
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev cmake g++ clang libclang-dev libvulkan-dev glslc
       - uses: dtolnay/rust-toolchain@stable
@@ -37,10 +40,13 @@ jobs:
   msrv:
     name: Minimum Rust version
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
         run: |
+          # man-db's index rebuild can stall apt for many minutes on the runners; nothing here needs it.
+          sudo rm -f /var/lib/man-db/auto-update
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev cmake g++ clang libclang-dev libvulkan-dev glslc
       - name: Read rust-version
@@ -67,6 +73,7 @@ jobs:
   deny:
     name: cargo deny (${{ matrix.checks }})
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -83,6 +90,7 @@ jobs:
   shell:
     name: Shell scripts
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: ShellCheck
@@ -92,6 +100,7 @@ jobs:
 
   extension:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -111,6 +120,7 @@ jobs:
         run: node --experimental-default-type=module --test tests/extension/*.test.js
       - name: Check the settings schema, and the tests that need GLib
         run: |
+          sudo rm -f /var/lib/man-db/auto-update
           sudo apt-get update && sudo apt-get install -y libglib2.0-bin gjs
           glib-compile-schemas --strict --dry-run gnome-extension/schemas
           gjs -m tests/extension/format.gjs.js
@@ -118,11 +128,14 @@ jobs:
   package:
     name: Release packages
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       # As the release builds them: isle-whisper needs cmake, libclang, the Vulkan headers and glslc.
       - name: Install build dependencies
         run: |
+          # man-db's index rebuild can stall apt for many minutes on the runners; nothing here needs it.
+          sudo rm -f /var/lib/man-db/auto-update
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev rpm file cmake g++ clang libclang-dev libvulkan-dev glslc
       - uses: dtolnay/rust-toolchain@stable
@@ -141,6 +154,7 @@ jobs:
     name: GNOME Shell smoke test (${{ matrix.image }}, ${{ matrix.package }})
     needs: package
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

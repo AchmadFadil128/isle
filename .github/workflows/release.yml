@@ -19,6 +19,7 @@ jobs:
   package:
     # Built against Ubuntu 24.04's GLib and GTK, the oldest GNOME 46 system.
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Check the version
@@ -32,6 +33,8 @@ jobs:
       # GTK 4 for isle-shelf, rpmbuild for the .rpm; cmake, libclang, the Vulkan headers and glslc for isle-whisper.
       - name: Install build dependencies
         run: |
+          # man-db's index rebuild can stall apt for many minutes on the runners; nothing here needs it.
+          sudo rm -f /var/lib/man-db/auto-update
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev rpm file cmake g++ clang libclang-dev libvulkan-dev glslc
       - uses: dtolnay/rust-toolchain@stable
