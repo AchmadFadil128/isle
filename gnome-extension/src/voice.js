@@ -74,6 +74,29 @@ const LEVEL_RATE = 8;
 const STILL_LEVEL = 0.2;
 /** After answering it smiles this long (s). */
 const SMILE_S = 1.6;
+/** Surprised this long (s) when it first hears you; sleepy after this long (s) with nothing going on. */
+const SURPRISE_S = 0.6;
+const SLEEPY_S = 8;
+/** How fast (per second) the eyes take on a new expression: a morph of about a fifth of a second. */
+const MORPH_RATE = 14;
+/** An eye's shape against an open one: width, height, turn (radians, clockwise), lift (px), lid (share
+ * shut from above), slant (more of the lid on the outer side, as a sad eye's) and smile (an arch). */
+const OPEN_EYE = {w: 1, h: 1, turn: 0, lift: 0, lid: 0, slant: 0, smile: 0};
+/** The expressions, as [left eye, right eye]; what an eye leaves out is as open. */
+const EXPRESSIONS = {
+    attentive: [{}, {}],
+    surprised: [{w: 1.5, h: 0.92}, {w: 1.5, h: 0.92}],
+    // The head cocked and one eye narrowed, looking up while it thinks.
+    curious: [{turn: 0.14}, {turn: 0.14, h: 0.78, lift: 0.8}],
+    happy: [{smile: 1}, {smile: 1}],
+    // One eye squeezed and raised: it did not catch what you said.
+    confused: [{}, {h: 0.55, lift: 2}],
+    // Lids falling to the outside, the eyes low: sad, where sleepy's lids are level.
+    sad: [{h: 0.9, lift: -1.4, slant: 0.62}, {h: 0.9, lift: -1.4, slant: 0.62}],
+    sleepy: [{lid: 0.55, lift: -0.6}, {lid: 0.55, lift: -0.6}],
+};
+/** Errors that come from not hearing you (isled's wording): it looks confused at them, sad at others. */
+const NOT_HEARD = /^(Didn't catch that|The microphone is muted|No microphone)/;
 /** Blinks come every few seconds, at random, and take this long (s). */
 const BLINK_S = 0.15;
 /** Without the pointer moving for this long (s), the eyes wander on their own. */
@@ -84,8 +107,8 @@ const KEY_LEVEL = 0.32;
 const easeOutBack = x => 1 + 2.2 * (x - 1) ** 3 + 1.2 * (x - 1) ** 2;
 const clamp = (value, limit = 1) => Math.max(-limit, Math.min(limit, value));
 
-// The character: a white head whose eyes follow the pointer, glance about and blink. They
-// stretch as you speak, look up while thinking, smile on answering and droop on an error.
+// The character: a white head whose eyes follow the pointer, glance about and blink. They stretch as
+// you speak and morph between expressions (see EXPRESSIONS) as it listens, thinks, answers or fails.
 const Face = GObject.registerClass(
 class Face extends St.DrawingArea {
     _init() {
@@ -111,13 +134,18 @@ class Face extends St.DrawingArea {
         this._pointerAt = -POINTER_REST_S;
         this._blinkAt = -1;
         this._nextBlink = 1.2;
+        this._surpriseAt = -SURPRISE_S;
+        this._heard = false;
+        this._voiceAt = 0;
+        this._eyes = [{...OPEN_EYE}, {...OPEN_EYE}];
     }
 
-    /** listening, thinking, searching, reply or error; each new form pops in. */
+    /** listening, typing, thinking, searching, reply, confused or error; each new form pops in. */
     setForm(form, time) {
         if (form !== this._form) {
             this._form = form;
             this._formAt = time;
+            this._heard = false;
         }
     }
 
@@ -139,10 +167,46 @@ class Face extends St.DrawingArea {
             this._gaze.y += (target.y - this._gaze.y) * follow;
         }
 
+        // The first word heard surprises it, for a moment.
+        if (this._form === 'listening' && this.level > 0.3) {
+            if (!this._heard)
+                this._surpriseAt = time;
+            this._heard = true;
+            this._voiceAt = time;
+        }
+        const goal = EXPRESSIONS[this._expression(time)];
+        const morph = 1 - Math.exp(-dt * MORPH_RATE);
+        this._eyes.forEach((eye, index) => {
+            for (const key in OPEN_EYE)
+                eye[key] += ((goal[index][key] ?? OPEN_EYE[key]) - eye[key]) * morph;
+        });
+
         if (time >= this._nextBlink) {
             this._blinkAt = time;
-            // Now and then a double blink.
-            this._nextBlink = time + (Math.random() < 0.15 ? 0.3 : 2.4 + Math.random() * 3);
+            // Now and then a double blink; slow and far apart when sleepy.
+            const sleepy = this._eyes[0].lid > 0.3;
+            this._nextBlink = time + (sleepy ? 3.5 + Math.random() * 3 : Math.random() < 0.15 ? 0.3 : 2.4 + Math.random() * 3);
+        }
+    }
+
+    /** The expression for the form at `time` (see EXPRESSIONS). */
+    _expression(time) {
+        const since = time - this._formAt;
+        // Nothing going on for a while: no pointer, no voice, no new form.
+        const idle = time - Math.max(this._formAt, this._pointerAt, this._voiceAt) > SLEEPY_S;
+        switch (this._form) {
+        case 'listening':
+            return time - this._surpriseAt < SURPRISE_S ? 'surprised' : idle ? 'sleepy' : 'attentive';
+        case 'thinking':
+            return 'curious';
+        case 'reply':
+            return since < SMILE_S ? 'happy' : idle ? 'sleepy' : 'attentive';
+        case 'confused':
+            return 'confused';
+        case 'error':
+            return 'sad';
+        default:
+            return 'attentive';
         }
     }
 
@@ -161,6 +225,9 @@ class Face extends St.DrawingArea {
             return {x: 0.9 * Math.sin(time * 2.2), y: 0.15 + 0.1 * Math.sin(time * 0.7)};
         if (this._form === 'error')
             return {x: 0.25 * Math.sin(time * 0.8), y: 0.5};
+        // Puzzled: up and to one side, with a little wobble.
+        if (this._form === 'confused')
+            return {x: 0.45 + 0.12 * Math.sin(time * 1.6), y: -0.35};
         if (time - this._pointerAt < POINTER_REST_S)
             return towards(px, py);
         if (time >= this._nextGlance) {
@@ -189,36 +256,54 @@ class Face extends St.DrawingArea {
 
         cr.setSourceRGBA(0.08, 0.08, 0.09, 1);
         const ey = hy - 0.5 + gy * EYE_TRAVEL.y;
-        for (const side of [-1, 1]) {
+        this._eyes.forEach((eye, index) => {
+            const side = index === 0 ? -1 : 1;
             const ex = hx + side * EYE_SPACING + gx * EYE_TRAVEL.x;
-            if (this._form === 'reply' && since < SMILE_S)
-                this._smile(cr, ex, ey);
-            else
-                this._eye(cr, ex, ey);
-        }
+            this._eye(cr, ex, ey, eye, side);
+            if (eye.smile > 0.01)
+                this._smile(cr, ex, ey, eye.smile);
+        });
         cr.$dispose();
     }
 
-    // A rounded eye, taller as you speak, shut for a moment when it blinks, low when it droops.
-    _eye(cr, x, y) {
+    // A rounded eye in the shape `eye` (see OPEN_EYE), taller as you speak, shut a moment as it blinks;
+    // `side` is -1 for the left one. It fades out as the smile's arch comes in.
+    _eye(cr, x, y, eye, side) {
+        if (eye.smile > 0.99)
+            return;
         const blinking = this.time - this._blinkAt;
-        const open = blinking >= 0 && blinking < BLINK_S
-            ? 1 - 0.9 * Math.sin(Math.PI * blinking / BLINK_S) : 1;
+        const length = eye.lid > 0.3 ? 2.5 * BLINK_S : BLINK_S;
+        const open = blinking >= 0 && blinking < length ? 1 - 0.9 * Math.sin(Math.PI * blinking / length) : 1;
         const listening = this._form === 'listening' ? 1 + 0.32 * this.level : 1;
-        const droop = this._form === 'error' ? 0.6 : 1;
-        const h = Math.max(EYE_WIDTH * 0.4, EYE_HEIGHT * open * listening * droop);
-        const w = EYE_WIDTH;
+        const w = EYE_WIDTH * eye.w;
+        const h = Math.max(EYE_WIDTH * 0.4, EYE_HEIGHT * eye.h * open * listening);
         const r = Math.min(w, h) / 2;
-        const top = y - h / 2 + (EYE_HEIGHT - h) * (droop < 1 ? 0.5 : 0);
+        cr.save();
+        cr.translate(x, y - eye.lift);
+        cr.rotate(eye.turn);
+        // The lid: down from the top by `lid`, lower on the outer side by `slant`.
+        if (eye.lid > 0.01 || eye.slant > 0.01) {
+            const inner = -h / 2 + h * eye.lid;
+            const outer = -h / 2 + h * Math.min(0.9, eye.lid + eye.slant);
+            cr.moveTo(-w, side < 0 ? outer : inner);
+            cr.lineTo(w, side < 0 ? inner : outer);
+            cr.lineTo(w, h);
+            cr.lineTo(-w, h);
+            cr.closePath();
+            cr.clip();
+        }
+        cr.setSourceRGBA(0.08, 0.08, 0.09, 1 - eye.smile);
         cr.newSubPath();
-        cr.arc(x, top + r, r, Math.PI, 0);
-        cr.arc(x, top + h - r, r, 0, Math.PI);
+        cr.arc(0, -h / 2 + r, r, Math.PI, 0);
+        cr.arc(0, h / 2 - r, r, 0, Math.PI);
         cr.closePath();
         cr.fill();
+        cr.restore();
     }
 
-    // Happy, closed eyes: two little arches.
-    _smile(cr, x, y) {
+    // Happy, closed eyes: a little arch, as strong as `amount` (it fades in from the open eye).
+    _smile(cr, x, y, amount) {
+        cr.setSourceRGBA(0.08, 0.08, 0.09, amount);
         cr.setLineWidth(2.5);
         cr.setLineCap(1); // round
         cr.newSubPath();
@@ -378,7 +463,8 @@ export const VoiceView = GObject.registerClass({
         // Stop while it works; else typing instead (to follow up, too).
         this._showAction(working ? this._stop : this._typeButton);
         const searching = (state.phase === 'thinking' && Boolean(state.activity)) || state.phase === 'acting';
-        const form = searching ? 'searching' : {transcribing: 'thinking'}[state.phase] ?? state.phase;
+        const notHeard = state.phase === 'error' && NOT_HEARD.test(state.error ?? '');
+        const form = searching ? 'searching' : notHeard ? 'confused' : {transcribing: 'thinking'}[state.phase] ?? state.phase;
         this._face.setForm(form, this._face.time);
     }
 
