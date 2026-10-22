@@ -8,6 +8,11 @@ All notable changes to Isle are listed here. The format follows
 
 ## [0.7.3] - 2026-10-22
 
+### Changed
+
+- The top bar is glass or black; the theme's own colour is no longer offered
+  (a bar set to it before reads as glass).
+
 ### Fixed
 
 - Antigravity's logs (one per request) are deleted at the end of the day,

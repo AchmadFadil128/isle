@@ -54,7 +54,7 @@ when Blur my Shell restyles the shell's.
 
 The bar can also be black, so that bar and island read as one shape: the
 shoulders then curve out of the bar's lower edge instead of the screen's
-top, or keep the theme's colour. The installer sets glass (and the slim
+top. The installer sets glass (and the slim
 bar) on every install, turns off Blur my Shell's top bar blur (it darkens
 the bar), and turns off
 extensions that take the island's place. Isle adds its colour to the bar's

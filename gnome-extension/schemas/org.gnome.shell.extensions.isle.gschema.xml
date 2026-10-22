@@ -5,11 +5,10 @@
       <choices>
         <choice value="glass"/>
         <choice value="black"/>
-        <choice value="theme"/>
       </choices>
       <default>'glass'</default>
       <summary>Top bar style</summary>
-      <description>“glass”: see-through, with no colour of its own, with the island as a black notch hanging from the top of the screen, like on a MacBook. “black”: the island blends into a black bar. “theme”: the bar keeps the theme's colour.</description>
+      <description>“glass”: see-through, with no colour of its own, with the island as a black notch hanging from the top of the screen, like on a MacBook. “black”: the island blends into a black bar. (A “theme” setting from before 0.7.3 reads as glass.)</description>
     </key>
     <key name="compact-top-bar" type="b">
       <default>true</default>

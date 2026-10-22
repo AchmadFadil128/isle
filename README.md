@@ -182,7 +182,7 @@ stops, a warning shows in the closed island; click it to start it again.
 Click the gear right of the clock in the open island (or Isle's gear in the
 **Extensions** app):
 
-- **Island:** glass (default), black, or your theme's colour for the top bar;
+- **Island:** a glass (default) or black top bar;
   the closed island inside the bar or hanging below it; with more than one
   display, on the main one or the one you are using; opening when the
   pointer rests on it (and for how long) or only on a click.

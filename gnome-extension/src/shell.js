@@ -145,7 +145,8 @@ export class TopBar extends Signals.EventEmitter {
         this._settings.disconnect(this._superVChanged);
         delete Main.panel.toggleCalendar;
 
-        this._syncColor('theme');
+        // No colour of Isle's: the theme's again.
+        this._syncColor(null);
         Main.panel.remove_style_class_name(COMPACT_BAR_CLASS);
         Main.panel.remove_style_class_name(NOTCH_BAR_CLASS);
         Main.panel.remove_style_class_name(GLASS_BAR_CLASS);

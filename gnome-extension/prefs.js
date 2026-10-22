@@ -226,7 +226,6 @@ export default class IslePreferences extends ExtensionPreferences {
         look.add(choiceRow(settings, 'top-bar-style', 'Top bar', 'Glass shows the island as a notch, like on a Mac', [
             ['glass', 'Glass'],
             ['black', 'Black'],
-            ['theme', 'Theme'],
         ]));
         look.add(switchRow(settings, 'compact-top-bar', 'Compact top bar', 'A slimmer top bar that frames the island like a bezel'));
         look.add(switchRow(settings, 'island-in-top-bar', 'Island inside the top bar',
