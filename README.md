@@ -53,9 +53,9 @@ appear in the same place instead of in the middle of the screen.
 | <img src="docs/images/calendar.png" alt="Calendar" width="420"> | **Calendar.** The month beside the chosen day's events, like macOS's Calendar widget. Shows your desktop calendars (Google and others through Online Accounts) and events you add in a line: "Dinner 8:00 pm". |
 | <img src="docs/images/notifications.png" alt="The notifications page" width="420"> | **Notifications.** GNOME's notifications collect here, grouped by app, with their buttons ("Reply", "Mark as read") and Do Not Disturb a click away. |
 | <img src="docs/images/voice.png" alt="The voice assistant working through a request in steps: finding Spotify, opening it, playing jazz, setting the volume" width="420"> | **Voice assistant.** Press Super+I and ask, in English or Indonesian: play a song, find a file, put windows side by side, add a reminder, explain why the laptop is slow. It works as an agent: a request with several steps is done one after another, each step checked, with the AI you already use (Claude Code, Codex or Antigravity). |
-| <img src="docs/images/voice-modes.png" alt="The assistant listening, a request being typed, and its answer" width="420"> | **Speak or type.** It listens as soon as it opens; start typing (or click the keyboard) to type instead. Its face follows what you do, light rises from the panel's edge with your voice, and the answer stays to read. Close the island and it carries on in the background. |
+| <img src="docs/images/voice-modes.png" alt="The assistant listening, a request being typed, and its answer" width="420"> | **Speak or type.** It listens as soon as it opens; start typing (or click the keyboard) to type instead. Its face turns to the pointer and changes expression as it listens, thinks and answers, light rises from the panel's edge with your voice, and the answer stays to read. Close the island and it carries on in the background. |
 | <img src="docs/images/usage.png" alt="Claude plan usage: a bar for the 5-hour limit and one for the week" width="420"> | **AI usage.** How much of your Claude and ChatGPT plans' limits is used: one plan at a time with its logo, a bar per limit it has (5 hours, the week) and when each resets; scroll up or down, or click the dots, to switch. A warning comes as one nears its end. Only the ones you are signed in to show. |
-| <img src="docs/images/alerts.png" alt="The closed island, then alerts for charging, a notification with a Reply button, an AI plan limit and a reminder" width="420"> | **Alerts** for volume, brightness, Caps Lock, charging, low battery, Bluetooth devices with their battery, going offline, reminders, AI plan limits and GNOME notifications with their buttons, in the same place instead of the middle of the screen. |
+| <img src="docs/images/alerts.png" alt="The closed island, then alerts for charging, a notification with a Reply button, an AI plan limit and a reminder" width="420"> | **Alerts** for volume, brightness, Caps Lock, charging, low battery, Bluetooth devices with their battery, going offline, reminders, AI plan limits and GNOME notifications with their buttons, in the same place instead of the middle of the screen. Icons drawn in SF Symbols' manner move once as they appear: the bolt pulses, the bell sways, rings sweep and count up. |
 
 Also: privacy dots while the camera, microphone or screen sharing is in use,
 a recording timer with a stop button, and a slim glass top bar that leaves
@@ -432,7 +432,10 @@ The bundled [Inter](https://rsms.me/inter/) typeface (`data/fonts`) is under
 the [SIL Open Font License 1.1](data/fonts/Inter-LICENSE.txt). Lyrics come
 from [LRCLIB](https://lrclib.net). The Claude and OpenAI logos on the AI usage page
 come from [Simple Icons](https://simpleicons.org) (CC0); they are trademarks of
-Anthropic and OpenAI, shown only to name their plans. Isle is inspired by the iPhone's Dynamic
+Anthropic and OpenAI, shown only to name their plans. The assistant's face
+takes its expressions from [bloub](https://github.com/jeremy-prt/bloub) by
+Jérémy Perret, under the MIT License
+([notice](gnome-extension/NOTICE-bloub.txt)). Isle is inspired by the iPhone's Dynamic
 Island and by [NotchNook](https://lo.cafe/notchnook) and
 [Boring Notch](https://github.com/TheBoredTeam/boring.notch) on the Mac.
 

@@ -6,6 +6,58 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-23
+
+### Added
+
+- Isle draws the island's icons itself, in SF Symbols' manner (volume,
+  brightness, keyboard light, touchpad, airplane mode, camera, Bluetooth,
+  Wi-Fi, display, warning, update, recording), with Apple's system colours;
+  a battery on its side replaces GNOME's upright one.
+- Each alert's icon moves once as it appears: charging pulses the bolt, a
+  reminder sways the bell, Caps Lock lifts its arrow, a stopped service
+  shakes, and new notifications, versions and answers bounce. None with
+  animations turned off.
+- A ring alert (charging, battery, Bluetooth, AI limits) sweeps from empty
+  as its badge pops in and its percentage counts up; a volume or brightness
+  bar grows from empty; the speaker's waves come and go one by one with the
+  volume, and muting fades to the slashed speaker.
+- The assistant's face has expressions that morph into one another, after
+  [bloub](https://github.com/jeremy-prt/bloub)'s: attentive, surprised at
+  the first word, curious while it thinks, happy with an answer, confused
+  when it heard nothing, sad on an error, sleepy when left alone. Its eyes
+  sit on a ball that turns to the pointer.
+- An assistant answer may take two lines in its alert.
+
+### Changed
+
+- Reminders' header and rows are 24 px, so five fit beside the timer.
+- A running timer says when it ends ("Ends at 23:56").
+- A notification's icon sits beside its text when it has buttons.
+- Brightness and the keyboard light say where they apply.
+- The assistant's messages and Isle's alerts use the typographic
+  apostrophe ("Didn’t catch that").
+
+### Fixed
+
+- A reminder's row kept growing while it was renamed; its selection took
+  the theme's orange.
+- Long words (an e-mail address, a link) broke with a hyphen added.
+- A queued alert is checked again when its turn comes: none for one read
+  or withdrawn meanwhile, and only who it is from if the screen is now
+  shared. A critical notification interrupted by another alert comes back.
+- "N new notifications" counts each notification once, and plays one sound
+  when it shows.
+- Off states (Bluetooth off, no Wi-Fi, the camera switched off) no longer
+  show the "on" icon.
+- An alert that follows one of its kind (a second "Charging") animates in
+  again, and an update to a ring alert mid-sweep no longer restarts it.
+- Opening the island cancels a close still pending; "Isle restarted" no
+  longer shows the first time isled starts; Reset all settings keeps focus
+  mode's Do Not Disturb.
+- The first alert after login is laid out ahead, so it doesn't drop a
+  frame; the face draws each frame without leaving garbage to collect.
+
 ## [0.7.3] - 2026-10-22
 
 ### Changed
@@ -522,7 +574,11 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/zickrian/isle/compare/v0.7.3...v0.8.0
+[0.7.3]: https://github.com/zickrian/isle/compare/v0.7.2...v0.7.3
+[0.7.2]: https://github.com/zickrian/isle/compare/v0.7.1...v0.7.2
+[0.7.1]: https://github.com/zickrian/isle/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/zickrian/isle/compare/v0.5.0...v0.7.0
 [0.5.0]: https://github.com/zickrian/isle/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/zickrian/isle/compare/v0.4.0...v0.4.1
