@@ -7,6 +7,8 @@ pub mod calendar;
 pub mod clipboard;
 pub mod lrc;
 pub mod pomodoro;
+pub mod reminders;
 pub mod shelf;
 pub mod todo;
 pub mod track;
+pub mod voice;

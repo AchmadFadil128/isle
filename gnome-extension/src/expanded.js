@@ -29,6 +29,7 @@ const TABS = {
     focus: {icon: 'isle-timer', label: 'Focus'},
     shelf: {icon: 'isle-shelf', label: 'Shelf'},
     calendar: {icon: 'isle-calendar', label: 'Calendar'},
+    usage: {icon: 'isle-gauge', label: 'Usage'},
 };
 /** How bright a tab's icon is: open, under the pointer, otherwise. */
 const TAB_OPACITY = {open: 255, hover: 230, idle: 140};
@@ -55,6 +56,8 @@ export const ExpandedView = GObject.registerClass({
         'width-changed': {},
         // The current page's tint colour changed; see `tint`.
         'tint-changed': {},
+        // The mic button: open the voice assistant.
+        'voice-requested': {},
         // The gear by the clock: Isle's settings.
         'settings-requested': {},
     },
@@ -140,6 +143,9 @@ export const ExpandedView = GObject.registerClass({
         status.add_child(this._recordingButton);
         status.add_child(this._privacyDots);
         status.add_child(this._headerBars);
+        this._micButton = iconButton('isle-mic', 'isle-button-flat isle-header-mic',
+            () => this.emit('voice-requested'), {size: 15, accessibleName: 'Voice assistant'});
+        status.add_child(this._micButton);
 
         const clock = new St.BoxLayout({y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-header-clock'});
         this._headerRing = new Ring({size: 15, lineWidth: 2.5});
@@ -153,6 +159,11 @@ export const ExpandedView = GObject.registerClass({
             () => this.emit('settings-requested'), {size: 14, accessibleName: 'Settings'}));
         header.add_child(status);
         return header;
+    }
+
+    /** Whether the voice assistant is on, to show its mic button. */
+    set voiceEnabled(enabled) {
+        this._micButton.visible = enabled;
     }
 
     /** A tab per page; the open one is lit and says its name. */

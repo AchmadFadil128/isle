@@ -31,6 +31,10 @@ impl TodoService {
         }
     }
 
+    pub fn list(&self) -> &TodoList {
+        &self.list
+    }
+
     async fn changed(&self, emitter: &SignalEmitter<'_>) -> zbus::Result<()> {
         self.store.save(&self.list);
         self.wake.notify_one();

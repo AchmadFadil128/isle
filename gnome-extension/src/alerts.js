@@ -2,6 +2,8 @@
 
 // Turns events into alerts for the peek view (see peek.js for the format).
 
+import GLib from 'gi://GLib';
+
 import * as Format from './format.js';
 import * as Playback from './playback.js';
 import {notificationIcon, plainBody} from './notifications.js';
@@ -227,6 +229,47 @@ export function notification(item, urgent) {
             if (!withdrawn.has(item))
                 item.activate();
         },
+    };
+}
+
+/** "5 hours" → "5-hour limit", "Week · Opus" → "weekly Opus limit". */
+function limitName(window) {
+    if (window === '5 hours')
+        return '5-hour limit';
+    const [span, model] = window.split(' · ');
+    const kind = span === 'Week' ? 'Weekly' : span;
+    return model ? `${kind} ${model} limit` : `${kind} limit`;
+}
+
+/** An AI plan limit nears its end: the provider's logo in a ring of the share, "86%" beside it. */
+export function usage(provider, window, percent, resetsAt, critical) {
+    const at = GLib.DateTime.new_from_unix_local(Math.floor(resetsAt / 1000));
+    // Within the next 20 hours (later today or tomorrow morning), the time alone; later, with the day.
+    const when = at.format(resetsAt - Date.now() < 20 * 3600e3 ? '%H:%M' : '%a %H:%M');
+    const name = provider.toLowerCase();
+    return {
+        key: `usage:${provider}:${window}`,
+        icon: name.includes('claude') ? 'isle-claude' : name.includes('gpt') || name.includes('codex') ? 'isle-openai' : 'isle-gauge',
+        ring: Math.min(1, percent / 100),
+        title: provider,
+        subtitle: resetsAt > 0 ? `${limitName(window)} · resets ${when}` : limitName(window),
+        value: percentText(percent),
+        tone: percent >= critical ? 'bad' : 'warn',
+        duration: REMINDER_DURATION,
+        page: 'usage',
+    };
+}
+
+/** A reminder the voice assistant set ("remind me in ten minutes to..."). */
+export function reminder({id, text}) {
+    return {
+        // Its own key, so reminders due together queue instead of replacing each other.
+        key: `reminder:${id}`,
+        icon: 'isle-bell',
+        title: text,
+        subtitle: 'Reminder',
+        tone: 'warn',
+        duration: REMINDER_DURATION,
     };
 }
 

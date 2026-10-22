@@ -64,6 +64,11 @@ if [ "$SHELF" = 1 ] || [ -x "$BINDIR/isle-shelf" ]; then
 fi
 install_service isled.service "$CONFIG/systemd/user"
 install -Dm644 README.md "$DATA/doc/isle/README.md"
+# The voice assistant: its speech helper, and `isle-setup-voice` to install speech recognition once.
+install -Dm755 data/isle-whisper.py "$DATA/isle/isle-whisper.py"
+install -Dm755 scripts/setup-voice.sh "$BINDIR/isle-setup-voice"
+# Sets a lasting battery charge limit; the assistant types it into a terminal when asked.
+install -Dm755 scripts/isle-charge-limit "$BINDIR/isle-charge-limit"
 
 step "Installing the Inter font"
 # The island is set in SF Pro where installed, else Inter, its open cousin.

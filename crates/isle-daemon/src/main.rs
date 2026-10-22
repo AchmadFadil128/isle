@@ -3,28 +3,34 @@
 //! `isled`: the Isle background service, on the session bus as `io.github.zickrian.isle.Daemon`.
 //! See `docs/dbus-api.md` for the interfaces.
 
+mod assistant;
 mod calendar;
 mod clipboard;
 mod clock;
 mod media;
 mod pomodoro;
+mod reminders;
 mod shelf;
 mod store;
 mod system;
 mod todo;
+mod usage;
 
 use anyhow::Context;
 use futures_util::StreamExt;
 use log::{info, warn};
 use zbus::connection;
 
+use crate::assistant::AssistantService;
 use crate::calendar::CalendarService;
 use crate::clipboard::ClipboardService;
 use crate::media::MediaService;
 use crate::pomodoro::PomodoroService;
+use crate::reminders::RemindersService;
 use crate::shelf::ShelfService;
 use crate::system::SystemService;
 use crate::todo::TodoService;
+use crate::usage::UsageService;
 
 const BUS_NAME: &str = "io.github.zickrian.isle.Daemon";
 const OBJECT_PATH: &str = "/io/github/zickrian/isle/Daemon";
@@ -49,6 +55,8 @@ async fn main() -> anyhow::Result<()> {
             store::prune_newest(&store::cache_dir().join(kind), CACHED_SONGS);
         }
     });
+    let (assistant, assistant_commands) = AssistantService::new();
+    let (usage, usage_refresh) = UsageService::new();
     let session = connection::Builder::session()?
         .serve_at(OBJECT_PATH, MediaService::default())?
         .serve_at(OBJECT_PATH, PomodoroService::load())?
@@ -56,7 +64,10 @@ async fn main() -> anyhow::Result<()> {
         .serve_at(OBJECT_PATH, ShelfService::load())?
         .serve_at(OBJECT_PATH, ClipboardService::load())?
         .serve_at(OBJECT_PATH, CalendarService::load())?
+        .serve_at(OBJECT_PATH, RemindersService::load())?
         .serve_at(OBJECT_PATH, SystemService::default())?
+        .serve_at(OBJECT_PATH, assistant)?
+        .serve_at(OBJECT_PATH, usage)?
         .build()
         .await
         .context("could not connect to the session bus")?;
@@ -66,6 +77,14 @@ async fn main() -> anyhow::Result<()> {
     let pomodoro = server.interface::<_, PomodoroService>(OBJECT_PATH).await?;
     let todo = server.interface::<_, TodoService>(OBJECT_PATH).await?;
     let system = server.interface::<_, SystemService>(OBJECT_PATH).await?;
+    let assistant = server.interface::<_, AssistantService>(OBJECT_PATH).await?;
+    let usage = server.interface::<_, UsageService>(OBJECT_PATH).await?;
+    tokio::spawn(usage::run(usage, usage_refresh));
+    let own_data = assistant::Sources {
+        todo: todo.clone(),
+        calendar: server.interface::<_, CalendarService>(OBJECT_PATH).await?,
+        reminders: server.interface::<_, RemindersService>(OBJECT_PATH).await?,
+    };
 
     let session_for_media = session.clone();
     tokio::spawn(async move {
@@ -74,6 +93,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
     tokio::spawn(todo::run(todo));
+    tokio::spawn(assistant::run(assistant, own_data, assistant_commands));
 
     match zbus::Connection::system().await {
         Ok(bus) => system::spawn_watchers(bus, system),

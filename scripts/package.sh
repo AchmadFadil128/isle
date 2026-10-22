@@ -17,6 +17,9 @@ mkdir -p "$OUT/bin"
 install -m755 target/release/isled target/release/isle-shelf "$OUT/bin/"
 strip "$OUT/bin/isled" "$OUT/bin/isle-shelf"
 cp -r gnome-extension data install.sh uninstall.sh README.md LICENSE CHANGELOG.md "$OUT/"
+# What install.sh installs as commands: the voice set-up and the battery charge limit.
+mkdir -p "$OUT/scripts"
+install -m755 scripts/setup-voice.sh scripts/isle-charge-limit "$OUT/scripts/"
 # Compiled on install, for the GLib there.
 rm -f "$OUT/gnome-extension/schemas/gschemas.compiled"
 

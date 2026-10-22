@@ -228,6 +228,18 @@
 .isle-peek-level-box { spacing: 8px; }
 .isle-peek-level-text { font-size: 12px; font-weight: 600; min-width: 30px; text-align: right; }
 
+/* ── Voice assistant ──────────────────────────────────── */
+
+/* The orb on the left, then what was heard above the answer (voice.js sizes them to match). */
+.isle-voice-row { padding: 14px 22px 22px 16px; spacing: 14px; }
+.isle-voice-orb { border-radius: 999px; }
+.isle-voice-heard { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-bottom: 3px; }
+.isle-voice-text { font-size: 15px; font-weight: 500; }
+.isle-voice-text-dim { color: rgba(255, 255, 255, 0.6); font-weight: 600; }
+.isle-voice-hint { font-size: 12px; color: rgba(255, 255, 255, 0.55); padding-top: 3px; }
+.isle-voice-sign-in { margin-top: 8px; }
+.isle-header-mic { padding: 4px; color: rgba(255, 255, 255, 0.75); }
+
 /* ── Expanded: frame ──────────────────────────────────── */
 
 .isle-header { padding: 0 20px; }
@@ -801,3 +813,40 @@
 }
 
 .isle-shelf-remove:hover { background-color: #5a5a5e; }
+
+/* ── Usage ────────────────────────────────────────────── */
+
+/* One provider at a time (usage.js): its mark, name and plan, then a line and a bar per limit;
+ * dots on the right move between providers, as in a widget stack. */
+.isle-usage-content { spacing: 14px; padding: 0 2px 4px 2px; }
+.isle-usage-head { spacing: 8px; }
+.isle-usage-mark { width: 10px; height: 10px; border-radius: 5px; }
+.isle-usage-name { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
+.isle-usage-plan {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 99px;
+  color: rgba(255, 255, 255, 0.7);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+.isle-usage-stamp { font-size: 11px; color: rgba(255, 255, 255, 0.42); }
+.isle-usage-stamp.warning { color: #ff9f0a; }
+.isle-usage-limits { spacing: 11px; }
+.isle-usage-limit { spacing: 5px; }
+.isle-usage-line { spacing: 10px; }
+.isle-usage-window { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.9); }
+.isle-usage-reset { font-size: 11px; color: rgba(255, 255, 255, 0.45); }
+.isle-usage-percent { font-size: 13px; font-weight: 700; min-width: 34px; text-align: right; }
+.isle-usage-percent.warn { color: #ff9f0a; }
+.isle-usage-percent.critical { color: #ff453a; }
+.isle-usage-track { height: 5px; border-radius: 3px; background-color: rgba(255, 255, 255, 0.1); }
+.isle-usage-fill { height: 5px; border-radius: 3px; }
+.isle-usage-fill.warn { background-color: #ff9f0a; }
+.isle-usage-fill.critical { background-color: #ff453a; }
+.isle-usage-empty { font-size: 12px; color: rgba(255, 255, 255, 0.45); }
+
+.isle-usage-dots { spacing: 6px; padding-left: 14px; }
+.isle-usage-dot { width: 6px; height: 6px; border-radius: 3px; background-color: rgba(255, 255, 255, 0.22); transition-duration: 200ms; }
+.isle-usage-dot:hover { background-color: rgba(255, 255, 255, 0.45); }
+.isle-usage-dot.shown { height: 16px; background-color: #ffffff; }

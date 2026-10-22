@@ -19,7 +19,14 @@ const GLIDE_MS = 360;
 const SHAPE_PAD = 1;
 
 /** How long a tint takes to come and go: a wash, and a glow (which lingers out). */
-const TINT_FADE = {wash: [450, 450], glow: [380, 1100]};
+const TINT_FADE = {wash: [450, 450], glow: [380, 1100], siri: [300, 500]};
+
+/** The 'siri' tint's blobs of light: how fast each drifts, where it starts, and its width (of the island's). */
+const BLOBS = [[0.55, 0, 0.32], [0.8, 2.1, 0.26], [0.42, 4.2, 0.3], [0.95, 1.1, 0.22], [0.67, 3.3, 0.28]];
+
+/** The 'siri' glow is drawn at 1/this of the size and scaled up: it is soft, so it looks the same
+ * with a quarter of the pixels to paint each frame. */
+const GLOW_SCALE = 2;
 
 /** Cross-fade timings in milliseconds. */
 const FADE_OUT = 160;
@@ -52,6 +59,7 @@ export const Island = GObject.registerClass({
         this._tint = null;
         this._tintStyle = 'wash';
         this._tintStrength = 0;
+        this._motion = {time: 0, level: 0};
 
         /** Where the island and its views' frame were last put, in whole pixels (see `_sync`). */
         this._islandX = 0;
@@ -67,6 +75,12 @@ export const Island = GObject.registerClass({
         this._shape = new St.DrawingArea();
         this._shape.connect('repaint', area => this._repaint(area));
         this.add_child(this._shape);
+        // The moving 'siri' light, on a layer of its own: the shape below is only drawn when it changes.
+        this._glow = new St.DrawingArea({visible: false});
+        this._glow.set_pivot_point(0, 0);
+        this._glow.set_scale(GLOW_SCALE, GLOW_SCALE);
+        this._glow.connect('repaint', area => this._repaintGlow(area));
+        this.add_child(this._glow);
 
         // Clips the views while the island grows; a fixed layout keeps them at
         // full size (a bin would squeeze them), so nothing reflows.
@@ -101,13 +115,21 @@ export const Island = GObject.registerClass({
     set tint_strength(value) {
         this._tintStrength = value;
         this.notify('tint-strength');
-        this._shape.queue_repaint();
+        const siri = this._tintStyle === 'siri';
+        this._glow.visible = siri && Boolean(this._tint) && value > 0;
+        if (this._glow.visible)
+            this._glow.queue_repaint();
+        if (!siri)
+            this._shape.queue_repaint();
     }
 
-    // Colours the island with `rgb` (0..1; null fades it): 'wash' rises to the bottom,
-    // 'glow' spills up from the two bottom corners.
+    // Colours the island with `rgb` (0..1; null fades it): 'wash' rises to the bottom, 'glow' spills
+    // up from the two bottom corners, 'siri' (a list of colours) flows around the edge.
     setTint(rgb, style = 'wash') {
         if (rgb) {
+            // The shape draws every style but the glow, so it changes when the style does.
+            if (style !== this._tintStyle)
+                this._shape.queue_repaint();
             this._tint = rgb;
             this._tintStyle = style;
         }
@@ -117,6 +139,13 @@ export const Island = GObject.registerClass({
             duration: rgb ? fadeIn : fadeOut,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
+    }
+
+    /** Moves the 'siri' tint: `time` in seconds, `level` (0..1) swells it. */
+    setTintMotion(time, level) {
+        this._motion = {time, level};
+        if (this._glow.visible)
+            this._glow.queue_repaint();
     }
 
     /** Where `actor` in the shown view will be once the island settles: {x, y, width, height}. */
@@ -263,6 +292,7 @@ export const Island = GObject.registerClass({
         // A pixel wider on each side, for the fraction the island is drawn off its whole-pixel place.
         this._shape.set_position(-SHAPE_PAD, 0);
         this._shape.set_size(Math.ceil(outerWidth) + 2 * SHAPE_PAD, Math.ceil(height));
+        this._glow.set_size(Math.ceil(outerWidth / GLOW_SCALE), Math.ceil(height / GLOW_SCALE));
         // Whole pixels keep text sharp while the island resizes.
         this._stageX = Math.round(margin);
         this._stage.set_position(this._stageX, 0);
@@ -277,6 +307,8 @@ export const Island = GObject.registerClass({
         for (const view of this._stage.get_children())
             this._placeView(view);
         this._shape.queue_repaint();
+        if (this._glow.visible)
+            this._glow.queue_repaint();
         this.emit('geometry-changed');
     }
 
@@ -285,6 +317,35 @@ export const Island = GObject.registerClass({
         // At the island's exact place (its actor sits on a whole pixel), so its edges never step back.
         cr.translate(SHAPE_PAD + this._islandFraction, 0);
         const height = Math.max(0, this._height.value);
+        this._outline(cr, height);
+        cr.setSourceRGBA(0, 0, 0, 1);
+        cr.fillPreserve();
+        if (this._tint && this._tintStrength > 0 && this._tintStyle !== 'siri') {
+            const {left, right, top} = this._outlineBox;
+            for (const gradient of this._tintGradients(left, right, top, height)) {
+                cr.setSource(gradient);
+                cr.fillPreserve();
+            }
+        }
+        cr.newPath();
+        cr.$dispose();
+    }
+
+    // The 'siri' light, inside the shape, on the scaled-down glow layer.
+    _repaintGlow(area) {
+        const cr = area.get_context();
+        const height = Math.max(0, this._height.value);
+        cr.scale(1 / GLOW_SCALE, 1 / GLOW_SCALE);
+        cr.translate(this._islandFraction, 0);
+        this._outline(cr, height);
+        cr.clip();
+        const {left, right, top, radius} = this._outlineBox;
+        this._paintRim(cr, left, right, top, height, radius);
+        cr.$dispose();
+    }
+
+    /** Traces the island's shape `height` tall into `cr`, and keeps its box in `_outlineBox`. */
+    _outline(cr, height) {
         const top = Math.min(this._topInset, height);
         // Shoulders and corners must share the part below the top bar; an
         // island without shoulders may round its corners inside the bar.
@@ -305,23 +366,87 @@ export const Island = GObject.registerClass({
         cr.lineTo(left, top + shoulder);
         cr.arcNegative(left - shoulder, top + shoulder, shoulder, 0, -Math.PI / 2);
         cr.closePath();
+        this._outlineBox = {left, right, top, radius};
+    }
 
-        cr.setSourceRGBA(0, 0, 0, 1);
-        cr.fillPreserve();
-        if (this._tint && this._tintStrength > 0) {
-            for (const gradient of this._tintGradients(left, right, top, height)) {
-                cr.setSource(gradient);
-                cr.fillPreserve();
-            }
+    // Light inside the shape, as Siri's: a rim along the edges and soft blobs of colour drifting along
+    // the bottom, added up like light; they swell and brighten with `level` (the voice).
+    _paintRim(cr, left, right, top, height, radius) {
+        const {time, level} = this._motion;
+        const strength = this._tintStrength;
+        const width = right - left;
+        const r = Math.max(0, radius);
+        const sides = () => {
+            cr.moveTo(left, top);
+            cr.lineTo(left, height - r);
+            cr.arcNegative(left + r, height - r, r, Math.PI, Math.PI / 2);
+            cr.lineTo(right - r, height);
+            cr.arcNegative(right - r, height - r, r, Math.PI / 2, 0);
+            cr.lineTo(right, top);
+        };
+        cr.setOperator(Cairo.Operator.ADD);
+        // Faint strokes, each narrower, so the edges glow softly; a crisp line of light at the very edge.
+        // Three, each twice as bright as six were: the same soft edge for half the work.
+        const STEPS = 3;
+        cr.setSource(this._flow(left, right, time, (0.07 + 0.06 * level) * strength));
+        for (let i = 0; i < STEPS; i++) {
+            cr.setLineWidth((30 + 18 * level) * (1 - i / STEPS));
+            sides();
+            cr.stroke();
         }
-        cr.newPath();
-        cr.$dispose();
+        cr.setSource(this._flow(left, right, time * 1.4, (0.4 + 0.25 * level) * strength));
+        cr.setLineWidth(3);
+        sides();
+        cr.stroke();
+
+        // Kept low, so text above stays easy to read.
+        const rise = Math.min(64, Math.max(0, height - top) * 0.5);
+        const colors = this._tint;
+        BLOBS.forEach(([speed, offset, size], i) => {
+            const [red, green, blue] = colors[i % colors.length];
+            // Each drifts to and fro at its own pace, and breathes.
+            const x = left + width * (0.5 + 0.42 * Math.sin(time * speed + offset));
+            const breath = 0.8 + 0.2 * Math.sin(time * speed * 1.1 + offset * 3);
+            const rx = width * size * (0.85 + 0.35 * level);
+            const ry = rise * breath * (0.7 + 0.6 * level);
+            const glow = new Cairo.RadialGradient(0, 0, 0, 0, 0, 1);
+            // Brightness changes little: the voice shows as size, which the eye reads as motion.
+            const alpha = (0.34 + 0.2 * level) * strength;
+            glow.addColorStopRGBA(0, red, green, blue, alpha);
+            glow.addColorStopRGBA(0.45, red, green, blue, alpha * 0.45);
+            glow.addColorStopRGBA(1, red, green, blue, 0);
+            cr.save();
+            cr.translate(x, height);
+            cr.scale(Math.max(1, rx), Math.max(1, ry));
+            cr.arc(0, 0, 1, 0, 2 * Math.PI);
+            cr.setSource(glow);
+            cr.fill();
+            cr.restore();
+        });
+        cr.setOperator(Cairo.Operator.OVER);
+    }
+
+    /** A left-to-right gradient of the tint's colours, shifted by `time` so they flow. */
+    _flow(left, right, time, alpha) {
+        const colors = this._tint;
+        const gradient = new Cairo.LinearGradient(left, 0, right, 0);
+        const STOPS = 24;
+        for (let i = 0; i <= STOPS; i++) {
+            const at = (i / STOPS + time * 0.12) * colors.length;
+            const index = Math.floor(at);
+            const mix = at - index;
+            const [r1, g1, b1] = colors[index % colors.length];
+            const [r2, g2, b2] = colors[(index + 1) % colors.length];
+            gradient.addColorStopRGBA(i / STOPS, r1 + (r2 - r1) * mix, g1 + (g2 - g1) * mix,
+                b1 + (b2 - b1) * mix, alpha);
+        }
+        return gradient;
     }
 
     /** The gradients that paint the tint over the black shape, in order. */
     _tintGradients(left, right, top, height) {
-        const [r, g, b] = this._tint;
         const strength = this._tintStrength;
+        const [r, g, b] = this._tint;
         if (this._tintStyle === 'glow') {
             // A pool of light at each bottom corner, joined by a faint band
             // along the bottom edge.

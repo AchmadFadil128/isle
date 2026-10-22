@@ -1,0 +1,701 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! AI plan usage for the island: Claude's limits, from the endpoint Claude Code's /usage reads (with its
+//! sign-in), and ChatGPT's, from what Codex writes in its session logs. Warns once as a limit nears.
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use log::warn;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use tokio::sync::Notify;
+use zbus::object_server::{InterfaceRef, SignalEmitter};
+use zbus::{fdo, interface};
+
+use crate::clock::now_ms;
+use crate::store::Store;
+
+/// Codex's logs are looked at this often (cheap, local); Claude is asked this often (one request),
+/// and after a failure ever less often, up to `CLAUDE_BACKOFF`, so its server is never pressed.
+const LOCAL_EVERY: Duration = Duration::from_secs(60);
+const CLAUDE_EVERY: Duration = Duration::from_secs(10 * 60);
+const CLAUDE_BACKOFF: Duration = Duration::from_secs(60 * 60);
+/// Only the end of a Codex log is read: its newest limits are written last.
+const CODEX_TAIL: u64 = 256 * 1024;
+/// Asked to refresh (the page opened), Claude is asked again only after this long.
+const CLAUDE_AT_MOST: Duration = Duration::from_secs(2 * 60);
+const CLAUDE_TIMEOUT: Duration = Duration::from_secs(10);
+/// Only Codex's newest session logs are looked at.
+const CODEX_FILES: usize = 8;
+
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+pub struct Usage {
+    pub providers: Vec<Provider>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+pub struct Provider {
+    pub id: String,
+    pub name: String,
+    pub plan: String,
+    /// Each limit the plan has, as it reports them: a 5-hour session, a week, a model's week…
+    pub windows: Vec<Window>,
+    /// When the numbers were read; 0 when never.
+    pub updated_ms: i64,
+    /// Why the numbers may be old ("Open Claude Code to refresh its sign-in"); empty when fresh.
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+pub struct Window {
+    pub label: String,
+    pub percent: f64,
+    /// 0 when unknown.
+    pub resets_at_ms: i64,
+}
+
+/// What the extension sends from Settings.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+struct Config {
+    enabled: bool,
+    claude: bool,
+    codex: bool,
+    warn: f64,
+    critical: f64,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        // Off until the extension says otherwise, so nothing is asked of Claude unbidden.
+        Self {
+            enabled: false,
+            claude: true,
+            codex: true,
+            warn: 80.0,
+            critical: 95.0,
+        }
+    }
+}
+
+pub struct UsageService {
+    usage: Usage,
+    config: Config,
+    refresh: Arc<Notify>,
+}
+
+impl UsageService {
+    pub fn new() -> (Self, Arc<Notify>) {
+        let refresh = Arc::new(Notify::new());
+        (
+            Self {
+                usage: Usage::default(),
+                config: Config::default(),
+                refresh: refresh.clone(),
+            },
+            refresh,
+        )
+    }
+}
+
+#[interface(name = "io.github.zickrian.isle.Usage1")]
+impl UsageService {
+    /// JSON `{enabled, claude, codex, warn, critical}`, from Settings.
+    fn set_config(&mut self, config: &str) -> fdo::Result<()> {
+        self.config =
+            serde_json::from_str(config).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
+        self.refresh.notify_one();
+        Ok(())
+    }
+
+    /// Reads the usage again now, Claude's too.
+    fn refresh(&self) {
+        self.refresh.notify_one();
+    }
+
+    /// JSON `{providers: [{id, name, plan, windows: [{label, percent, resets_at_ms}], updated_ms, note}]}`.
+    #[zbus(property)]
+    fn usage(&self) -> String {
+        serde_json::to_string(&self.usage).unwrap_or_default()
+    }
+
+    /// A limit passed `percent` (the warning or the critical mark) of its window.
+    #[zbus(signal)]
+    async fn alert(
+        emitter: &SignalEmitter<'_>,
+        provider: &str,
+        window: &str,
+        percent: f64,
+        resets_at_ms: i64,
+    ) -> zbus::Result<()>;
+}
+
+/// The marks already warned about, by "provider/window/reset": 1 the warning, 2 the critical one.
+type Alerted = BTreeMap<String, u8>;
+
+/// Reads the usage now and then, publishes it, and warns as limits near.
+pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
+    let mut store: Store<Alerted> = Store::new("usage-alerts");
+    let mut alerted = store.load();
+    let mut claude: Option<Provider> = None;
+    let mut asked_claude: Option<Instant> = None;
+    let mut claude_wait = CLAUDE_EVERY;
+    let mut codex = CodexReader::default();
+    loop {
+        let forced = tokio::select! {
+            () = tokio::time::sleep(LOCAL_EVERY) => false,
+            () = refresh.notified() => true,
+        };
+        let config = iface.get().await.config.clone();
+        if !config.enabled {
+            publish(&iface, Usage::default()).await;
+            continue;
+        }
+        let home = dirs::home_dir().unwrap_or_default();
+        let mut providers = Vec::new();
+        if config.claude && home.join(CLAUDE_SIGN_IN).exists() {
+            let due = |every| asked_claude.is_none_or(|at: Instant| at.elapsed() >= every);
+            // Opening the page asks sooner, but never while Claude is being given time after a failure.
+            let failing = claude_wait > CLAUDE_EVERY;
+            if (forced && !failing && due(CLAUDE_AT_MOST)) || due(claude_wait) {
+                asked_claude = Some(Instant::now());
+                let at = home.clone();
+                let fresh = tokio::task::spawn_blocking(move || read_claude(&at))
+                    .await
+                    .ok();
+                claude_wait = match &fresh {
+                    Some(Ok(_)) => CLAUDE_EVERY,
+                    // Only the sign-in file was read: look again soon, for Claude Code renewing it.
+                    Some(Err(note)) if note == NEEDS_REFRESH => CLAUDE_AT_MOST,
+                    _ => (claude_wait * 2).min(CLAUDE_BACKOFF),
+                };
+                claude = match (fresh, claude.take()) {
+                    (Some(Ok(fresh)), _) => Some(fresh),
+                    // The last numbers stay, saying why they are old.
+                    (Some(Err(note)), Some(mut last)) => Some(Provider {
+                        note,
+                        ..std::mem::take(&mut last)
+                    }),
+                    (Some(Err(note)), None) => Some(Provider {
+                        note,
+                        ..claude_shell(&home)
+                    }),
+                    (None, last) => last,
+                };
+            }
+            providers.extend(claude.clone());
+        }
+        if config.codex {
+            // Reading logs is file work: done on a blocking thread, as Claude's request is.
+            let mut reader = std::mem::take(&mut codex);
+            let at = home.clone();
+            if let Ok((back, read)) = tokio::task::spawn_blocking(move || {
+                let read = reader.read(&at);
+                (reader, read)
+            })
+            .await
+            {
+                codex = back;
+                providers.extend(read);
+            }
+        }
+        for provider in &mut providers {
+            settle(provider, now_ms());
+        }
+        let warnings = marks_passed(&providers, &config, &mut alerted, now_ms());
+        if !warnings.is_empty() {
+            store.save(&alerted);
+        }
+        for (provider, window, percent, resets_at_ms) in warnings {
+            let emitter = iface.signal_emitter();
+            if let Err(err) =
+                UsageService::alert(emitter, &provider, &window, percent, resets_at_ms).await
+            {
+                warn!("could not send a usage alert: {err}");
+            }
+        }
+        publish(&iface, Usage { providers }).await;
+    }
+}
+
+async fn publish(iface: &InterfaceRef<UsageService>, usage: Usage) {
+    let mut service = iface.get_mut().await;
+    if service.usage == usage {
+        return;
+    }
+    service.usage = usage;
+    if let Err(err) = service.usage_changed(iface.signal_emitter()).await {
+        warn!("could not publish the AI usage: {err}");
+    }
+}
+
+/// A window whose reset has passed starts over at 0, until the numbers are read again.
+fn settle(provider: &mut Provider, now: i64) {
+    for window in &mut provider.windows {
+        if window.resets_at_ms > 0 && window.resets_at_ms <= now {
+            window.percent = 0.0;
+        }
+    }
+}
+
+/// The marks newly passed, as (provider, window, percent, reset); each is warned about once per window.
+fn marks_passed(
+    providers: &[Provider],
+    config: &Config,
+    alerted: &mut Alerted,
+    now: i64,
+) -> Vec<(String, String, f64, i64)> {
+    // Windows that have reset are forgotten; one with no known reset (0) only once it is low again.
+    alerted.retain(|key, _| {
+        key.rsplit('/')
+            .next()
+            .and_then(|r| r.parse::<i64>().ok())
+            .is_none_or(|r| r == 0 || r > now)
+    });
+    let mut passed = Vec::new();
+    for provider in providers {
+        for window in &provider.windows {
+            let level = if window.percent >= config.critical {
+                2
+            } else if window.percent >= config.warn {
+                1
+            } else {
+                0
+            };
+            let key = format!("{}/{}/{}", provider.id, window.label, window.resets_at_ms);
+            if level == 0 && window.resets_at_ms == 0 {
+                alerted.remove(&key);
+            }
+            if level > alerted.get(&key).copied().unwrap_or(0) {
+                alerted.insert(key, level);
+                passed.push((
+                    provider.name.clone(),
+                    window.label.clone(),
+                    window.percent,
+                    window.resets_at_ms,
+                ));
+            }
+        }
+    }
+    passed
+}
+
+/// Said when the sign-in has run out; Claude Code renews it once opened.
+const NEEDS_REFRESH: &str = "Open Claude Code to refresh its sign-in";
+
+/// Where Claude Code keeps its sign-in.
+const CLAUDE_SIGN_IN: &str = ".claude/.credentials.json";
+
+fn claude_shell(home: &Path) -> Provider {
+    let plan = std::fs::read_to_string(home.join(CLAUDE_SIGN_IN))
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .map(|sign_in| {
+            plan_name(
+                sign_in["claudeAiOauth"]["subscriptionType"]
+                    .as_str()
+                    .unwrap_or_default(),
+            )
+        })
+        .unwrap_or_default();
+    Provider {
+        id: "claude".into(),
+        name: "Claude".into(),
+        plan,
+        ..Provider::default()
+    }
+}
+
+/// Claude's limits now, with Claude Code's sign-in (read, never refreshed: that is Claude Code's to do).
+fn read_claude(home: &Path) -> Result<Provider, String> {
+    let text = std::fs::read_to_string(home.join(CLAUDE_SIGN_IN))
+        .map_err(|_| "Sign in with Claude Code".to_owned())?;
+    let sign_in: Value =
+        serde_json::from_str(&text).map_err(|_| "Sign in with Claude Code".to_owned())?;
+    let oauth = &sign_in["claudeAiOauth"];
+    let token = oauth["accessToken"]
+        .as_str()
+        .ok_or("Sign in with Claude Code")?;
+    if oauth["expiresAt"]
+        .as_i64()
+        .is_some_and(|expires| expires <= now_ms())
+    {
+        return Err(NEEDS_REFRESH.into());
+    }
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(CLAUDE_TIMEOUT))
+        .build()
+        .into();
+    let response: Value = agent
+        .get("https://api.anthropic.com/api/oauth/usage")
+        .header("Authorization", &format!("Bearer {token}"))
+        .header("anthropic-beta", "oauth-2025-04-20")
+        // Said plainly who asks, never another app.
+        .header("User-Agent", concat!("Isle/", env!("CARGO_PKG_VERSION")))
+        .call()
+        .and_then(|mut reply| reply.body_mut().read_json())
+        .map_err(|err| {
+            warn!("could not read Claude's usage: {err}");
+            "Could not reach Claude; showing the last numbers".to_owned()
+        })?;
+    Ok(Provider {
+        windows: claude_windows(&response),
+        updated_ms: now_ms(),
+        ..claude_shell(home)
+    })
+}
+
+/// The limits Claude reports for this plan, in its order: "5 hours", "Week", "Week · Opus"…
+fn claude_windows(response: &Value) -> Vec<Window> {
+    if let Some(limits) = response["limits"].as_array() {
+        return limits
+            .iter()
+            .filter_map(|limit| {
+                let label = match limit["group"].as_str().or(limit["kind"].as_str())? {
+                    "session" => "5 hours".to_owned(),
+                    "weekly" | "weekly_all" | "weekly_scoped" => "Week".to_owned(),
+                    other => title_case(other),
+                };
+                let model = limit["scope"]["model"]["display_name"]
+                    .as_str()
+                    .filter(|m| !m.is_empty());
+                Some(Window {
+                    label: model.map_or(label.clone(), |model| format!("{label} · {model}")),
+                    percent: limit["percent"].as_f64()?,
+                    resets_at_ms: limit["resets_at"].as_str().map_or(0, rfc3339_ms),
+                })
+            })
+            .collect();
+    }
+    // The older shape: one object per window.
+    [
+        ("five_hour", "5 hours"),
+        ("seven_day", "Week"),
+        ("seven_day_opus", "Week · Opus"),
+    ]
+    .iter()
+    .filter_map(|(key, label)| {
+        let window = response.get(*key).filter(|w| !w.is_null())?;
+        Some(Window {
+            label: (*label).into(),
+            percent: window["utilization"].as_f64()?,
+            resets_at_ms: window["resets_at"].as_str().map_or(0, rfc3339_ms),
+        })
+    })
+    .collect()
+}
+
+/// ChatGPT's limits as Codex last saw them, read again only when its newest log changed.
+#[derive(Default)]
+struct CodexReader {
+    seen: Option<(PathBuf, std::time::SystemTime)>,
+    last: Option<Provider>,
+}
+
+impl CodexReader {
+    /// `None` without Codex, or before it saw any limits. Both the user's Codex and Isle's are looked at.
+    fn read(&mut self, home: &Path) -> Option<Provider> {
+        // Each folder's newest, so a long history of the user's own never hides Isle's fresh ones.
+        let mut files = Vec::new();
+        for sessions in [
+            home.join(".codex/sessions"),
+            crate::store::data_dir().join("codex/sessions"),
+        ] {
+            let mut newest = Vec::new();
+            newest_logs(&sessions, &mut newest);
+            files.extend(newest);
+        }
+        let modified = |file: &PathBuf| std::fs::metadata(file).and_then(|m| m.modified()).ok();
+        files.sort_by_key(|file| std::cmp::Reverse(modified(file)));
+        let newest = files
+            .first()
+            .and_then(|file| Some((file.clone(), modified(file)?)));
+        if newest.is_some() && newest == self.seen {
+            return self.last.clone();
+        }
+        self.seen = newest;
+        self.last = files
+            .iter()
+            .take(CODEX_FILES)
+            .find_map(|file| codex_limits(file));
+        self.last.clone()
+    }
+}
+
+/// The newest limits in one Codex log, from its last part.
+fn codex_limits(file: &Path) -> Option<Provider> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut log = std::fs::File::open(file).ok()?;
+    let length = log.metadata().ok()?.len();
+    log.seek(SeekFrom::Start(length.saturating_sub(CODEX_TAIL)))
+        .ok()?;
+    let mut tail = Vec::new();
+    log.read_to_end(&mut tail).ok()?;
+    let text = String::from_utf8_lossy(&tail);
+    let (limits, at) = text.lines().rev().find_map(|line| {
+        // Most lines are messages; only parse the ones that can hold limits.
+        if !line.contains("rate_limits") {
+            return None;
+        }
+        let event: Value = serde_json::from_str(line).ok()?;
+        let limits = find_key(&event, "rate_limits")?.clone();
+        Some((limits, event["timestamp"].as_str().map_or(0, rfc3339_ms)))
+    })?;
+    let modified = std::fs::metadata(file)
+        .and_then(|m| m.modified())
+        .map(|t| chrono::DateTime::<chrono::Local>::from(t).timestamp_millis())
+        .unwrap_or(0);
+    Some(Provider {
+        id: "codex".into(),
+        name: "ChatGPT".into(),
+        plan: plan_name(limits["plan_type"].as_str().unwrap_or_default()),
+        windows: codex_windows(&limits),
+        updated_ms: if at > 0 { at } else { modified },
+        note: "As of Codex's last use".into(),
+    })
+}
+
+/// Codex's session logs, newest first: sessions/<year>/<month>/<day>/*.jsonl.
+fn newest_logs(dir: &Path, files: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
+    entries.sort_by(|a, b| b.cmp(a));
+    for path in entries {
+        if files.len() >= CODEX_FILES {
+            return;
+        }
+        if path.is_dir() {
+            newest_logs(&path, files);
+        } else if path.extension().is_some_and(|e| e == "jsonl") {
+            files.push(path);
+        }
+    }
+}
+
+fn codex_windows(limits: &Value) -> Vec<Window> {
+    ["primary", "secondary"]
+        .iter()
+        .filter_map(|key| {
+            let window = limits.get(*key).filter(|w| !w.is_null())?;
+            let minutes = window["window_minutes"].as_i64().unwrap_or(0);
+            let label = match minutes {
+                300 => "5 hours".to_owned(),
+                10080 => "Week".to_owned(),
+                m if m > 0 && m % 1440 == 0 => format!("{} days", m / 1440),
+                m if m > 0 => format!("{} hours", (m + 30) / 60),
+                _ => "Limit".to_owned(),
+            };
+            Some(Window {
+                label,
+                percent: window["used_percent"].as_f64()?,
+                resets_at_ms: window["resets_at"].as_i64().map_or(0, |s| s * 1000),
+            })
+        })
+        .collect()
+}
+
+/// The first value under `key`, at any depth.
+fn find_key<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
+    match value {
+        Value::Object(map) => map
+            .get(key)
+            .filter(|v| !v.is_null())
+            .or_else(|| map.values().find_map(|v| find_key(v, key))),
+        Value::Array(items) => items.iter().find_map(|v| find_key(v, key)),
+        _ => None,
+    }
+}
+
+fn rfc3339_ms(text: &str) -> i64 {
+    chrono::DateTime::parse_from_rfc3339(text).map_or(0, |t| t.timestamp_millis())
+}
+
+/// "prolite" → "Pro Lite", "team" → "Team".
+fn plan_name(plan: &str) -> String {
+    match plan.to_lowercase().as_str() {
+        "prolite" | "pro_lite" => "Pro Lite".into(),
+        other => title_case(other),
+    }
+}
+
+fn title_case(text: &str) -> String {
+    text.split(['_', ' '])
+        .filter(|word| !word.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            chars.next().map_or(String::new(), |first| {
+                first.to_uppercase().chain(chars).collect()
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn reads_claudes_limits_whatever_the_plan_has() {
+        let team = json!({"five_hour": {"utilization": 21.0}, "limits": [
+            {"kind": "session", "group": "session", "percent": 21, "resets_at": "2026-10-21T16:10:00+00:00"},
+            {"kind": "weekly_scoped", "group": "weekly", "percent": 0, "resets_at": "2026-10-24T21:00:00+00:00",
+             "scope": {"model": {"display_name": "Fable"}}}]});
+        let windows = claude_windows(&team);
+        assert_eq!(windows.len(), 2);
+        assert_eq!(
+            (windows[0].label.as_str(), windows[0].percent),
+            ("5 hours", 21.0)
+        );
+        assert_eq!(
+            windows[0].resets_at_ms,
+            rfc3339_ms("2026-10-21T16:10:00+00:00")
+        );
+        assert_eq!(windows[1].label, "Week · Fable");
+        let older = json!({"five_hour": {"utilization": 4.0, "resets_at": null}, "seven_day": {"utilization": 31.5},
+            "seven_day_opus": null});
+        let windows = claude_windows(&older);
+        assert_eq!(
+            windows.iter().map(|w| w.label.as_str()).collect::<Vec<_>>(),
+            ["5 hours", "Week"]
+        );
+    }
+
+    #[test]
+    fn reads_what_codex_saw() {
+        let pro = json!({"primary": {"used_percent": 9.0, "window_minutes": 10080, "resets_at": 1793084579},
+            "secondary": null, "plan_type": "prolite"});
+        let windows = codex_windows(&pro);
+        assert_eq!(windows.len(), 1);
+        assert_eq!(
+            (windows[0].label.as_str(), windows[0].percent),
+            ("Week", 9.0)
+        );
+        assert_eq!(windows[0].resets_at_ms, 1_793_084_579_000);
+        assert_eq!(plan_name("prolite"), "Pro Lite");
+        let plus = json!({"primary": {"used_percent": 50.0, "window_minutes": 300}, "secondary":
+            {"used_percent": 20.0, "window_minutes": 10080}});
+        let labels: Vec<_> = codex_windows(&plus).into_iter().map(|w| w.label).collect();
+        assert_eq!(labels, ["5 hours", "Week"]);
+        let line = json!({"timestamp": "2026-10-21T08:59:00Z", "payload": {"info": {}, "rate_limits": pro}});
+        assert_eq!(
+            find_key(&line, "rate_limits").unwrap()["plan_type"],
+            "prolite"
+        );
+    }
+
+    #[test]
+    fn warns_once_per_mark_and_window() {
+        let config = Config {
+            enabled: true,
+            ..Config::default()
+        };
+        let mut alerted = Alerted::new();
+        let at = |percent: f64| {
+            vec![Provider {
+                id: "claude".into(),
+                name: "Claude".into(),
+                windows: vec![Window {
+                    label: "5 hours".into(),
+                    percent,
+                    resets_at_ms: 2_000,
+                }],
+                ..Provider::default()
+            }]
+        };
+        assert!(marks_passed(&at(50.0), &config, &mut alerted, 1_000).is_empty());
+        assert_eq!(
+            marks_passed(&at(82.0), &config, &mut alerted, 1_000).len(),
+            1
+        );
+        assert!(marks_passed(&at(85.0), &config, &mut alerted, 1_000).is_empty());
+        assert_eq!(
+            marks_passed(&at(96.0), &config, &mut alerted, 1_000).len(),
+            1
+        );
+        assert!(marks_passed(&at(99.0), &config, &mut alerted, 1_000).is_empty());
+        // Once the window has reset, it may warn again.
+        assert!(marks_passed(&[], &config, &mut alerted, 3_000).is_empty() && alerted.is_empty());
+    }
+
+    #[test]
+    fn a_limit_with_no_known_reset_warns_once_until_it_is_low_again() {
+        let config = Config {
+            enabled: true,
+            ..Config::default()
+        };
+        let mut alerted = Alerted::new();
+        let at = |percent: f64| {
+            vec![Provider {
+                id: "codex".into(),
+                name: "ChatGPT".into(),
+                windows: vec![Window {
+                    label: "Week".into(),
+                    percent,
+                    resets_at_ms: 0,
+                }],
+                ..Provider::default()
+            }]
+        };
+        assert_eq!(
+            marks_passed(&at(85.0), &config, &mut alerted, 1_000).len(),
+            1
+        );
+        // A minute later, and later still: no repeat.
+        assert!(marks_passed(&at(85.0), &config, &mut alerted, 61_000).is_empty());
+        assert!(marks_passed(&at(86.0), &config, &mut alerted, 121_000).is_empty());
+        // Low again (a reset nobody announced), then high: a new warning.
+        assert!(marks_passed(&at(5.0), &config, &mut alerted, 181_000).is_empty());
+        assert_eq!(
+            marks_passed(&at(83.0), &config, &mut alerted, 241_000).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn reads_the_newest_limits_from_the_end_of_a_codex_log() {
+        let file = std::env::temp_dir().join(format!("isle-codex-{}.jsonl", std::process::id()));
+        let line = |percent: f64| {
+            json!({"timestamp": "2026-10-21T08:00:00Z", "payload": {"rate_limits": {"plan_type": "plus",
+                "primary": {"used_percent": percent, "window_minutes": 300, "resets_at": 1793084579}}}})
+            .to_string()
+        };
+        let filler = "x".repeat(300 * 1024);
+        std::fs::write(
+            &file,
+            format!(
+                "{}\n{filler}\n{}\n{{\"other\":1}}\n",
+                line(10.0),
+                line(42.0)
+            ),
+        )
+        .unwrap();
+        let codex = codex_limits(&file).unwrap();
+        assert_eq!(
+            (codex.plan.as_str(), codex.windows[0].percent),
+            ("Plus", 42.0)
+        );
+        std::fs::remove_file(file).unwrap();
+    }
+
+    #[test]
+    fn a_window_past_its_reset_starts_over() {
+        let mut provider = Provider {
+            windows: vec![Window {
+                label: "Week".into(),
+                percent: 70.0,
+                resets_at_ms: 1_000,
+            }],
+            ..Provider::default()
+        };
+        settle(&mut provider, 2_000);
+        assert_eq!(provider.windows[0].percent, 0.0);
+    }
+}

@@ -5,6 +5,7 @@
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -32,6 +33,10 @@ import {FocusPage} from './pages/focus.js';
 import {MediaPage} from './pages/media.js';
 import {NotificationsPage} from './pages/notifications.js';
 import {ShelfPage} from './pages/shelf.js';
+import {UsagePage} from './pages/usage.js';
+import {ReminderWatcher} from './reminders.js';
+import {GREETING, InstalledApps, SIRI_COLORS, VoiceView, actionTypes, aiSettings, openSignIn, runActions, stopPending, voiceContext} from './voice.js';
+import {TextWriter} from './writer.js';
 
 /** The pointer must rest this long before the island opens, moving at most this far meanwhile. */
 const EXPAND_DELAY_MS = 120;
@@ -63,6 +68,18 @@ const PEEK_TOP_GLASS = 6;
 const PEEK_SHOULDER = 13;
 const EXPANDED_RADIUS = 32;
 const EXPANDED_SHOULDER = 22;
+const VOICE_RADIUS = 26;
+
+/** A question back is shown this long before the island listens for the reply. */
+const VOICE_LISTEN_AGAIN_MS = 900;
+/** It listens by itself at most this many times in a row; a noisy room can't keep it open. */
+const VOICE_MAX_AUTO_LISTENS = 2;
+/** How long an answer stays: one that did something, one to read (by its length), and an error. */
+const VOICE_DONE_MS = 2500;
+const VOICE_READ_MS = {base: 3000, perChar: 45, max: 12000};
+const VOICE_ERROR_MS = 4000;
+/** Once read with the pointer on it, an answer goes this soon after the pointer leaves. */
+const VOICE_LEAVE_MS = 1200;
 
 // Pages that open by default when they have something to show, best first, unless one was picked
 // by hand lately. Notifications count only when some arrived unseen (others were shown as alerts).
@@ -83,6 +100,31 @@ export class Controller {
         this._lastTrack = null;
         this._tint = null;
         this._tintStyle = null;
+        this._voiceOpen = false;
+        this._voiceBound = false;
+        /** Counts `_listen` calls, so only the latest sends its request. */
+        this._listenRequest = 0;
+        this._voiceCloseMs = VOICE_ERROR_MS;
+        /** The last answer whose actions ran. */
+        this._voiceTurn = 0;
+        /** Times in a row it listened again by itself; see `VOICE_MAX_AUTO_LISTENS`. */
+        this._autoListens = 0;
+        /** The window in front when the assistant opened, for it to write into. */
+        this._voiceTarget = null;
+        /** Actions waiting for the island to close; see `closeThen`. */
+        this._voiceAfter = [];
+        /** The window text was last selected in, so a selection only goes to the AI from where it was made. */
+        this._selectedIn = null;
+        this._primaryChanged = global.display.get_selection().connect('owner-changed', (_selection, type) => {
+            if (type === Meta.SelectionType.SELECTION_PRIMARY)
+                this._selectedIn = global.display.focus_window;
+        });
+        // Clicking into a window, or one an action opened, puts an answer away.
+        this._focusChanged = global.display.connect('notify::focus-window', () => {
+            const focus = global.display.focus_window;
+            if (this._voiceOpen && this._voiceAnswered && focus && focus !== this._voiceTarget)
+                this.collapse();
+        });
 
         this._topBar = new TopBar(this._settings);
         this._notifications = new NotificationCenter();
@@ -91,6 +133,7 @@ export class Controller {
         this._audio = new AudioOutputs();
         this._focusMode = new FocusMode(this._daemon, this._notifications, this._settings);
         this._clipboard = new ClipboardHistory(this._daemon, this._settings);
+        this._writer = new TextWriter(this._clipboard);
         this._island = new Island();
         if (hasSfPro())
             this._island.add_style_class_name(SF_PRO_CLASS);
@@ -98,11 +141,12 @@ export class Controller {
         // Two, taking turns: a new alert fades in over the one it replaces, rather than swapping in a frame.
         this._peeks = [new PeekView(), new PeekView()];
         this._peek = this._peeks[0];
+        this._voice = new VoiceView();
         this._expanded = this._buildExpanded();
         this._shelf = this._expanded.pageNamed('shelf');
         this._shelfHelper = new ShelfHelper(this._island, this._shelf);
 
-        for (const view of [this._compact, ...this._peeks, this._expanded])
+        for (const view of [this._compact, ...this._peeks, this._expanded, this._voice])
             this._island.addView(view);
         Main.layoutManager.addChrome(this._island, {trackFullscreen: true});
         this._connectSignals();
@@ -110,6 +154,13 @@ export class Controller {
         this._keyboard.connect('caps-lock', (_watcher, on) => this._postSystemAlert(Alerts.capsLock(on)));
         this._osd = new OsdHook((icon, label, level, maxLevel) => this._showOsd(icon, label, level, maxLevel));
         this._watchIdle();
+        this._installedApps = new InstalledApps();
+        this._reminders = new ReminderWatcher(this._daemon, reminder => {
+            this._chime('complete');
+            this._post(Alerts.reminder(reminder));
+        });
+        this._syncVoiceEnabled();
+        this._syncUsage();
 
         this._updateGeometry();
         this._render();
@@ -124,6 +175,7 @@ export class Controller {
             new FocusPage(this._daemon, size),
             new ShelfPage(this._daemon, this._clipboard, this._settings, size),
             new CalendarPage(this._daemon, size),
+            new UsagePage(this._daemon, size),
         ];
         for (const page of pages) {
             page.connect('request-keyboard', (_page, wanted) => this._setKeyboard(wanted));
@@ -147,6 +199,7 @@ export class Controller {
                 this._render();
         });
         expanded.connect('tint-changed', () => this._syncTint());
+        expanded.connect('voice-requested', () => this._openVoice());
         // Settings open in their own window; the island gets out of its way.
         expanded.connect('settings-requested', () => {
             this.collapse();
@@ -189,6 +242,9 @@ export class Controller {
 
         this._settingsChanged = ['notch-depth', 'island-in-top-bar'].map(key =>
             this._settings.connect(`changed::${key}`, () => this._render()));
+        this._settingsChanged.push(this._settings.connect('changed::voice-assistant', () => this._syncVoiceEnabled()));
+        for (const key of ['usage-enabled', 'usage-claude', 'usage-codex', 'usage-warn', 'usage-critical'])
+            this._settingsChanged.push(this._settings.connect(`changed::${key}`, () => this._syncUsage()));
 
         this._topBar.connect('height-changed', () => this._updateGeometry());
         this._topBar.connect('style-changed', () => this._updateGeometry());
@@ -205,7 +261,27 @@ export class Controller {
         daemon.connect('changed', (_daemon, key) => {
             if (key === 'nowPlaying')
                 this._onNowPlaying();
+            else if (key === 'assistant')
+                this._onAssistant();
         });
+        daemon.connect('voice-level', (_daemon, level) => this._voice.setLevel(level));
+        daemon.connect('assistant-lost', () => this._onAssistantLost());
+        daemon.connect('usage-alert', (_daemon, provider, window, percent, resetsAt) =>
+            this._post(Alerts.usage(provider, window, percent, resetsAt, this._settings.get_int('usage-critical'))));
+        // isled forgets the settings when it restarts; they are sent again whenever it appears.
+        daemon.connect('changed', (_daemon, key) => {
+            if (key === 'usage' && this._daemon.state.usage === null)
+                this._usageSent = false;
+            if (key === 'usage' && !this._usageSent)
+                this._syncUsage();
+        });
+        this._voice.connect('orb-clicked', () => this._onVoiceKey());
+        // An AI's CLI signs in from a terminal; the island gets out of its way.
+        this._voice.connect('sign-in', () => {
+            if (openSignIn(this._daemon.state.assistant?.provider))
+                this.collapse();
+        });
+        this._voice.connect('frame', (_view, time, level) => this._island.setTintMotion(time, level));
         daemon.connect('pomodoro-finished', (_daemon, finished, next) => {
             this._chime('complete');
             this._post(Alerts.pomodoroFinished(finished, next, daemon.state.pomodoro, daemon));
@@ -241,7 +317,8 @@ export class Controller {
     }
 
     _render() {
-        const presentation = this._expandWanted ? 'expanded' : this._alert ? 'peek' : 'compact';
+        const presentation = this._voiceOpen ? 'voice'
+            : this._expandWanted ? 'expanded' : this._alert ? 'peek' : 'compact';
         this._presentation = presentation;
         const top = this._topBar.height;
         const inBar = this._settings.get_boolean('island-in-top-bar');
@@ -261,6 +338,14 @@ export class Controller {
             };
             view = this._expanded;
             break;
+        case 'voice': {
+            // Like an alert, it hangs below the bar (or near the top of the screen).
+            const inset = this._topBar.blendsIn ? top : PEEK_TOP_GLASS;
+            size = {width: this._voice.preferredWidth, height: inset + this._voice.fit(), radius: VOICE_RADIUS, shoulder: PEEK_SHOULDER};
+            view = this._voice;
+            view.style = `padding-top: ${inset}px;`;
+            break;
+        }
         case 'peek': {
             const inset = this._topBar.blendsIn ? top : PEEK_TOP_GLASS;
             size = {width: this._peek.preferredWidth, height: inset + this._peek.preferredHeight, radius: PEEK_RADIUS, shoulder: PEEK_SHOULDER};
@@ -282,6 +367,7 @@ export class Controller {
         this._topBar.reserveWidth(this._compact.preferredWidth);
         this._island.morph(size, view);
         this._expanded.setActive(presentation === 'expanded');
+        this._voice.setActive(presentation === 'voice');
         this._syncTint();
         // Have the helper running before it is needed: starting takes a moment.
         if (presentation === 'expanded' && this._expanded.page === this._shelf)
@@ -291,8 +377,9 @@ export class Controller {
 
     _syncTint() {
         const expanded = this._presentation === 'expanded';
-        const tint = expanded ? this._expanded.tint : null;
-        const style = expanded ? this._expanded.tintStyle : null;
+        const voice = this._presentation === 'voice';
+        const tint = voice ? SIRI_COLORS : expanded ? this._expanded.tint : null;
+        const style = voice ? 'siri' : expanded ? this._expanded.tintStyle : null;
         if (tint !== this._tint || style !== this._tintStyle) {
             this._tint = tint;
             this._tintStyle = style;
@@ -303,6 +390,14 @@ export class Controller {
     // Pointer
 
     _onHoverChanged() {
+        // An answer stays while the pointer is on it, and as long again once it leaves.
+        if (this._voiceOpen) {
+            if (this._island.hover)
+                this._cancel('voice-close');
+            else
+                this._scheduleVoiceClose(Math.min(this._voiceCloseMs, VOICE_LEAVE_MS));
+            return;
+        }
         if (this._island.hover) {
             this._cancel('collapse');
             if (!this._expandWanted)
@@ -352,6 +447,13 @@ export class Controller {
     }
 
     _onClick(event) {
+        // A click puts an answer away; the face and the Sign in button take their own clicks.
+        if (this._voiceOpen) {
+            if (!this._voiceAnswered)
+                return Clutter.EVENT_PROPAGATE;
+            this.collapse();
+            return Clutter.EVENT_STOP;
+        }
         switch (event.get_button()) {
         case Clutter.BUTTON_PRIMARY:
             // Clicking a notification opens it, like GNOME's banner did.
@@ -390,6 +492,8 @@ export class Controller {
     /** Opens the island, on `pageName` or the most useful page. */
     expand(pageName = null) {
         this._cancel('expand');
+        if (this._voiceOpen)
+            this._closeVoice();
         const target = pageName ?? this._alert?.page ?? this._defaultPage();
         if (target)
             this._expanded.showPage(target, {animate: this._expandWanted});
@@ -402,6 +506,11 @@ export class Controller {
     collapse() {
         this._cancel('collapse');
         this._setKeyboard(false);
+        if (this._voiceOpen) {
+            this._closeVoice();
+            this._nextAlert();
+            return;
+        }
         if (!this._expandWanted)
             return;
         this._expandWanted = false;
@@ -457,7 +566,8 @@ export class Controller {
             this._keyboardGrab = null;
             global.stage.disconnect(this._stageCapture);
             Main.popModal(grab);
-            if (!this._island.hover)
+            // An open assistant closes on its own timer.
+            if (!this._island.hover && !this._voiceOpen)
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
         }
     }
@@ -472,7 +582,7 @@ export class Controller {
             this._showAlert(alert); // update in place
             return;
         }
-        if (this._expandWanted) {
+        if (this._expandWanted || this._voiceOpen) {
             // Volume and the like are stale by the time the island closes.
             if (!alert.transient)
                 this._enqueue(alert);
@@ -524,7 +634,7 @@ export class Controller {
 
     _nextAlert() {
         const next = this._queue.shift();
-        if (next && !this._expandWanted)
+        if (next && !this._expandWanted && !this._voiceOpen)
             this._showAlert(next);
         else
             this._render();
@@ -534,7 +644,7 @@ export class Controller {
         if (!this._settings.get_boolean('replace-osd') || !this._island.visible)
             return false;
         // While the island is open the OSD would cover it; let GNOME show it.
-        if (this._expandWanted)
+        if (this._expandWanted || this._voiceOpen)
             return false;
         const alert = Alerts.osd(icon, label, level, maxLevel);
         // Pressing on at 0% or 100% stretches the island like a rubber band.
@@ -554,6 +664,208 @@ export class Controller {
         this._lastTrack = track;
         if (changed && track && Playback.isPlaying(nowPlaying) && this._settings.get_boolean('track-peek'))
             this._post(Alerts.track(nowPlaying));
+    }
+
+    // Usage
+
+    /** Sends the usage settings to isled, and the warning marks to the page. */
+    _syncUsage() {
+        const config = {
+            enabled: this._settings.get_boolean('usage-enabled'),
+            claude: this._settings.get_boolean('usage-claude'),
+            codex: this._settings.get_boolean('usage-codex'),
+            warn: this._settings.get_int('usage-warn'),
+            critical: this._settings.get_int('usage-critical'),
+        };
+        this._expanded.pageNamed('usage')?.setMarks(config.warn, config.critical);
+        this._usageSent = true;
+        this._daemon.call('usage', 'SetConfig', JSON.stringify(config));
+    }
+
+    // Voice
+
+    /** Binds the shortcut and shows the mic button while the assistant is turned on. */
+    _syncVoiceEnabled() {
+        const enabled = this._settings.get_boolean('voice-assistant');
+        if (enabled && !this._voiceBound) {
+            Main.wm.addKeybinding('voice-shortcut', this._settings, Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
+                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW | Shell.ActionMode.POPUP,
+                () => this._onVoiceKey());
+        } else if (!enabled && this._voiceBound) {
+            Main.wm.removeKeybinding('voice-shortcut');
+            if (this._voiceOpen)
+                this.collapse();
+        }
+        this._voiceBound = enabled;
+        this._expanded.voiceEnabled = enabled;
+    }
+
+    // The shortcut (or the face) opens the assistant listening; while listening it finishes,
+    // and once answered it listens again for a follow-up.
+    _onVoiceKey() {
+        if (!this._voiceOpen) {
+            this._openVoice();
+            return;
+        }
+        // isled's phase, not the view's: the view says listening before isled has started.
+        const phase = this._daemon.state.assistant?.phase;
+        if (phase === 'listening')
+            this._daemon.call('assistant', 'Stop');
+        else if (this._voiceAnswered) {
+            this._autoListens = 0;
+            this._listen();
+        }
+    }
+
+    _openVoice() {
+        if (!this._voiceBound)
+            return;
+        // Opened again before the last answer's actions ran: they belonged to that one.
+        this._cancel('voice-after');
+        this._voiceAfter = [];
+        this._voiceTarget = global.display.focus_window;
+        this._cancel('expand');
+        this._cancel('collapse');
+        this._expandWanted = false;
+        if (this._alert && !this._alert.transient)
+            this._queue.unshift(this._alert);
+        this._dismissAlert(false);
+        this._voiceOpen = true;
+        this._voiceTurn = this._daemon.state.assistant?.turn ?? 0;
+        this._autoListens = 0;
+        this._listen({greet: true});
+    }
+
+    async _listen({greet = false} = {}) {
+        // Read before the keyboard is taken, while the selection is surely the app's.
+        // The app list only matters to a conversation's first request.
+        const apps = greet ? this._installedApps.names : [];
+        const context = voiceContext(this._settings, this._notifications, {apps, selectedIn: this._selectedIn});
+        const request = ++this._listenRequest;
+        this._cancel('voice-close');
+        this._cancel('voice-listen');
+        // A follow-up shows what was just said back, one dim line above "Listening…".
+        this._voice.followUp = greet ? null : this._voice.exchange?.reply || null;
+        // Esc and clicks elsewhere close it while it listens and thinks.
+        this._setKeyboard(true);
+        this._voice.greeting = greet ? GREETING : null;
+        this._voice.setState({phase: 'listening'});
+        this._render();
+        let json;
+        try {
+            json = await context;
+        } catch (e) {
+            // Never left listening for nothing: ask without the extras.
+            console.warn(`Isle: could not gather the request's context: ${e.message}`);
+            json = JSON.stringify({
+                ...aiSettings(this._settings),
+                actions: actionTypes(),
+                whisper_model: this._settings.get_string('voice-speech-model'),
+                language: this._settings.get_string('voice-language'),
+            });
+        }
+        // Closed, or asked to listen again, meanwhile.
+        if (this._voiceOpen && request === this._listenRequest)
+            this._daemon.call('assistant', 'Listen', json);
+    }
+
+    _onAssistant() {
+        const state = this._daemon.state.assistant;
+        if (!this._voiceOpen || !state || state.phase === 'idle')
+            return;
+        // Nothing said back to a follow-up: it just closes, no error.
+        if (state.phase === 'error' && state.heard_nothing && this._voice.followUp) {
+            this.collapse();
+            return;
+        }
+        this._voice.setState(state);
+        this._render();
+        // New text is only measured right once styled; fit the island again then.
+        this._later('voice-fit', ALERT_FIT_DELAY_MS, () => {
+            if (this._presentation === 'voice')
+                this._render();
+        });
+        // Once answered, typing goes back to the windows; the answer closes on its own.
+        if (state.phase === 'reply' || state.phase === 'error')
+            this._setKeyboard(false);
+        if (state.phase === 'reply' && state.turn !== this._voiceTurn) {
+            this._voiceTurn = state.turn;
+            runActions(state.actions, this._voiceActions());
+            if (state.listen && this._autoListens < VOICE_MAX_AUTO_LISTENS) {
+                this._autoListens++;
+                // Asked something back: listen for the reply without a key press.
+                this._later('voice-listen', VOICE_LISTEN_AGAIN_MS, () => {
+                    if (this._voiceOpen && this._voice.phase === 'reply')
+                        this._listen();
+                });
+            } else {
+                const {base, perChar, max} = VOICE_READ_MS;
+                this._scheduleVoiceClose(state.actions?.length ? VOICE_DONE_MS
+                    : Math.min(max, base + perChar * (state.reply?.length ?? 0)));
+            }
+        } else if (state.phase === 'error') {
+            // Long enough to reach the Sign in button.
+            this._scheduleVoiceClose(state.sign_in ? VOICE_READ_MS.max : VOICE_ERROR_MS);
+        }
+    }
+
+    /** An answer or an error is on show, no longer listening or thinking. */
+    get _voiceAnswered() {
+        return ['reply', 'error'].includes(this._voice.phase);
+    }
+
+    // isled restarted (an update) or stopped while listening or thinking: it will never answer, so
+    // the island says so rather than wait forever.
+    _onAssistantLost() {
+        if (!this._voiceOpen || !['listening', 'transcribing', 'thinking'].includes(this._voice.phase))
+            return;
+        this._voice.setState({phase: 'error', error: 'Isle restarted', hint: 'Press Super+I to ask again.'});
+        this._setKeyboard(false);
+        this._render();
+        this._scheduleVoiceClose(VOICE_ERROR_MS);
+    }
+
+    _scheduleVoiceClose(ms) {
+        this._voiceCloseMs = ms;
+        // An action may have closed it already.
+        if (!this._voiceOpen)
+            return;
+        if (this._voiceAnswered && !this._island.hover)
+            this._later('voice-close', ms, () => this.collapse());
+    }
+
+    /** What the assistant's actions act on; see `ACTIONS` in voice.js. */
+    _voiceActions() {
+        return {
+            daemon: this._daemon,
+            audio: this._audio,
+            notifications: this._notifications,
+            target: this._voiceTarget,
+            writer: this._writer,
+            // The answer shows for a moment, then the page.
+            showNotifications: () => this._later('voice-page', 1200, () => this.expand('notifications')),
+            // Closed first, so the island is not in a screenshot or over the lock screen.
+            // Every close-first action of an answer runs, in order, once the island has closed.
+            closeThen: callback => {
+                this._voiceAfter.push(callback);
+                this.collapse();
+                this._later('voice-after', 450, () => {
+                    const callbacks = this._voiceAfter;
+                    this._voiceAfter = [];
+                    callbacks.forEach(run => run());
+                });
+            },
+        };
+    }
+
+    /** Ends the conversation: the AI and the speech model quit until next time. */
+    _closeVoice() {
+        this._cancel('voice-close');
+        this._cancel('voice-listen');
+        this._cancel('voice-page');
+        this._voiceOpen = false;
+        this._voiceTarget = null;
+        this._daemon.call('assistant', 'End');
     }
 
     _chime(soundName) {
@@ -598,6 +910,13 @@ export class Controller {
     }
 
     destroy() {
+        global.display.get_selection().disconnect(this._primaryChanged);
+        global.display.disconnect(this._focusChanged);
+        stopPending();
+        if (this._voiceBound)
+            Main.wm.removeKeybinding('voice-shortcut');
+        if (this._voiceOpen)
+            this._closeVoice();
         // Releasing the keyboard may schedule a collapse; cancel it after.
         this._setKeyboard(false);
         for (const name of [...this._timeouts.keys()])
@@ -614,12 +933,15 @@ export class Controller {
         this._osd.destroy();
         this._keyboard.destroy();
         this._shelfHelper.destroy();
+        this._reminders.destroy();
         // Ending focus mode can turn Do Not Disturb off, which the views
         // still show.
         this._focusMode.destroy();
 
         // The views listen to the services below, so they go first.
         this._island.destroy();
+        this._writer.destroy();
+        this._installedApps.destroy();
         this._clipboard.destroy();
         this._call.destroy();
         this._privacy.destroy();

@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Shows isled's reminders when they are due. isled keeps them until shown, so one that fell due
+// while the screen was locked (and Isle was off) shows as soon as Isle is back.
+
+import GLib from 'gi://GLib';
+
+/** Waits are cut into naps this long: GLib's clock stops during suspend, the wall clock does not. */
+const MAX_NAP_MS = 30 * 1000;
+
+export class ReminderWatcher {
+    /** `onDue({id, text})` shows a reminder that is due. */
+    constructor(daemon, onDue) {
+        this._daemon = daemon;
+        this._onDue = onDue;
+        this._timeout = 0;
+        this._shown = new Set();
+        this._changedId = daemon.connect('changed', (_daemon, key) => {
+            if (key === 'reminders')
+                this._sync();
+        });
+        this._sync();
+    }
+
+    _sync() {
+        if (this._timeout) {
+            GLib.source_remove(this._timeout);
+            this._timeout = 0;
+        }
+        const items = this._daemon.state.reminders ?? [];
+        const now = Date.now();
+        for (const item of items) {
+            // Dismissing takes a round trip; don't show it twice meanwhile.
+            if (item.due_ms > now || this._shown.has(item.id))
+                continue;
+            this._shown.add(item.id);
+            this._onDue(item);
+            this._daemon.call('reminders', 'Dismiss', item.id);
+        }
+        const next = items.find(item => item.due_ms > now);
+        if (!next)
+            return;
+        const wait = Math.min(MAX_NAP_MS, next.due_ms - now + 50);
+        this._timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, wait, () => {
+            this._timeout = 0;
+            this._sync();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    destroy() {
+        if (this._timeout)
+            GLib.source_remove(this._timeout);
+        this._daemon.disconnect(this._changedId);
+    }
+}

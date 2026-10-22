@@ -85,10 +85,37 @@ const INTERFACES = {
             <property name="State" type="s" access="read"/>`),
         properties: {State: 'system'},
     },
+    reminders: {
+        xml: node('Reminders1', `
+            <method name="Add"><arg name="delay_ms" type="t" direction="in"/><arg name="text" type="s" direction="in"/><arg type="t" direction="out"/></method>
+            <method name="Dismiss"><arg name="id" type="t" direction="in"/></method>
+            <property name="Items" type="s" access="read"/>`),
+        properties: {Items: 'reminders'},
+    },
+    usage: {
+        xml: node('Usage1', `
+            <method name="SetConfig"><arg name="config" type="s" direction="in"/></method>
+            <method name="Refresh"/>
+            <signal name="Alert"><arg name="provider" type="s"/><arg name="window" type="s"/><arg name="percent" type="d"/><arg name="resets_at_ms" type="x"/></signal>
+            <property name="Usage" type="s" access="read"/>`),
+        properties: {Usage: 'usage'},
+    },
+    assistant: {
+        xml: node('Assistant1', `
+            <method name="Listen"><arg name="context" type="s" direction="in"/></method>
+            <method name="Ask"><arg name="text" type="s" direction="in"/><arg name="context" type="s" direction="in"/></method>
+            <method name="Stop"/>
+            <method name="End"/>
+            <signal name="Level"><arg name="level" type="d"/></signal>
+            <property name="State" type="s" access="read"/>`),
+        properties: {State: 'assistant'},
+    },
 };
 
 // Signals: `changed` (key): `state[key]` is new; `pomodoro-finished` (finished, next): phase names;
-// `system-event` (event): see `SystemEvent` in the daemon.
+// `system-event` (event): see `SystemEvent` in the daemon; `voice-level` (level): the mic, 0..1;
+// `usage-alert` (provider, window, percent, resets_at_ms): an AI plan limit nears its end;
+// `assistant-lost`: isled stopped or restarted, so a request in flight will not be answered.
 export class Daemon extends Signals.EventEmitter {
     constructor() {
         super();
@@ -148,6 +175,9 @@ export class Daemon extends Signals.EventEmitter {
             });
             // The daemon restarted (or stopped): re-read everything.
             proxy.connect('notify::g-name-owner', refresh);
+            // Whatever it was doing for the voice assistant is lost with it.
+            if (name === 'assistant')
+                proxy.connect('notify::g-name-owner', () => this.emit('assistant-lost'));
             proxy.connect('g-signal', (_proxy, _sender, signal, parameters) =>
                 this._onSignal(signal, parameters.deep_unpack()));
             refresh();
@@ -173,6 +203,12 @@ export class Daemon extends Signals.EventEmitter {
         switch (signal) {
         case 'PhaseFinished':
             this.emit('pomodoro-finished', ...args);
+            break;
+        case 'Level':
+            this.emit('voice-level', args[0]);
+            break;
+        case 'Alert':
+            this.emit('usage-alert', ...args);
             break;
         case 'Event':
             try {

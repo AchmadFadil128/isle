@@ -166,17 +166,21 @@ export class ClipboardHistory {
         }
         }
 
-        this._ownCopy = true;
+        this.ignoreNextCopy();
         if (text !== null)
             this._clipboard.set_text(CLIPBOARD, text);
         else
             this._clipboard.set_content(CLIPBOARD, mimetype, bytes);
-        // If the clipboard did not change hands (same content), don't skip
-        // the user's next copy.
-        this._later(500, () => (this._ownCopy = false));
         if (touch)
             this._daemon.call('clipboard', 'Touch', item.id);
         return true;
+    }
+
+    /** Leaves the next change of the clipboard out of the history; call right before making it. */
+    ignoreNextCopy() {
+        this._ownCopy = true;
+        // If the clipboard did not change hands (same content), don't skip the user's next copy.
+        this._later(500, () => (this._ownCopy = false));
     }
 
     /** Pastes into the window in front, once it has the keyboard again (call after the island lets go). */

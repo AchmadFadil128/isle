@@ -19,6 +19,8 @@ const START_DELAY_MS = 2000;
 const SERVICE_GRACE_US = 15 * 1000 * 1000;
 /** A call outlasts the microphone closing this long, as apps reopen it to switch devices. */
 const END_DELAY_MS = 4000;
+/** Isle's own recordings: the voice assistant listening. */
+const OWN_APP_ID = 'io.github.zickrian.isle';
 /** Apps that record rather than call, matched in their names. */
 const RECORDERS = ['obs', 'audacity', 'tenacity', 'recorder', 'kooha', 'kdenlive', 'ardour'];
 /** The icon Gvc gives a stream that names none. */
@@ -151,7 +153,8 @@ export class CallMonitor extends Signals.EventEmitter {
         if (!this._settings.get_boolean('call-activity'))
             return null;
         return this._mixer.get_source_outputs().find(stream => {
-            if (LEVEL_METERS.includes(stream.get_application_id()))
+            const appId = stream.get_application_id();
+            if (LEVEL_METERS.includes(appId) || appId === OWN_APP_ID)
                 return false;
             return !streamKeys(stream).some(key => RECORDERS.some(recorder => key.includes(recorder)));
         }) ?? null;

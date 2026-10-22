@@ -22,6 +22,10 @@ impl CalendarService {
         Self { calendar, store }
     }
 
+    pub fn calendar(&self) -> &Calendar {
+        &self.calendar
+    }
+
     async fn changed(&self, emitter: &SignalEmitter<'_>) -> zbus::Result<()> {
         self.store.save(&self.calendar);
         self.events_changed(emitter).await

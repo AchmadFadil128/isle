@@ -26,6 +26,124 @@ export default class IslePreferences extends ExtensionPreferences {
         window.add(this._islandPage(settings));
         window.add(this._clipboardPage(settings, window));
         window.add(this._timerPage(settings, window));
+        window.add(this._voicePage(settings));
+        window.add(this._usagePage(settings));
+    }
+
+    // AI plan usage: only the providers signed in on this computer are listed.
+    _usagePage(settings) {
+        const page = new Adw.PreferencesPage({title: 'AI Usage', icon_name: 'speedometer-symbolic'});
+        const found = usageProviders();
+        const group = new Adw.PreferencesGroup({
+            title: 'AI Usage',
+            description: found.length
+                ? 'How much of your plans\' limits is used, on a Usage page in the open island, with a warning ' +
+                  'as one nears its end. Found from the apps you are signed in to; nothing else to set up.'
+                : 'Sign in to Claude Code (claude) or Codex (codex) and your plan shows up here.',
+        });
+        const enabled = switchRow(settings, 'usage-enabled', 'Show AI usage', 'The Usage page and its warnings');
+        group.add(enabled);
+        const rows = found.map(({key, title, subtitle}) => switchRow(settings, key, title, subtitle));
+        const warn = spinRow(settings, 'usage-warn', 'Warn at', 'Share of a limit, in %', 50, 99);
+        const critical = spinRow(settings, 'usage-critical', 'Warn again at', 'Share of a limit, in %', 50, 100);
+        for (const row of found.length ? [...rows, warn, critical] : []) {
+            settings.bind('usage-enabled', row, 'sensitive', Gio.SettingsBindFlags.GET);
+            group.add(row);
+        }
+        enabled.sensitive = found.length > 0;
+        page.add(group);
+        return page;
+    }
+
+    _voicePage(settings) {
+        const page = new Adw.PreferencesPage({title: 'Voice', icon_name: 'audio-input-microphone-symbolic'});
+        const installed = AI_PROVIDERS.filter(provider => findProgram(provider.command));
+        const group = new Adw.PreferencesGroup({
+            title: 'Voice Assistant',
+            description: 'Press Super+I (or the mic in the open island) and speak. Speech is recognised on this ' +
+                'computer (set up once with isle-setup-voice in a terminal); the request goes to the AI you pick, with your ' +
+                'own sign-in and plan.',
+        });
+        group.add(switchRow(settings, 'voice-assistant', 'Voice assistant', 'Super+I and the mic in the open island'));
+
+        // Only the AIs installed here are offered; with none, the assistant says how to get one.
+        const provider = choiceRow(settings, 'voice-provider', 'AI', installed.length
+            ? 'Answers with your own sign-in; Isle runs its actions'
+            : 'Install Claude Code, Codex or Antigravity (agy), and sign in', [
+            ['auto', installed.length ? `Automatic (${installed[0].name})` : 'None installed'],
+            ...installed.map(({id, name}) => [id, name]),
+        ]);
+        const model = new Adw.ComboRow({title: 'Model'});
+        let modelChoices = [];
+        let modelKey = null;
+        // Swapping the list moves the selection; that must not write a model of its own.
+        let syncing = false;
+        const syncModel = () => {
+            syncing = true;
+            try {
+                fillModel();
+            } finally {
+                syncing = false;
+            }
+        };
+        const fillModel = () => {
+            const wanted = settings.get_string('voice-provider');
+            const current = installed.find(p => p.id === wanted) ?? installed[0];
+            model.visible = Boolean(current);
+            if (!current)
+                return;
+            modelKey = current.modelKey;
+            modelChoices = current.models();
+            // A model set by hand, not in the list, stays shown and kept.
+            const value = settings.get_string(modelKey);
+            if (!modelChoices.some(([id]) => id === value))
+                modelChoices.push([value, value || 'Default']);
+            model.subtitle = current.about;
+            model.model = Gtk.StringList.new(modelChoices.map(([, label]) => label));
+            model.selected = Math.max(0, modelChoices.findIndex(([id]) => id === value));
+        };
+        model.connect('notify::selected', () => {
+            if (syncing)
+                return;
+            const value = modelChoices[model.selected]?.[0];
+            if (modelKey && value !== undefined && value !== settings.get_string(modelKey))
+                settings.set_string(modelKey, value);
+        });
+        const changed = settings.connect('changed::voice-provider', syncModel);
+        model.connect('destroy', () => settings.disconnect(changed));
+        syncModel();
+
+        const options = [provider, model];
+        options.push(choiceRow(settings, 'voice-speech-model', 'Speech recognition', 'Bigger is more accurate, and slower', [
+            ['base', 'Base'],
+            ['small', 'Small'],
+            ['medium', 'Medium'],
+        ]));
+        options.push(choiceRow(settings, 'voice-language', 'Language', 'The language you speak', [
+            ['id,en', 'Indonesian or English'],
+            ['id', 'Indonesian'],
+            ['en', 'English'],
+            ['', 'Detect'],
+        ]));
+        options.push(switchRow(settings, 'voice-use-selection', 'Use selected text',
+            'Send the text you have selected, so the AI can work on it; never from terminals or password managers'));
+        options.push(switchRow(settings, 'voice-read-notifications', 'Read notifications',
+            'Let the AI read your recent notifications when you ask about them'));
+        for (const row of options) {
+            settings.bind('voice-assistant', row, 'sensitive', Gio.SettingsBindFlags.GET);
+            group.add(row);
+        }
+        page.add(group);
+
+        const notes = new Adw.PreferencesGroup({
+            title: 'About the AIs',
+            description: 'Claude Code and Codex answer within your Claude or ChatGPT plan\'s limits. Antigravity\'s ' +
+                'terms bar third-party tools from its service; Isle only runs the official agy app, but use it at ' +
+                'your own risk. Each runs kept to answering: commands and file changes go through Isle, which ' +
+                'asks you first.',
+        });
+        page.add(notes);
+        return page;
     }
 
     _clipboardPage(settings, window) {
@@ -180,6 +298,75 @@ function switchRow(settings, key, title, subtitle) {
     return row;
 }
 
+/** The AI CLIs the voice assistant can ask, in the order "Automatic" tries them (as isled does). */
+const AI_PROVIDERS = [
+    {
+        id: 'agy', name: 'Antigravity', command: 'agy', modelKey: 'voice-agy-model',
+        about: 'What agy answers with',
+        models: () => [
+            ['gemini-3.8-flash-low', 'Gemini Flash (fastest)'],
+            ['gemini-3.8-flash-medium', 'Gemini Flash (medium)'],
+            ['gemini-3.8-flash-high', 'Gemini Flash (high)'],
+            ['claude-sonnet-4-6', 'Claude Sonnet'],
+        ],
+    },
+    {
+        id: 'claude', name: 'Claude Code', command: 'claude', modelKey: 'voice-claude-model',
+        about: 'What Claude answers with',
+        models: () => [
+            ['haiku', 'Haiku (fastest, less reliable)'],
+            ['sonnet', 'Sonnet'],
+            ['opus', 'Opus (smartest, slower)'],
+            ['', 'Claude Code\'s default'],
+        ],
+    },
+    {
+        id: 'codex', name: 'Codex', command: 'codex', modelKey: 'voice-codex-model',
+        about: 'What Codex answers with, with little reasoning, to be quick',
+        models: () => [['', 'Codex\'s default'], ...codexModels()],
+    },
+];
+
+/** `command` on the PATH or where installers put it, else null. */
+function findProgram(command) {
+    const home = GLib.get_home_dir();
+    return GLib.find_program_in_path(command) ?? ['.local/bin', '.npm-global/bin', '.bun/bin']
+        .map(dir => GLib.build_filenamev([home, dir, command]))
+        .find(path => GLib.file_test(path, GLib.FileTest.IS_EXECUTABLE)) ?? null;
+}
+
+/** The models Codex lists, from the cache it keeps (Isle's own home for it, else the user's). */
+function codexModels() {
+    const home = GLib.get_home_dir();
+    for (const dir of [[home, '.local', 'share', 'isle', 'codex'], [home, '.codex']]) {
+        try {
+            const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([...dir, 'models_cache.json']));
+            const models = JSON.parse(new TextDecoder().decode(bytes)).models ?? [];
+            return models.filter(m => m.visibility === 'list').map(m => [m.slug, m.display_name ?? m.slug]);
+        } catch {
+            // Not there, or not readable: the next place.
+        }
+    }
+    return [];
+}
+
+/** The AI providers signed in here, as rows to switch: Claude Code's sign-in, and Codex's logs. */
+function usageProviders() {
+    const home = GLib.get_home_dir();
+    const providers = [];
+    try {
+        const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([home, '.claude', '.credentials.json']));
+        const plan = JSON.parse(new TextDecoder().decode(bytes)).claudeAiOauth?.subscriptionType ?? '';
+        providers.push({key: 'usage-claude', title: 'Claude',
+            subtitle: `${plan ? `${plan[0].toUpperCase()}${plan.slice(1)} plan, ` : ''}signed in with Claude Code`});
+    } catch {
+        // Not signed in to Claude Code.
+    }
+    if (GLib.file_test(GLib.build_filenamev([home, '.codex', 'sessions']), GLib.FileTest.IS_DIR))
+        providers.push({key: 'usage-codex', title: 'ChatGPT', subtitle: 'As Codex last saw it'});
+    return providers;
+}
+
 /** A drop-down for a string key with `choices`: [[value, label], …]. */
 function choiceRow(settings, key, title, subtitle, choices) {
     const row = new Adw.ComboRow({
@@ -195,7 +382,7 @@ function choiceRow(settings, key, title, subtitle, choices) {
     const changed = settings.connect(`changed::${key}`, sync);
     row.connect('notify::selected', () => {
         const value = choices[row.selected]?.[0];
-        if (value && value !== settings.get_string(key))
+        if (value !== undefined && value !== settings.get_string(key))
             settings.set_string(key, value);
     });
     row.connect('destroy', () => settings.disconnect(changed));

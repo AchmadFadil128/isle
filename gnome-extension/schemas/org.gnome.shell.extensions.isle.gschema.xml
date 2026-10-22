@@ -72,6 +72,79 @@
       <summary>Apps whose copies are never kept</summary>
       <description>Desktop app ids, e.g. password managers.</description>
     </key>
+    <key name="voice-assistant" type="b">
+      <default>true</default>
+      <summary>Voice assistant</summary>
+      <description>Listen for requests on the shortcut and the mic button, and answer them with agy.</description>
+    </key>
+    <key name="voice-shortcut" type="as">
+      <default><![CDATA[['<Super>i']]]></default>
+      <summary>Voice assistant shortcut</summary>
+      <description>Opens the voice assistant and listens. Pressed while listening, it finishes; after an answer, it listens again.</description>
+    </key>
+    <key name="voice-provider" type="s">
+      <default>'auto'</default>
+      <summary>AI the voice assistant asks</summary>
+      <description>“agy” (Antigravity), “claude” (Claude Code) or “codex” (Codex), each with its own sign-in; “auto” for the first installed.</description>
+    </key>
+    <key name="voice-claude-model" type="s">
+      <default>'sonnet'</default>
+      <summary>Model Claude Code answers with</summary>
+      <description>haiku, sonnet or opus; empty for Claude Code's default.</description>
+    </key>
+    <key name="voice-codex-model" type="s">
+      <default>''</default>
+      <summary>Model Codex answers with</summary>
+      <description>A model id from Codex; empty for the one Codex itself uses.</description>
+    </key>
+    <key name="voice-agy-model" type="s">
+      <default>'gemini-3.8-flash-low'</default>
+      <summary>Model the voice assistant asks</summary>
+      <description>A model id from “agy models”; empty for agy's default.</description>
+    </key>
+    <key name="voice-speech-model" type="s">
+      <default>'small'</default>
+      <summary>Speech recognition model</summary>
+      <description>A Whisper model: tiny, base, small or medium. Bigger is more accurate and slower.</description>
+    </key>
+    <key name="voice-language" type="s">
+      <default>'id,en'</default>
+      <summary>Spoken language</summary>
+      <description>A language code such as “id” or “en”, several (“id,en”) to tell them apart, or empty to detect any.</description>
+    </key>
+    <key name="voice-use-selection" type="b">
+      <default>true</default>
+      <summary>Send the selected text to the voice assistant</summary>
+      <description>So it can work on it ("make this shorter"). Never from terminals or apps kept out of the clipboard history.</description>
+    </key>
+    <key name="voice-read-notifications" type="b">
+      <default>false</default>
+      <summary>Let the voice assistant read notifications</summary>
+      <description>Send the last few notifications with each request, so agy can read them out or summarise them.</description>
+    </key>
+    <key name="usage-enabled" type="b">
+      <default>true</default>
+      <summary>Show AI plan usage</summary>
+      <description>A Usage page and warnings for Claude (signed in with Claude Code) and ChatGPT (as Codex last saw it), when found.</description>
+    </key>
+    <key name="usage-claude" type="b">
+      <default>true</default>
+      <summary>Show Claude's usage</summary>
+    </key>
+    <key name="usage-codex" type="b">
+      <default>true</default>
+      <summary>Show ChatGPT's usage</summary>
+    </key>
+    <key name="usage-warn" type="i">
+      <range min="50" max="99"/>
+      <default>80</default>
+      <summary>Warn at this share of a limit (%)</summary>
+    </key>
+    <key name="usage-critical" type="i">
+      <range min="50" max="100"/>
+      <default>95</default>
+      <summary>Warn again at this share of a limit (%)</summary>
+    </key>
     <key name="chimes" type="b">
       <default>true</default>
       <summary>Play a sound when a focus session or break ends</summary>
