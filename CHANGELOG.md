@@ -6,6 +6,23 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-22
+
+### Fixed
+
+- **Smoother opening, closing and switching tabs.** The island no longer
+  restyles every page whenever the pointer enters or leaves it, or as one
+  page takes over from another. While it rests closed, the pages are
+  prepared ahead, including any that changed meanwhile, so the frames that
+  animate them only draw.
+- **New songs no longer stall the island**: covers are decoded once, off
+  the main thread, at the size they are shown, however big the cover a
+  browser sends.
+- Switching between the player, lyrics and outputs no longer restyles the
+  whole music page.
+- Opening the calendar or notifications no longer rebuilds them unless
+  something changed.
+
 ## [0.5.0] - 2026-10-22
 
 ### Added
@@ -349,7 +366,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/zickrian/isle/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/zickrian/isle/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/zickrian/isle/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/zickrian/isle/compare/v0.3.0...v0.4.0
