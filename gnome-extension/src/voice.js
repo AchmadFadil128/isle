@@ -47,11 +47,10 @@ const SELECTION_TIMEOUT_MS = 500;
 const MAX_NOTIFICATIONS = 10;
 const MAX_NOTIFICATION_BODY = 300;
 
-/** The head's radius, the eyes' size and how far apart they sit, in pixels. */
+/** The head's radius; the eyes sit on a ball this big inside it and measure in this unit, in pixels. */
 const HEAD_RADIUS = 15;
-const EYE_WIDTH = 5.8;
-const EYE_HEIGHT = 11.5;
-const EYE_SPACING = 5.1;
+const EYE_BALL = 17.3;
+const EYE_UNIT = 20.3;
 /** An app just opened gets this long (ms) to show its window before the next step goes on without it. */
 const WINDOW_WAIT_MS = 5000;
 /** An app asked to quit gets this long (ms) to close its windows; one asking to save stays open. */
@@ -61,8 +60,9 @@ const PLAYER_WAIT_MS = 12000;
 /** Spotify's name on the session bus, for its MPRIS player. */
 const SPOTIFY_BUS = 'org.mpris.MediaPlayer2.spotify';
 
-/** How far the eyes and the head turn towards what they look at. */
-const EYE_TRAVEL = {x: 3.3, y: 2.6};
+/** How far the head turns towards what it looks at (degrees), and how far it may turn in all. */
+const LOOK_TURN = {yaw: 14, pitch: 12};
+const MAX_TURN = {yaw: 26, pitch: 22};
 const HEAD_TRAVEL = {x: 1.3, y: 1};
 /** How fast (per second) the glow follows the voice up and down, how fast a silent mic fades,
  * and how fast it moves to each phase's level. */
@@ -77,24 +77,21 @@ const SMILE_S = 1.6;
 /** Surprised this long (s) when it first hears you; sleepy after this long (s) with nothing going on. */
 const SURPRISE_S = 0.6;
 const SLEEPY_S = 8;
-/** How fast (per second) the eyes take on a new expression: a morph of about a fifth of a second. */
-const MORPH_RATE = 14;
-/** An eye's shape against an open one: width, height, turn (radians, clockwise), lift (px), lid (share
- * shut from above), slant (more of the lid on the outer side, as a sad eye's) and smile (an arch). */
-const OPEN_EYE = {w: 1, h: 1, turn: 0, lift: 0, lid: 0, slant: 0, smile: 0};
-/** The expressions, as [left eye, right eye]; what an eye leaves out is as open. */
+/** How fast (per second) the face takes on a new expression: a morph of about a third of a second. */
+const MORPH_RATE = 10;
+const pair = (w, h, tilt = 0, open = 1) => [{w, h, tilt, open}, {w, h, tilt: -tilt, open}];
+// Expressions from bloub (MIT, © 2026 Jérémy Perret, github.com/jeremy-prt/bloub): the head's turn and
+// how far apart the eyes sit (degrees), each eye's width and height (EYE_UNIT), tilt and how open.
 const EXPRESSIONS = {
-    attentive: [{}, {}],
-    surprised: [{w: 1.5, h: 0.92}, {w: 1.5, h: 0.92}],
-    // The head cocked and one eye narrowed, looking up while it thinks.
-    curious: [{turn: 0.14}, {turn: 0.14, h: 0.78, lift: 0.8}],
-    happy: [{smile: 1}, {smile: 1}],
-    // One eye squeezed and raised: it did not catch what you said.
-    confused: [{}, {h: 0.55, lift: 2}],
-    // Lids falling to the outside, the eyes low: sad, where sleepy's lids are level.
-    sad: [{h: 0.9, lift: -1.4, slant: 0.62}, {h: 0.9, lift: -1.4, slant: 0.62}],
-    sleepy: [{lid: 0.55, lift: -0.6}, {lid: 0.55, lift: -0.6}],
+    attentive: {yaw: 4, pitch: 5, roll: -4, split: 16, eyes: pair(0.21, 0.44)},
+    surprised: {yaw: 3, pitch: -3, roll: 0, split: 19, eyes: pair(0.45, 0.47)},
+    curious: {yaw: 16, pitch: -9, roll: -15, split: 16.5, eyes: [{w: 0.24, h: 0.46, tilt: -8, open: 1}, {w: 0.2, h: 0.38, tilt: -8, open: 1}]},
+    happy: {yaw: 5, pitch: 9, roll: 0, split: 17, eyes: pair(0.27, 0.17, 14)},
+    confused: {yaw: -14, pitch: 3, roll: 8, split: 16.5, eyes: [{w: 0.2, h: 0.44, tilt: -18, open: 1}, {w: 0.28, h: 0.17, tilt: 14, open: 1}]},
+    sad: {yaw: 3, pitch: -13, roll: 0, split: 16, eyes: pair(0.22, 0.4, -28)},
+    sleepy: {yaw: 6, pitch: -9, roll: -3, split: 16, eyes: pair(0.2, 0.42, 0, 0.42)},
 };
+const copyExpression = ({eyes, ...turn}) => ({...turn, eyes: eyes.map(eye => ({...eye}))});
 /** Errors that come from not hearing you (isled's wording): it looks confused at them, sad at others. */
 const NOT_HEARD = /^(Didn't catch that|The microphone is muted|No microphone)/;
 /** Blinks come every few seconds, at random, and take this long (s). */
@@ -106,9 +103,28 @@ const KEY_LEVEL = 0.32;
 
 const easeOutBack = x => 1 + 2.2 * (x - 1) ** 3 + 1.2 * (x - 1) ** 2;
 const clamp = (value, limit = 1) => Math.max(-limit, Math.min(limit, value));
+const RAD = Math.PI / 180;
 
-// The character: a white head whose eyes follow the pointer, glance about and blink. They stretch as
-// you speak and morph between expressions (see EXPRESSIONS) as it listens, thinks, answers or fails.
+/** `u` turned towards `v` by `angle` (radians), with `v` turned along: one rotation of two axes. */
+function rotate(u, v, angle) {
+    const [c, s] = [Math.cos(angle), Math.sin(angle)];
+    return [u.map((x, i) => x * c + v[i] * s), v.map((x, i) => x * c - u[i] * s)];
+}
+
+/** Where each eye sits on the turned head, and its axes there: the eyes lie on a ball, as bloub's. */
+function placeEyes({yaw, pitch, roll, split}) {
+    let [forward, across, up] = [[0, 0, 1], [1, 0, 0], [0, 1, 0]];
+    [forward, across] = rotate(forward, across, yaw * RAD);
+    [up, forward] = rotate(up, forward, pitch * RAD);
+    [across, up] = rotate(across, up, roll * RAD);
+    return [-1, 1].map(side => {
+        const [at, eyeAcross] = rotate(forward, across, split * side * RAD);
+        return {x: at[0] * EYE_BALL, y: at[1] * EYE_BALL, across: eyeAcross, up};
+    });
+}
+
+// The character: a white head that turns to the pointer, sways, glances about and blinks; its eyes
+// stretch as you speak and it morphs between expressions (see EXPRESSIONS) as it listens and answers.
 const Face = GObject.registerClass(
 class Face extends St.DrawingArea {
     _init() {
@@ -137,7 +153,7 @@ class Face extends St.DrawingArea {
         this._surpriseAt = -SURPRISE_S;
         this._heard = false;
         this._voiceAt = 0;
-        this._eyes = [{...OPEN_EYE}, {...OPEN_EYE}];
+        this._shape = copyExpression(EXPRESSIONS.attentive);
     }
 
     /** listening, typing, thinking, searching, reply, confused or error; each new form pops in. */
@@ -176,15 +192,18 @@ class Face extends St.DrawingArea {
         }
         const goal = EXPRESSIONS[this._expression(time)];
         const morph = 1 - Math.exp(-dt * MORPH_RATE);
-        this._eyes.forEach((eye, index) => {
-            for (const key in OPEN_EYE)
-                eye[key] += ((goal[index][key] ?? OPEN_EYE[key]) - eye[key]) * morph;
+        const shape = this._shape;
+        for (const key of ['yaw', 'pitch', 'roll', 'split'])
+            shape[key] += (goal[key] - shape[key]) * morph;
+        shape.eyes.forEach((eye, index) => {
+            for (const key in eye)
+                eye[key] += (goal.eyes[index][key] - eye[key]) * morph;
         });
 
         if (time >= this._nextBlink) {
             this._blinkAt = time;
             // Now and then a double blink; slow and far apart when sleepy.
-            const sleepy = this._eyes[0].lid > 0.3;
+            const sleepy = shape.eyes[0].open < 0.7;
             this._nextBlink = time + (sleepy ? 3.5 + Math.random() * 3 : Math.random() < 0.15 ? 0.3 : 2.4 + Math.random() * 3);
         }
     }
@@ -218,16 +237,16 @@ class Face extends St.DrawingArea {
         const caret = this._form === 'typing' ? this.lookAt?.() : null;
         if (caret)
             return towards(...caret);
+        // Thinking, sad and confused look where their expression turns the head, swaying a little.
         if (this._form === 'thinking')
-            return {x: 0.75 * Math.sin(time * 1.3), y: -0.75};
+            return {x: 0.3 * Math.sin(time * 1.3), y: -0.15};
         // Reading along, line after line: a sweep left to right, then back.
         if (this._form === 'searching')
             return {x: 0.9 * Math.sin(time * 2.2), y: 0.15 + 0.1 * Math.sin(time * 0.7)};
         if (this._form === 'error')
-            return {x: 0.25 * Math.sin(time * 0.8), y: 0.5};
-        // Puzzled: up and to one side, with a little wobble.
+            return {x: 0.15 * Math.sin(time * 0.8), y: 0.1};
         if (this._form === 'confused')
-            return {x: 0.45 + 0.12 * Math.sin(time * 1.6), y: -0.35};
+            return {x: 0.12 * Math.sin(time * 1.6), y: 0};
         if (time - this._pointerAt < POINTER_REST_S)
             return towards(px, py);
         if (time >= this._nextGlance) {
@@ -254,61 +273,54 @@ class Face extends St.DrawingArea {
         cr.arc(hx, hy, HEAD_RADIUS, 0, 2 * Math.PI);
         cr.fill();
 
+        // The expression's turn, plus where it looks and a slow sway, as if it breathed.
+        const t = this.time * 2 * Math.PI;
+        const shape = this._shape;
+        const turn = {
+            yaw: clamp(shape.yaw + gx * LOOK_TURN.yaw + 2.2 * Math.sin(t / 11.3 + 0.4) + 0.7 * Math.sin(t / 3.7 + 2.1), MAX_TURN.yaw),
+            pitch: clamp(shape.pitch - gy * LOOK_TURN.pitch + 1.7 * Math.sin(t / 9.1 + 1.3) + 0.5 * Math.sin(t / 4.3 + 0.7), MAX_TURN.pitch),
+            roll: shape.roll + 0.9 * Math.sin(t / 13.7 + 3.2),
+            split: shape.split,
+        };
         cr.setSourceRGBA(0.08, 0.08, 0.09, 1);
-        const ey = hy - 0.5 + gy * EYE_TRAVEL.y;
-        this._eyes.forEach((eye, index) => {
-            const side = index === 0 ? -1 : 1;
-            const ex = hx + side * EYE_SPACING + gx * EYE_TRAVEL.x;
-            this._eye(cr, ex, ey, eye, side);
-            if (eye.smile > 0.01)
-                this._smile(cr, ex, ey, eye.smile);
-        });
+        placeEyes(turn).forEach((place, index) => this._eye(cr, hx + place.x, hy + place.y, place, shape.eyes[index]));
         cr.$dispose();
     }
 
-    // A rounded eye in the shape `eye` (see OPEN_EYE), taller as you speak, shut a moment as it blinks;
-    // `side` is -1 for the left one. It fades out as the smile's arch comes in.
-    _eye(cr, x, y, eye, side) {
-        if (eye.smile > 0.99)
-            return;
+    // A rounded eye of `eye`'s shape lying on the head as `place` says (turned, foreshortened); taller as
+    // you speak; its lid falls from the top as it blinks or gets sleepy.
+    _eye(cr, x, y, place, eye) {
         const blinking = this.time - this._blinkAt;
-        const length = eye.lid > 0.3 ? 2.5 * BLINK_S : BLINK_S;
-        const open = blinking >= 0 && blinking < length ? 1 - 0.9 * Math.sin(Math.PI * blinking / length) : 1;
+        const length = eye.open < 0.7 ? 2.5 * BLINK_S : BLINK_S;
+        const blink = blinking >= 0 && blinking < length ? 1 - 0.88 * Math.sin(Math.PI * blinking / length) : 1;
         const listening = this._form === 'listening' ? 1 + 0.32 * this.level : 1;
-        const w = EYE_WIDTH * eye.w;
-        const h = Math.max(EYE_WIDTH * 0.4, EYE_HEIGHT * eye.h * open * listening);
+        const w = EYE_UNIT * eye.w;
+        const h = EYE_UNIT * eye.h * listening;
         const r = Math.min(w, h) / 2;
+        const [ax, ay] = place.across;
+        const [ux, uy] = place.up;
+        const angle = Math.atan2(ay, ax);
         cr.save();
-        cr.translate(x, y - eye.lift);
-        cr.rotate(eye.turn);
-        // The lid: down from the top by `lid`, lower on the outer side by `slant`.
-        if (eye.lid > 0.01 || eye.slant > 0.01) {
-            const inner = -h / 2 + h * eye.lid;
-            const outer = -h / 2 + h * Math.min(0.9, eye.lid + eye.slant);
-            cr.moveTo(-w, side < 0 ? outer : inner);
-            cr.lineTo(w, side < 0 ? inner : outer);
-            cr.lineTo(w, h);
-            cr.lineTo(-w, h);
-            cr.closePath();
+        cr.translate(x, y);
+        cr.rotate(angle);
+        // Foreshortened as the head turns: narrower across, shorter up and down.
+        cr.scale(Math.max(0.2, Math.hypot(ax, ay)), Math.max(0.2, Math.abs(-Math.sin(angle) * ux + Math.cos(angle) * uy)));
+        cr.rotate(eye.tilt * RAD);
+        const shown = Math.max(0.12, eye.open * blink);
+        if (shown < 0.99) {
+            cr.rectangle(-w, h / 2 - h * shown, 2 * w, h * shown + 1);
             cr.clip();
         }
-        cr.setSourceRGBA(0.08, 0.08, 0.09, 1 - eye.smile);
+        // A capsule either way: tall, or wide (a happy squint).
+        const [left, top, right, bottom] = [-w / 2 + r, -h / 2 + r, w / 2 - r, h / 2 - r];
         cr.newSubPath();
-        cr.arc(0, -h / 2 + r, r, Math.PI, 0);
-        cr.arc(0, h / 2 - r, r, 0, Math.PI);
+        cr.arc(right, top, r, -Math.PI / 2, 0);
+        cr.arc(right, bottom, r, 0, Math.PI / 2);
+        cr.arc(left, bottom, r, Math.PI / 2, Math.PI);
+        cr.arc(left, top, r, Math.PI, 1.5 * Math.PI);
         cr.closePath();
         cr.fill();
         cr.restore();
-    }
-
-    // Happy, closed eyes: a little arch, as strong as `amount` (it fades in from the open eye).
-    _smile(cr, x, y, amount) {
-        cr.setSourceRGBA(0.08, 0.08, 0.09, amount);
-        cr.setLineWidth(2.5);
-        cr.setLineCap(1); // round
-        cr.newSubPath();
-        cr.arc(x, y + 2.2, 3.2, Math.PI * 1.1, Math.PI * 1.9);
-        cr.stroke();
     }
 });
 
