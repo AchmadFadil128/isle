@@ -622,6 +622,81 @@ function allocateAt(actor, x, y, width, height) {
     actor.allocate(Clutter.ActorBox.new(x, y, x + width, y + height));
 }
 
+/** How long a speaker's wave takes to come or go, and the gap between waves coming in turn. */
+const WAVE_MS = 180;
+const WAVE_STAGGER_MS = 70;
+
+/** A speaker whose waves come one by one as the volume rises and go as it falls, as macOS's does. */
+export const VolumeGlyph = GObject.registerClass(
+class VolumeGlyph extends St.Widget {
+    _init({size = 16} = {}) {
+        super._init({layout_manager: new Clutter.BinLayout(), x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        const part = name => new St.Icon({gicon: icon(name), icon_size: size});
+        this._body = part('isle-speaker-0-symbolic');
+        this._off = part('isle-speaker-off-symbolic');
+        this._off.opacity = 0;
+        // Each wave grows out from the speaker's cone.
+        this._waves = [1, 2, 3].map(n => {
+            const wave = part(`isle-speaker-wave-${n}-symbolic`);
+            wave.opacity = 0;
+            wave.set_pivot_point(0.45, 0.5);
+            wave.set_scale(0.6, 0.6);
+            wave.on = false;
+            return wave;
+        });
+        for (const actor of [this._body, ...this._waves, this._off])
+            this.add_child(actor);
+        this._count = 0;
+        this._muted = false;
+        // Waves to bring in once on screen: ease() skips to the end before then. The last child is mapped last.
+        this._pending = false;
+        this._off.connect('notify::mapped', () => {
+            if (this._off.mapped && this._pending) {
+                this._pending = false;
+                this._sync(true);
+            }
+        });
+    }
+
+    /** A wave per third of `level` (0..1), none at 0, the speaker slashed when `muted`; `fresh` brings
+     * the waves in one after another, for an alert just shown. */
+    setLevel(level, muted, {fresh = false} = {}) {
+        this._count = Math.ceil(Math.min(1, Math.max(0, level)) * 3);
+        this._muted = muted;
+        if (fresh) {
+            for (const wave of this._waves) {
+                wave.remove_all_transitions();
+                wave.opacity = 0;
+                wave.set_scale(0.6, 0.6);
+                wave.on = false;
+            }
+            this._pending = !this._off.mapped;
+        }
+        if (!this._pending)
+            this._sync(fresh);
+    }
+
+    _sync(stagger) {
+        const shown = this._muted ? 0 : this._count;
+        this._waves.forEach((wave, index) => {
+            const on = index < shown;
+            if (on === wave.on)
+                return;
+            wave.on = on;
+            wave.ease({
+                opacity: on ? 255 : 0,
+                scale_x: on ? 1 : 0.6,
+                scale_y: on ? 1 : 0.6,
+                delay: on && stagger ? index * WAVE_STAGGER_MS : 0,
+                duration: WAVE_MS,
+                mode: on ? Clutter.AnimationMode.EASE_OUT_CUBIC : Clutter.AnimationMode.EASE_IN_QUAD,
+            });
+        });
+        this._body.ease({opacity: this._muted ? 0 : 255, duration: WAVE_MS});
+        this._off.ease({opacity: this._muted ? 255 : 0, duration: WAVE_MS});
+    }
+});
+
 /** A thin horizontal level meter. */
 export const LevelBar = GObject.registerClass(
 class LevelBar extends St.Widget {

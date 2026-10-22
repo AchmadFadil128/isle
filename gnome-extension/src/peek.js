@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Short-lived alerts the island grows to show. An alert: {key (same key replaces), icon | gicon | art, badge,
-// appIcon, ring, ringIconSize, title, titleLines, subtitle, tone, value, status, level, action, duration, onActivate, page, priority, transient}.
+// appIcon, ring, ringIconSize, volume, title, titleLines, subtitle, tone, value, status, level, action, duration, onActivate, page, priority, transient}.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -10,7 +10,7 @@ import St from 'gi://St';
 
 import {VERTICAL} from './compat.js';
 import * as Palette from './palette.js';
-import {Art, LevelBar, Ring, icon, isSymbolic, ownIcon, pillButton, wrapLines} from './widgets.js';
+import {Art, LevelBar, Ring, VolumeGlyph, icon, isSymbolic, ownIcon, pillButton, wrapLines} from './widgets.js';
 
 /** Narrowest and widest an alert gets; in between it fits its content. */
 const MIN_WIDTH = 220;
@@ -87,6 +87,7 @@ class PeekView extends St.Widget {
         this._ringIcon = new St.Icon({icon_size: 12});
         this._ringBadge = new St.Bin({style_class: 'isle-peek-ring-badge', child: this._ringIcon});
         this._ring = new Ring({size: 32, lineWidth: 3, child: this._ringBadge});
+        this._volume = new VolumeGlyph();
         this._row.add_child(this._badge);
 
         const texts = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
@@ -123,7 +124,7 @@ class PeekView extends St.Widget {
         // Put away, the next alert here is a new one and animates in.
         this.connect('notify::mapped', () => {
             if (!this.mapped)
-                this._ringKey = this._levelKey = null;
+                this._ringKey = this._levelKey = this._volumeKey = null;
         });
         this.connect('destroy', () => this._onDestroy());
     }
@@ -161,6 +162,12 @@ class PeekView extends St.Widget {
             else
                 this._ring.jumpTo(alert.ring);
             this._ringKey = ringKey;
+        } else if (alert.volume) {
+            // A new volume alert brings its waves in; changes while shown add or take away one.
+            this._volume.setLevel(alert.volume.level, alert.volume.muted, {fresh: alert.key !== this._volumeKey});
+            this._volume.style = `color: ${color};`;
+            this._setChild(this._badge, this._volume);
+            this._badge.style_class = 'isle-peek-icon';
         } else {
             // An app's own colour icon stands alone; a symbolic one gets a badge.
             const appIcon = alert.appIcon && !isSymbolic(gicon);
@@ -175,6 +182,7 @@ class PeekView extends St.Widget {
             : null;
         if (!hasRing)
             this._ringKey = null;
+        this._volumeKey = alert.volume ? alert.key : null;
 
         // Two lines at most for a title that may run long (an answer); the island widens and grows by the
         // line. Cut here: with wrapping, Pango's own … would keep the first line alone.
@@ -279,7 +287,7 @@ class PeekView extends St.Widget {
 
     _onDestroy() {
         // Pieces not currently shown are not children and must be freed here.
-        for (const actor of [this._icon, this._artBox, this._ring, this._value, this._status, this._levelBox]) {
+        for (const actor of [this._icon, this._artBox, this._ring, this._volume, this._value, this._status, this._levelBox]) {
             if (!actor.get_parent())
                 actor.destroy();
         }

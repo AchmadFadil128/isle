@@ -71,6 +71,8 @@ export function osd(gicon, text, level, maxLevel) {
         levelText: hasLevel ? percentText(level * 100) : null,
         tone: 'neutral',
         duration: OSD_DURATION,
+        // Volume: the speaker's waves follow the level (see VolumeGlyph).
+        volume: kind === 'Volume' ? {level: hasLevel ? fraction : 0, muted: iconName.includes('muted')} : undefined,
     };
 }
 
