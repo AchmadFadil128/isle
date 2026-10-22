@@ -315,6 +315,9 @@ class TasksPage extends Page {
 
     onDeactivate() {
         this._stopAdding();
+        // Nothing in the middle of anything: the list stays as it is, with no rebuild as the page goes.
+        if (this._renaming === null && this._leaving.size === 0)
+            return;
         this._renaming = null;
         // Closing cancels the linger: ticked ones are done now, so the list never stays frozen.
         for (const id of this._leaving) {

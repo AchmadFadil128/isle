@@ -33,6 +33,17 @@ export function label(text, styleClass, props = {}) {
     return new St.Label({text, style_class: styleClass, y_align: Clutter.ActorAlign.CENTER, ...props});
 }
 
+/**
+ * Fences in a bin's or fixed layout's children with two empty ends, so St never restyles a child's whole subtree
+ * as it becomes or stops being the first or last one shown. Returns the end to add further children before.
+ */
+export function fence(box) {
+    box.insert_child_at_index(new Clutter.Actor(), 0);
+    const end = new Clutter.Actor();
+    box.add_child(end);
+    return end;
+}
+
 /** A round icon button. */
 export function iconButton(iconName, styleClass, onClick, {size = 16, accessibleName = ''} = {}) {
     const button = new St.Button({
@@ -259,7 +270,6 @@ export function isSymbolic(gicon) {
     return false;
 }
 
-/** Whether the image at `path` looks like an icon, not a cover: its corners are see-through. */
 /** A key for `path`'s current contents: a player may write new art under the same name. */
 export function fileKey(path) {
     try {
@@ -301,9 +311,59 @@ const isIcon = memoByFile(path => {
     }
 });
 
+/** Longest side of the copies covers are shown from: the biggest art, 104 px, at up to 2.5× scale. */
+const COVER_SIZE = 256;
+/** Copies kept; none on screen is that many songs old (see `memoByFile`). */
+const COVERS_KEPT = 30;
+const coversMade = [];
+
+/**
+ * A small copy of the cover at `path`, decoded and saved off the main thread, or null: St decodes a background
+ * image whole in the frame that first paints it, tens of milliseconds for a big cover.
+ */
+export const smallCover = memoByFile(async path => {
+    if (!path)
+        return null;
+    try {
+        const pixbuf = await new Promise((resolve, reject) => {
+            const stream = Gio.File.new_for_path(path).read(null);
+            GdkPixbuf.Pixbuf.new_from_stream_at_scale_async(stream, COVER_SIZE, COVER_SIZE, true, null, (_source, result) => {
+                stream.close(null);
+                try {
+                    resolve(GdkPixbuf.Pixbuf.new_from_stream_finish(result));
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        });
+        const dir = GLib.build_filenamev([GLib.get_user_runtime_dir(), 'isle-covers']);
+        GLib.mkdir_with_parents(dir, 0o700);
+        const copy = GLib.build_filenamev([dir, `${GLib.uuid_string_random()}.png`]);
+        const out = Gio.File.new_for_path(copy).replace(null, false, Gio.FileCreateFlags.PRIVATE, null);
+        await new Promise((resolve, reject) => {
+            pixbuf.save_to_streamv_async(out, 'png', [], [], null, (_source, result) => {
+                out.close(null);
+                try {
+                    resolve(GdkPixbuf.Pixbuf.save_to_stream_finish(result));
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        });
+        coversMade.push(copy);
+        if (coversMade.length > COVERS_KEPT)
+            GLib.unlink(coversMade.shift());
+        return copy;
+    } catch {
+        return null;
+    }
+});
+
 /** Square cover art with rounded corners and a placeholder. */
-export const Art = GObject.registerClass(
-class Art extends St.Bin {
+export const Art = GObject.registerClass({
+    // The image changed; `showsIcon` may have too.
+    Signals: {'shown': {}},
+}, class Art extends St.Bin {
     _init({size, radius}) {
         super._init({
             style_class: 'isle-art',
@@ -320,6 +380,7 @@ class Art extends St.Bin {
             style_class: 'isle-art-placeholder',
         });
         this.setPath('');
+        this.connect('destroy', () => (this._destroyed = true));
     }
 
     /** Resizes the art; `radius` is its new corner radius. */
@@ -332,10 +393,22 @@ class Art extends St.Bin {
         this.setPath(path);
     }
 
+    /** Shows the cover at `path`, once its small copy is ready (see `smallCover`); until then the last one. */
     setPath(path) {
         if (path === this._path)
             return;
         this._path = path;
+        if (!path) {
+            this._show(null);
+            return;
+        }
+        smallCover(path).then(cover => {
+            if (path === this._path && !this._destroyed)
+                this._show(cover ?? path);
+        });
+    }
+
+    _show(path) {
         const base = `border-radius: ${this._radius}px;`;
         if (path) {
             const uri = GLib.filename_to_uri(path, null).replace(/"/g, '%22');
@@ -352,6 +425,7 @@ class Art extends St.Bin {
             this.style = base;
             this.child = this._placeholder;
         }
+        this.emit('shown');
     }
 
     /** Whether the image is an app's logo rather than a cover. */

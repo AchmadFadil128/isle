@@ -41,6 +41,11 @@ import {TextWriter} from './writer.js';
 /** The pointer must rest this long before the island opens, moving at most this far meanwhile. */
 const EXPAND_DELAY_MS = 120;
 const REST_DISTANCE_PX = 10;
+/** The views and pages are laid out ahead this long after starting, a step at a time (see `_warmUp`). */
+const WARM_START_MS = 3000;
+const WARM_STEP_MS = 60;
+/** And again this long after the island closes, or a page changes out of sight, while it stays closed. */
+const WARM_AFTER_CLOSE_MS = 1500;
 /** Outside an island that shrank under it, the pointer is checked this often, and left this long. */
 const MOVE_CHECK_MS = 250;
 const STILL_OUTSIDE_MS = 30000;
@@ -92,6 +97,8 @@ export class Controller {
         this._daemon = new Daemon();
         this._timeouts = new Map();
         this._presentation = 'compact';
+        /** Whether `_warmUp` shows the open island's view out of sight. */
+        this._warmShown = false;
         this._expandWanted = false;
         this._alert = null;
         this._queue = [];
@@ -164,6 +171,7 @@ export class Controller {
 
         this._updateGeometry();
         this._render();
+        this._later('warm', WARM_START_MS, () => this._warmUp(true));
     }
 
     _buildExpanded() {
@@ -180,6 +188,7 @@ export class Controller {
         for (const page of pages) {
             page.connect('request-keyboard', (_page, wanted) => this._setKeyboard(wanted));
             page.connect('request-close', () => this.collapse());
+            page.connect('cold', () => this._scheduleWarm());
         }
         const expanded = new ExpandedView(this._daemon, this._privacy, this._call, this._settings, pages);
         expanded.connect('page-changed', () => {
@@ -210,7 +219,9 @@ export class Controller {
 
     _connectSignals() {
         const island = this._island;
-        island.connect('notify::hover', () => this._onHoverChanged());
+        island.connect('notify::hovered', () => this._onHoverChanged());
+        // Hidden (under a fullscreen window), nothing can be laid out: it waits until shown again.
+        island.connect('notify::mapped', () => this._scheduleWarm());
         island.connect('button-release-event', (_actor, event) => this._onClick(event));
         island.connect('geometry-changed', () => this._shelfHelper.sync());
 
@@ -224,7 +235,7 @@ export class Controller {
         });
         this._shelfHelper.connect('drag-end', () => {
             this._shelf.dropping = false;
-            if (!this._island.hover)
+            if (!this._island.hovered)
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
         });
         // It went elsewhere after all.
@@ -320,6 +331,8 @@ export class Controller {
         const presentation = this._voiceOpen ? 'voice'
             : this._expandWanted ? 'expanded' : this._alert ? 'peek' : 'compact';
         this._presentation = presentation;
+        if (presentation !== 'compact')
+            this._putAwayWarm();
         const top = this._topBar.height;
         const inBar = this._settings.get_boolean('island-in-top-bar');
         // Before measuring it: inside the bar it is smaller.
@@ -375,6 +388,65 @@ export class Controller {
         this._shelfHelper.sync();
     }
 
+    /**
+     * Lays out ahead, while closed and a step at a time, what would otherwise be styled and laid out in the
+     * frames that show it: the pages that changed out of sight, and with `all` the alerts' and voice's views.
+     */
+    _warmUp(all) {
+        const island = this._island;
+        const expanded = this._expanded;
+        if (!island.mapped)
+            return;
+        const pages = expanded.pages.filter(page => page.cold);
+        const steps = all
+            ? [...this._peeks, this._voice].map(view => () => island.warmView(view, true) && island.warmView(view, false))
+            : [];
+        if (pages.length || all) {
+            steps.push(() => {
+                this._warmShown = island.warmView(expanded, true);
+                expanded.warmTabs();
+            });
+            // Each page stays shown until the next step, so a frame lays it out too.
+            pages.forEach((page, i) => steps.push(() => {
+                if (!this._warmShown)
+                    return;
+                if (i)
+                    expanded.warmPage(pages[i - 1], false);
+                expanded.warmPage(page, true);
+            }));
+            steps.push(() => this._putAwayWarm());
+        }
+        const next = () => {
+            // Opened meanwhile (see `_render`): the rest waits.
+            if (this._presentation !== 'compact') {
+                this._later('warm', WARM_START_MS, () => this._warmUp(all));
+                return;
+            }
+            steps.shift()?.();
+            if (steps.length)
+                this._later('warm', WARM_STEP_MS, next);
+            else
+                this._scheduleWarm();
+        };
+        next();
+    }
+
+    /** Hides what `_warmUp` showed out of sight. */
+    _putAwayWarm() {
+        if (!this._warmShown)
+            return;
+        this._warmShown = false;
+        this._expanded.hideWarmPages();
+        this._island.warmView(this._expanded, false);
+    }
+
+    /** Lays out the pages that changed out of sight, once the island has rested closed a while. */
+    _scheduleWarm() {
+        if (this._presentation === 'compact' && this._island.mapped && !this._timeouts.has('warm') &&
+            this._expanded.pages.some(page => page.cold))
+            this._later('warm', WARM_AFTER_CLOSE_MS, () => this._warmUp(false));
+    }
+
     _syncTint() {
         const expanded = this._presentation === 'expanded';
         const voice = this._presentation === 'voice';
@@ -392,13 +464,13 @@ export class Controller {
     _onHoverChanged() {
         // An answer stays while the pointer is on it, and as long again once it leaves.
         if (this._voiceOpen) {
-            if (this._island.hover)
+            if (this._island.hovered)
                 this._cancel('voice-close');
             else
                 this._scheduleVoiceClose(Math.min(this._voiceCloseMs, VOICE_LEAVE_MS));
             return;
         }
-        if (this._island.hover) {
+        if (this._island.hovered) {
             this._cancel('collapse');
             if (!this._expandWanted)
                 this._expandOnRest();
@@ -421,7 +493,7 @@ export class Controller {
             const [nowX, nowY] = global.get_pointer();
             if (Math.hypot(nowX - x, nowY - y) <= REST_DISTANCE_PX)
                 this.expand();
-            else if (this._island.hover)
+            else if (this._island.hovered)
                 this._expandOnRest();
         });
     }
@@ -506,6 +578,8 @@ export class Controller {
     collapse() {
         this._cancel('collapse');
         this._setKeyboard(false);
+        // Once closed and settled, what changed meanwhile is laid out for next time (see `_warmUp`).
+        this._later('warm', WARM_AFTER_CLOSE_MS, () => this._warmUp(true));
         if (this._voiceOpen) {
             this._closeVoice();
             this._nextAlert();
@@ -567,7 +641,7 @@ export class Controller {
             global.stage.disconnect(this._stageCapture);
             Main.popModal(grab);
             // An open assistant closes on its own timer.
-            if (!this._island.hover && !this._voiceOpen)
+            if (!this._island.hovered && !this._voiceOpen)
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
         }
     }
@@ -830,7 +904,7 @@ export class Controller {
         // An action may have closed it already.
         if (!this._voiceOpen)
             return;
-        if (this._voiceAnswered && !this._island.hover)
+        if (this._voiceAnswered && !this._island.hovered)
             this._later('voice-close', ms, () => this.collapse());
     }
 
@@ -891,8 +965,8 @@ export class Controller {
     // Timeouts
 
     _later(name, ms, callback) {
-        if (!this._settings)
-            return; // destroyed
+        if (this._destroying)
+            return;
         this._cancel(name);
         this._timeouts.set(name, GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
             this._timeouts.delete(name);
@@ -917,10 +991,11 @@ export class Controller {
             Main.wm.removeKeybinding('voice-shortcut');
         if (this._voiceOpen)
             this._closeVoice();
-        // Releasing the keyboard may schedule a collapse; cancel it after.
+        // Releasing the keyboard may schedule a collapse; cancel it after. Tearing down schedules nothing.
         this._setKeyboard(false);
         for (const name of [...this._timeouts.keys()])
             this._cancel(name);
+        this._destroying = true;
 
         const monitor = global.backend.get_core_idle_monitor();
         if (this._idleWatch)

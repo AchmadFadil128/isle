@@ -12,7 +12,7 @@ import {timerColor} from './compact.js';
 import {VERTICAL} from './compat.js';
 import * as Format from './format.js';
 import * as Playback from './playback.js';
-import {Bars, PrivacyDots, RecordingDot, Ring, icon, iconButton, label} from './widgets.js';
+import {Bars, PrivacyDots, RecordingDot, Ring, fence, icon, iconButton, label} from './widgets.js';
 
 export const EXPANDED_WIDTH = 600;
 /** The least room between the tabs and the status on the right. */
@@ -254,6 +254,7 @@ export const ExpandedView = GObject.registerClass({
             page.hide();
             this._pager.add_child(page);
         }
+        fence(this._pager);
         this.page.show();
         area.add_child(this._pager);
         return area;
@@ -280,17 +281,29 @@ export const ExpandedView = GObject.registerClass({
             return 0;
         // As wide as with the longest tab name open, so switching tabs never resizes the island. Names
         // are measured in the open one's font: the others, never shown yet, may not be styled.
-        const openName = this._tabs[this._index]?.name;
-        const open = openName?.get_preferred_width(-1)[1] ?? 0;
-        // The open name's own margin (its gap from the icon), the same for every name.
-        const gap = open - (openName?.clutter_text.get_preferred_width(-1)[1] ?? open);
-        const names = this._tabs.map(({name}) => gap + (openName?.clutter_text.create_pango_layout(name.text).get_pixel_size()[0] ?? 0));
+        const longest = this._longestName();
         // The tabs without their names, whose widths ease while switching, then room for the longest name.
         const shown = this._tabs.reduce((sum, {nameClip}) => sum + nameClip.width, 0);
         const [, tabs] = this._tabsBox.get_preferred_width(-1);
         const [, status] = this._status.get_preferred_width(-1);
-        return Math.ceil(tabs - shown + Math.max(open, ...names) + status +
+        return Math.ceil(tabs - shown + longest + status +
             this._header.get_theme_node().get_horizontal_padding() + HEADER_GAP);
+    }
+
+    /** The widest tab name with its gap from the icon, measured once per font: names never change. */
+    _longestName() {
+        const openName = this._tabs[this._index]?.name;
+        if (!openName)
+            return 0;
+        const font = openName.get_theme_node().get_font().to_string();
+        if (this._names?.font !== font) {
+            // The open name's own margin (its gap from the icon), the same for every name.
+            const gap = openName.get_preferred_width(-1)[1] - openName.clutter_text.get_preferred_width(-1)[1];
+            const widest = Math.max(...this._tabs.map(({name}) =>
+                openName.clutter_text.create_pango_layout(name.text).get_pixel_size()[0]));
+            this._names = {font, width: gap + widest};
+        }
+        return this._names.width;
     }
 
     /** RGB colour to wash the island with, or null. */
@@ -301,6 +314,50 @@ export const ExpandedView = GObject.registerClass({
     /** How `tint` colours the island; see `Island.setTint`. */
     get tintStyle() {
         return this.page.tintStyle;
+    }
+
+    /** The pages, in order. */
+    get pages() {
+        return this._pages;
+    }
+
+    /**
+     * Shows a page out of sight while this view is (see `Island.warmView`), or hides it again: shown across
+     * a frame, it is styled and laid out ahead. The open page is shown with the view.
+     */
+    warmPage(page, shown) {
+        if (!shown) {
+            page.coolDown();
+            if (page !== this.page)
+                page.hide();
+            return;
+        }
+        if (!this.mapped)
+            return;
+        page.show();
+        page.warmUp();
+        page.cold = false;
+    }
+
+    /** Puts away the pages `warmPage` shows. */
+    hideWarmPages() {
+        for (const page of this._pages)
+            this.warmPage(page, false);
+    }
+
+    /** Styles each tab open and hovered once, out of sight, for its first time to cost no frame. */
+    warmTabs() {
+        if (this._tabsWarmed || !this.mapped)
+            return;
+        this._tabsWarmed = true;
+        for (const {tab} of this._tabs) {
+            for (const pseudo of ['checked', 'hover']) {
+                if (tab.has_style_pseudo_class(pseudo))
+                    continue;
+                tab.add_style_pseudo_class(pseudo);
+                tab.remove_style_pseudo_class(pseudo);
+            }
+        }
     }
 
     pageNamed(name) {

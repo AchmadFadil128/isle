@@ -20,6 +20,8 @@ export const Page = GObject.registerClass({
         'news-changed': {},
         // `available` changed.
         'availability-changed': {},
+        // Changed out of sight: worth laying out before it is next shown (see `markCold`).
+        'cold': {},
     },
 }, class Page extends St.Widget {
     _init(daemon, params) {
@@ -28,6 +30,8 @@ export const Page = GObject.registerClass({
         this._active = false;
         this._timeouts = new Map();
         this._daemonHandlers = [];
+        /** Whether it changed since last laid out out of sight (see `Expanded.warmPage`). */
+        this.cold = true;
         this.connect('destroy', () => this._onPageDestroy());
     }
 
@@ -82,11 +86,27 @@ export const Page = GObject.registerClass({
 
     onDeactivate() {}
 
+    /** Readies, while shown out of sight, what its showing would build (see `Expanded.warmPage`). */
+    warmUp() {}
+
+    /** Puts away what `warmUp` showed. */
+    coolDown() {}
+
+    /** Notes a change made out of sight: its next showing would style and lay it out in the frames it animates. */
+    markCold() {
+        if (this.cold || this.mapped)
+            return;
+        this.cold = true;
+        this.emit('cold');
+    }
+
     /** Calls `callback` whenever one of the daemon's `keys` changes. */
     watch(keys, callback) {
         this._daemonHandlers.push(this.daemon.connect('changed', (_daemon, key) => {
-            if (keys.includes(key))
+            if (keys.includes(key)) {
                 callback();
+                this.markCold();
+            }
         }));
     }
 

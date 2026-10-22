@@ -9,6 +9,7 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import {GENTLE, Spring, SpringDriver} from './spring.js';
+import {fence} from './widgets.js';
 
 
 /** Sideways speed (px/s) `nudge` gives: a ~15 px stretch that springs back, as iOS does at a volume limit. */
@@ -17,6 +18,8 @@ const NUDGE_VELOCITY = 220;
 const GLIDE_MS = 360;
 /** The shape layer reaches this far past the island on each side (see `_repaint`). */
 const SHAPE_PAD = 1;
+/** Where a view shown out of sight is moved (see `warmView`): far above the island, beyond its clip. */
+const OUT_OF_REACH = -10000;
 
 /** How long a tint takes to come and go: a wash, and a glow (which lingers out). */
 const TINT_FADE = {wash: [450, 450], glow: [380, 1100], siri: [300, 500]};
@@ -41,6 +44,8 @@ export const Island = GObject.registerClass({
         // How strongly `tint` washes the island, so it can fade in and out.
         'tint-strength': GObject.ParamSpec.double('tint-strength', null, null,
             GObject.ParamFlags.READWRITE, 0, 1, 0),
+        // Like `hover`, without its :hover pseudo class: setting that restyles every view.
+        'hovered': GObject.ParamSpec.boolean('hovered', null, null, GObject.ParamFlags.READABLE, false),
     },
     Signals: {'geometry-changed': {}},
 }, class Island extends St.Widget {
@@ -48,14 +53,15 @@ export const Island = GObject.registerClass({
         super._init({
             name: 'isleIsland',
             reactive: true,
-            track_hover: true,
             layout_manager: new Clutter.FixedLayout(),
         });
 
         /** Height of the top bar the island grows out of; 0 for none. */
         this._topInset = 0;
+        this._hovered = false;
         this._monitor = null;
         this._view = null;
+        this._views = [];
         this._tint = null;
         this._tintStyle = 'wash';
         this._tintStrength = 0;
@@ -89,7 +95,31 @@ export const Island = GObject.registerClass({
             clip_to_allocation: true,
         });
         this.add_child(this._stage);
+        this._stageEnd = fence(this._stage);
         this.connect('destroy', () => this._onDestroy());
+    }
+
+    get hovered() {
+        return this._hovered;
+    }
+
+    _setHovered(hovered) {
+        if (hovered === this._hovered)
+            return;
+        this._hovered = hovered;
+        this.notify('hovered');
+    }
+
+    vfunc_enter_event(event) {
+        this._setHovered(true);
+        return super.vfunc_enter_event(event);
+    }
+
+    vfunc_leave_event(event) {
+        const related = event.get_related();
+        if (!related || !this.contains(related))
+            this._setHovered(false);
+        return super.vfunc_leave_event(event);
     }
 
     /** The height of the bar the island grows out of; its body starts below. */
@@ -194,6 +224,24 @@ export const Island = GObject.registerClass({
         this._showView(view);
     }
 
+    /**
+     * Shows `view` out of sight and out of the pointer's reach, or hides it again, while the island rests
+     * closed: its next real showing finds its style and layout ready. Never the view on screen; false then.
+     */
+    warmView(view, shown) {
+        if (view === this._view)
+            return false;
+        if (shown) {
+            view.opacity = 0;
+            view.translation_y = OUT_OF_REACH;
+            view.show();
+        } else {
+            view.hide();
+            view.translation_y = 0;
+        }
+        return true;
+    }
+
     /** Whether the island is still changing shape. */
     get morphing() {
         return this._driver.running;
@@ -203,9 +251,11 @@ export const Island = GObject.registerClass({
     addView(view) {
         view.connect('notify::width', () => this._onViewWidth(view));
         view.opacity = 0;
-        view.reactive = false;
+        // For good: toggling it would restyle the view's every child.
+        view.reactive = true;
         view.hide();
-        this._stage.add_child(view);
+        this._stage.insert_child_below(view, this._stageEnd);
+        this._views.push(view);
     }
 
     /** A quick rubber-band stretch, e.g. pressing volume up at 100%. */
@@ -252,7 +302,6 @@ export const Island = GObject.registerClass({
         const previous = this._view;
         if (previous) {
             previous.remove_all_transitions();
-            previous.reactive = false;
             previous.ease({
                 opacity: 0,
                 duration: FADE_OUT,
@@ -268,8 +317,7 @@ export const Island = GObject.registerClass({
         // Still fading out (shown again within a moment): it comes back from where it is, without a blink.
         const returning = view.visible && view.opacity > 0;
         view.remove_all_transitions();
-        view.translation_x = 0;
-        view.reactive = true;
+        view.translation_x = view.translation_y = 0;
         view.show();
         if (!returning)
             view.opacity = 0;
@@ -304,7 +352,7 @@ export const Island = GObject.registerClass({
             this._islandFraction = exact - this._islandX;
             this.set_position(this._islandX, y);
         }
-        for (const view of this._stage.get_children())
+        for (const view of this._views)
             this._placeView(view);
         this._shape.queue_repaint();
         if (this._glow.visible)

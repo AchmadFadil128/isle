@@ -65,6 +65,9 @@ class NotificationsPage extends Page {
             center.connect('changed', () => {
                 if (this.active)
                     this._update();
+                else
+                    this._stale = true;
+                this.markCold();
                 this.emit('news-changed');
             }),
             center.connect('dnd-changed', () => this._updateDnd()),
@@ -121,6 +124,9 @@ class NotificationsPage extends Page {
     }
 
     _update() {
+        this._stale = false;
+        /** Each card's "5m ago", with when it came, to bring up to date without a rebuild. */
+        this._times = [];
         const notifications = this._center.notifications;
         const count = notifications.length;
         this._count.text = count ? `${count} ${count === 1 ? 'notification' : 'notifications'}` : '';
@@ -207,6 +213,7 @@ class NotificationsPage extends Page {
         // The time and the close button share one spot.
         const corner = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
         const time = label(Format.ago(notification.datetime), 'isle-notification-time', {x_align: Clutter.ActorAlign.END});
+        this._times.push([time, notification.datetime]);
         corner.add_child(time);
         header.add_child(title);
         header.add_child(corner);
@@ -236,9 +243,18 @@ class NotificationsPage extends Page {
         return row;
     }
 
+    warmUp() {
+        if (this._stale)
+            this._update();
+    }
+
     onActivate() {
         this._center.acknowledgeAll();
-        this._update();
+        // Rebuilt only if something came or went while it was closed; else just the times move on.
+        if (this._stale)
+            this._update();
+        else
+            this._times.forEach(([time, datetime]) => (time.text = Format.ago(datetime)));
     }
 
     _onDestroy() {

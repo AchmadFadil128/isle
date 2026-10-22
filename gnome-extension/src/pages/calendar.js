@@ -176,7 +176,10 @@ class CalendarPage extends Page {
         this._unbindSource();
         this._source = source;
         if (source)
-            this._sourceChanged = source.connect('changed', () => this._refresh());
+            this._sourceChanged = source.connect('changed', () => {
+                this._refresh();
+                this.markCold();
+            });
     }
 
     _unbindSource() {
@@ -252,10 +255,28 @@ class CalendarPage extends Page {
 
     // Showing
 
-    _refresh() {
-        if (!this.active)
+    /** Draws the month ahead, so the first time the page opens costs no frames. */
+    warmUp() {
+        this._bindSource();
+        this._requestMonth();
+        this._refresh(true);
+    }
+
+    _refresh(force = false) {
+        if (!this.active && !force)
             return; // drawn when the page opens
         this._today = startOfDay(new Date());
+        // Redrawn only when what it shows changed: opening the page, or the desktop's calendars
+        // answering again with the same events, must not rebuild it while it slides in.
+        const now = new Date();
+        const shown = JSON.stringify([
+            this._today.getTime(), this._month.getTime(), this._selected.getTime(), [...this._busyDays()],
+            this._eventsOn(this._selected).map(e => [e.title, +e.start, +e.end, e.allDay, e.ownId,
+                !e.allDay && (e.end ?? e.start) < now]),
+        ]);
+        if (shown === this._shown)
+            return;
+        this._shown = shown;
         this._renderMonth();
         this._renderAgenda();
     }

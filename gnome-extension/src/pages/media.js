@@ -12,7 +12,7 @@ import {vividColorOfFile} from '../colors.js';
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import * as Playback from '../playback.js';
-import {Art, Bars, Slider, icon, iconButton, label, setButtonIcon} from '../widgets.js';
+import {Art, Bars, Slider, fence, icon, iconButton, label, setButtonIcon, smallCover} from '../widgets.js';
 import {LyricsPane} from './lyrics.js';
 import {Page} from './page.js';
 
@@ -55,6 +55,7 @@ class MediaPage extends Page {
         this._empty = this._buildEmpty();
         for (const child of [this._player, this._lyricsLayout, this._audioLayout, this._empty])
             this.add_child(child);
+        fence(this);
 
         this.watch(['nowPlaying', 'lyrics'], () => this._update());
         this._audioChanged = audio.connect('changed', () => this._updateAudio());
@@ -85,6 +86,7 @@ class MediaPage extends Page {
     /** Cover art with the playing app's icon on its corner. */
     _art(size, radius) {
         const art = new Art({size, radius});
+        art.connect('shown', () => this._syncBadges());
         art.reactive = true;
         art.connect('button-release-event', () => {
             this.daemon.call('media', 'Raise');
@@ -275,14 +277,31 @@ class MediaPage extends Page {
         this.emit('tint-changed');
     }
 
-    _update() {
-        const {nowPlaying} = this.daemon.state;
-        const hasTrack = Playback.hasTrack(nowPlaying);
+    /** Shows the lyrics and the outputs too, out of sight, so opening them costs no frames (see `coolDown`). */
+    warmUp() {
+        if (!Playback.hasTrack(this.daemon.state.nowPlaying))
+            return;
+        this._lyricsLayout.show();
+        this._audioLayout.show();
+    }
+
+    coolDown() {
+        this._syncMode();
+    }
+
+    /** Shows the layout for the mode; returns whether there is a song. */
+    _syncMode() {
+        const hasTrack = Playback.hasTrack(this.daemon.state.nowPlaying);
         this._empty.visible = !hasTrack;
         this._player.visible = hasTrack && this._mode === 'player';
         this._lyricsLayout.visible = this._shown('lyrics');
         this._audioLayout.visible = this._shown('audio');
-        if (!hasTrack)
+        return hasTrack;
+    }
+
+    _update() {
+        const {nowPlaying} = this.daemon.state;
+        if (!this._syncMode())
             return;
 
         const [playerTitle, sideTitle] = this._titles;
@@ -298,18 +317,22 @@ class MediaPage extends Page {
         for (const button of this._playButtons)
             setButtonIcon(button, playIcon);
 
-        // Which app plays it, unless the cover already is that app's logo.
-        const appIcon = Playback.playerApp(nowPlaying)?.get_icon() ?? null;
-        for (const {badge, icon: badgeIcon} of this._badges) {
-            badgeIcon.gicon = appIcon;
-            badge.visible = Boolean(appIcon) && !this._arts[0].showsIcon;
-        }
+        this._syncBadges();
 
         for (const scrubber of this._scrubbers)
             scrubber.reactive = nowPlaying.can_seek && nowPlaying.length_us > 0;
         this._lyricsPane.update();
         this._syncBars();
         this._tickProgress();
+    }
+
+    /** Which app plays it, unless the cover already is that app's logo. */
+    _syncBadges() {
+        const appIcon = Playback.playerApp(this.daemon.state.nowPlaying)?.get_icon() ?? null;
+        for (const {badge, icon: badgeIcon} of this._badges) {
+            badgeIcon.gicon = appIcon;
+            badge.visible = Boolean(appIcon) && !this._arts[0].showsIcon;
+        }
     }
 
     _updateAudio() {
@@ -354,9 +377,14 @@ class MediaPage extends Page {
         if (path === this._tintPath)
             return;
         this._tintPath = path;
-        this._tint = vividColorOfFile(path);
-        if (this._shown('lyrics'))
-            this.emit('tint-changed');
+        // From the small copy the art shows: the cover itself may be big.
+        smallCover(path).then(cover => {
+            if (path !== this._tintPath || this._destroyed)
+                return;
+            this._tint = vividColorOfFile(cover ?? path);
+            if (this._shown('lyrics'))
+                this.emit('tint-changed');
+        });
     }
 
     _tickProgress() {

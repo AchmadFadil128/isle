@@ -26,8 +26,15 @@ class FocusPage extends Page {
         this.add_child(this._timer);
         this.add_child(new St.Widget({style_class: 'isle-focus-divider', y_align: Clutter.ActorAlign.CENTER}));
         this.add_child(this._tasks);
-        for (const half of [this._timer, this._tasks])
+        for (const half of [this._timer, this._tasks]) {
             half.connect('request-keyboard', (_half, wanted) => this.emit('request-keyboard', wanted));
+            // Laid out ahead with this page: each note of its own is passed on and cleared.
+            half.cold = false;
+            half.connect('cold', () => {
+                half.cold = false;
+                this.markCold();
+            });
+        }
     }
 
     get relevant() {

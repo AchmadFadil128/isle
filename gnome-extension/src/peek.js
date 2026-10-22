@@ -59,6 +59,7 @@ class PeekView extends St.Widget {
         this._icon = new St.Icon({icon_size: 16});
         // Cover art, with the playing app's icon on its corner.
         this._art = new Art({size: 32, radius: 8});
+        this._art.connect('shown', () => this._syncArtBadge());
         this._artBadgeIcon = new St.Icon({icon_size: 12});
         this._artBadge = new St.Bin({
             style_class: 'isle-app-badge',
@@ -105,6 +106,11 @@ class PeekView extends St.Widget {
         this.connect('destroy', () => this._onDestroy());
     }
 
+    /** The app's icon on the cover's corner, unless the cover already is that icon. */
+    _syncArtBadge() {
+        this._artBadge.visible = Boolean(this._artBadgeIcon.gicon) && !this._art.showsIcon;
+    }
+
     /** Fills the view from an alert (see the top of this file); `onDone` runs after its button did its job. */
     setAlert(alert, onDone = null) {
         const rgb = TONE_COLORS[alert.tone] ?? TONE_COLORS.neutral;
@@ -113,9 +119,9 @@ class PeekView extends St.Widget {
         const hasRing = alert.ring !== undefined && alert.ring !== null;
 
         if (alert.art !== undefined) {
-            this._art.setPath(alert.art);
             this._artBadgeIcon.gicon = alert.badge ?? null;
-            this._artBadge.visible = Boolean(alert.badge) && !this._art.showsIcon;
+            this._art.setPath(alert.art);
+            this._syncArtBadge();
             this._setChild(this._badge, this._artBox);
             this._badge.style_class = '';
         } else if (hasRing) {
