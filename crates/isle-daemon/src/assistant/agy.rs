@@ -82,6 +82,18 @@ fn prune_in(store: &Path, today: NaiveDate) {
             paths.iter().for_each(remove);
         }
     }
+    // agy writes a log per run: those from before today go too.
+    if let Ok(entries) = std::fs::read_dir(store.join("log")) {
+        for entry in entries.flatten() {
+            let old = entry
+                .metadata()
+                .and_then(|meta| meta.modified())
+                .is_ok_and(|modified| DateTime::<Local>::from(modified).date_naive() < today);
+            if old && entry.file_type().is_ok_and(|kind| kind.is_file()) {
+                std::fs::remove_file(entry.path()).ok();
+            }
+        }
+    }
 }
 
 /// Deletes the conversation `id` now.
@@ -312,7 +324,11 @@ mod tests {
         touch("conversations/new.db", 2);
         // Its write-ahead log was used today, so the conversation is today's.
         touch("conversations/new.db-wal", 0);
+        touch("log/cli-old.log", 2);
+        touch("log/cli-new.log", 0);
         prune_in(&store, today);
+        assert!(!store.join("log/cli-old.log").exists());
+        assert!(store.join("log/cli-new.log").exists());
         assert!(!store.join("conversations/old.db").exists());
         assert!(!store.join("brain/old").exists());
         assert!(store.join("conversations/new.db").exists());

@@ -30,7 +30,7 @@ the tagged source and carry a build provenance attestation. With the
 [GitHub CLI](https://cli.github.com):
 
 ```sh
-gh attestation verify isle-0.7.2-x86_64-linux.tar.gz --repo zickrian/isle
+gh attestation verify isle-0.7.3-x86_64-linux.tar.gz --repo zickrian/isle
 ```
 
 `get.sh` also checks each download against the release's `.sha256`.

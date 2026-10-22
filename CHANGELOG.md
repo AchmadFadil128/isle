@@ -6,6 +6,13 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-22
+
+### Fixed
+
+- Antigravity's logs (one per request) are deleted at the end of the day,
+  with its conversations, instead of piling up in Isle's folder.
+
 ## [0.7.2] - 2026-10-22
 
 ### Fixed

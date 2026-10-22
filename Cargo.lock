@@ -1150,7 +1150,7 @@ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
 name = "isle-core"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -1158,7 +1158,7 @@ dependencies = [
 
 [[package]]
 name = "isle-daemon"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1180,7 +1180,7 @@ dependencies = [
 
 [[package]]
 name = "isle-shelf"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "env_logger",
  "gdk4-x11",
@@ -1193,7 +1193,7 @@ dependencies = [
 
 [[package]]
 name = "isle-whisper"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "isle-core",
  "libc",
