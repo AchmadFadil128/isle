@@ -5,14 +5,13 @@
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
-import Gio from 'gi://Gio';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import {notificationIcon, plainBody} from '../notifications.js';
-import {icon, iconButton, isSymbolic, label, pillButton, setButtonIcon, setEnabled} from '../widgets.js';
+import {icon, iconButton, isSymbolic, label, ownIcon, pillButton, setButtonIcon, setEnabled} from '../widgets.js';
 import {Page} from './page.js';
 
 /** A card offers at most this many of its notification's buttons ("Mark as read", "Accept"). */
@@ -37,7 +36,7 @@ function appName(source, notification) {
 
 /** The app's icon: a colour one as is, a symbolic one on a grey rounded square, as macOS does. */
 function notificationBadge(gicon) {
-    gicon ??= new Gio.ThemedIcon({name: 'dialog-information-symbolic'});
+    gicon = gicon ? ownIcon(gicon) : icon('dialog-information-symbolic');
     if (!isSymbolic(gicon))
         return new St.Icon({gicon, icon_size: 32, y_align: Clutter.ActorAlign.CENTER});
     return new St.Bin({
@@ -204,7 +203,8 @@ class NotificationsPage extends Page {
     /** A macOS-like card: app icon, title with its time (a close button under the pointer), text below. */
     _row(notification) {
         const content = new St.BoxLayout({style_class: 'isle-notification', x_expand: true});
-        content.add_child(notificationBadge(notificationIcon(notification)));
+        const badge = notificationBadge(notificationIcon(notification));
+        content.add_child(badge);
 
         const texts = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         const header = new St.BoxLayout({style_class: 'isle-notification-header'});
@@ -235,6 +235,8 @@ class NotificationsPage extends Page {
                 }));
             }
             texts.add_child(buttons);
+            // Beside the name and text, as on macOS, not halfway down the buttons.
+            badge.y_align = Clutter.ActorAlign.START;
         }
         content.add_child(texts);
 

@@ -32,7 +32,7 @@ const STATES = {
     not_found: {icon: 'isle-lyrics', title: 'No lyrics for this song', hint: 'Lyrics come from LRCLIB'},
     instrumental: {icon: 'isle-music', title: 'Instrumental', hint: 'Nothing to sing along to'},
     off: {icon: 'isle-lyrics', title: 'Lyrics are off', hint: 'Turn them on in Isle’s settings'},
-    error: {icon: 'isle-lyrics', title: "Can't reach the lyrics", hint: 'Check your connection · trying again soon'},
+    error: {icon: 'isle-lyrics', title: 'Can’t reach the lyrics', hint: 'Check your connection · trying again soon'},
     unavailable: {icon: 'isle-lyrics', title: 'Lyrics are busy right now', hint: 'Trying again in a moment'},
 };
 

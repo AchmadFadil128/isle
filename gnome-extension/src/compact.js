@@ -9,6 +9,7 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import * as Format from './format.js';
+import * as Palette from './palette.js';
 import * as Playback from './playback.js';
 import {watchClock} from './wallClock.js';
 import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon} from './widgets.js';
@@ -24,7 +25,7 @@ const PAUSED_OPACITY = 110;
 const RING_REFRESH_S = 5;
 /** The focus timer's colour: white while focusing, green on a break. */
 export function timerColor(phase) {
-    return phase === 'focus' || phase === 'idle' ? [1, 1, 1] : [0.2, 0.88, 0.48];
+    return phase === 'focus' || phase === 'idle' ? Palette.WHITE : Palette.GREEN;
 }
 
 export const CompactView = GObject.registerClass({

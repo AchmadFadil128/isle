@@ -20,9 +20,61 @@ export function setIconDir(dir) {
     icons.clear();
 }
 
-// A `Gio.Icon` for `name`: a bundled one (in `icons/`) if it exists, else a themed icon. Bundled
-// icons are not named `-symbolic`: GNOME would fill every shape, turning outlines into blobs.
+/** GNOME's icons that Isle draws itself (icons/), in SF Symbols' manner; a name or the start of one. */
+const OWN_ICONS = {
+    'audio-volume-muted': 'isle-speaker-off-symbolic',
+    'audio-volume-low': 'isle-speaker-1-symbolic',
+    'audio-volume-medium': 'isle-speaker-2-symbolic',
+    'audio-volume-high': 'isle-speaker-3-symbolic',
+    'audio-volume-overamplified': 'isle-speaker-3-symbolic',
+    'audio-speakers': 'isle-speaker-2-symbolic',
+    'audio-card': 'isle-speaker-2-symbolic',
+    'audio-headphones': 'isle-headphones-symbolic',
+    'audio-headset': 'isle-headphones-symbolic',
+    'display-brightness': 'isle-sun-symbolic',
+    'keyboard-brightness': 'isle-sun-min-symbolic',
+    'microphone-sensitivity-muted': 'isle-mic-off-symbolic',
+    'microphone-disabled': 'isle-mic-off-symbolic',
+    'microphone-sensitivity': 'isle-mic-symbolic',
+    'audio-input-microphone': 'isle-mic-symbolic',
+    'touchpad-disabled': 'isle-touchpad-off-symbolic',
+    'input-touchpad': 'isle-touchpad-symbolic',
+    'airplane-mode': 'isle-airplane-symbolic',
+    'camera-disabled': 'isle-video-off-symbolic',
+    'camera': 'isle-video-symbolic',
+    'bluetooth': 'isle-bluetooth-symbolic',
+    'network-wireless-disabled': 'isle-wifi-off-symbolic',
+    'network-wireless-offline': 'isle-wifi-off-symbolic',
+    'network-wireless': 'isle-wifi-symbolic',
+    'video-display': 'isle-display-symbolic',
+    'input-mouse': 'isle-mouse-symbolic',
+    'input-keyboard': 'isle-keyboard-symbolic',
+    'phone': 'isle-phone-symbolic',
+    'dialog-warning': 'isle-warning-symbolic',
+    'dialog-information': 'isle-info-symbolic',
+    'software-update-available': 'isle-update-symbolic',
+    'media-record': 'isle-record-symbolic',
+};
+const OWN_KEYS = Object.keys(OWN_ICONS).sort((a, b) => b.length - a.length);
+
+/** Isle's own icon for GNOME's `name` ("audio-volume-high-symbolic"), or null. */
+function ownName(name) {
+    const base = name.replace(/-symbolic$/, '');
+    const key = OWN_KEYS.find(k => base === k || base.startsWith(`${k}-`));
+    return key ? OWN_ICONS[key] : null;
+}
+
+/** `gicon` in Isle's own style when Isle draws it (GNOME's OSD and device icons), else as it is. */
+export function ownIcon(gicon) {
+    const names = gicon instanceof Gio.ThemedIcon ? gicon.get_names() : [];
+    const own = names.map(ownName).find(Boolean);
+    return own ? icon(own) : gicon;
+}
+
+// A `Gio.Icon` for `name`: a bundled one (in `icons/`) if it exists, else a themed icon. A bundled
+// `-symbolic` one has fills only: GNOME fills every shape, turning outlines into blobs.
 export function icon(name) {
+    name = ownName(name) ?? name;
     if (!icons.has(name)) {
         const file = iconDir?.get_child(`${name}.svg`);
         icons.set(name, file?.query_exists(null) ? new Gio.FileIcon({file}) : new Gio.ThemedIcon({name}));

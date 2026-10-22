@@ -18,6 +18,9 @@ const TICK_MS = 200;
 const LINGER_MS = 900;
 /** How long it takes to fade and fold away. */
 const LEAVE_MS = 260;
+/** The strike drawn across the title, and a new reminder opening its row. */
+const STRIKE_MS = 180;
+const ARRIVE_MS = 220;
 
 export const TasksPage = GObject.registerClass(
 class TasksPage extends Page {
@@ -157,10 +160,35 @@ class TasksPage extends Page {
             if (child !== this._newRow)
                 child.destroy();
         }
-        for (const task of shown)
-            this._list.insert_child_below(this._row(task), this._newRow);
+        // One added while the list is on screen opens its row, as on macOS; on first showing, all are there.
+        const known = this.mapped ? this._known : null;
+        for (const task of shown) {
+            const row = this._row(task);
+            this._list.insert_child_below(row, this._newRow);
+            if (known && !known.has(task.id))
+                this._arrive(row);
+        }
+        this._known = new Set(shown.map(task => task.id));
         this._empty.visible = shown.length === 0;
         this._empty.text = tasks.length > shown.length ? 'All Done' : 'No Reminders';
+    }
+
+    /** Opens `row` from nothing to its height, fading in, while the rows below make room. */
+    _arrive(row) {
+        const [, height] = row.get_preferred_height(-1);
+        row.clip_to_allocation = true;
+        row.height = 0;
+        row.opacity = 0;
+        row.ease({
+            height,
+            opacity: 255,
+            duration: ARRIVE_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onStopped: () => {
+                row.height = -1;
+                row.clip_to_allocation = false;
+            },
+        });
     }
 
     _row(task) {
@@ -234,7 +262,8 @@ class TasksPage extends Page {
             check.accessible_name = 'Mark as done';
             row.remove_style_class_name('done');
             pop(false);
-            strike.scale_x = 0;
+            strike.remove_transition('scale-x');
+            strike.ease({scale_x: 0, duration: STRIKE_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
             return;
         }
         // The text's own width, as laid out (cut short with … when long); measured before restyling.
@@ -246,8 +275,13 @@ class TasksPage extends Page {
         check.accessible_name = 'Not done';
         row.add_style_class_name('done');
         pop(true);
-        // Struck through at once.
-        strike.scale_x = box > 0 ? Math.min(1, textWidth / box) : 1;
+        // Struck through from the left, as the dot pops in.
+        strike.remove_transition('scale-x');
+        strike.ease({
+            scale_x: box > 0 ? Math.min(1, textWidth / box) : 1,
+            duration: STRIKE_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
         this.later(name, LINGER_MS, () => {
             // Folds away: the rows below slide up into its place; too late now to undo.
             check.reactive = false;

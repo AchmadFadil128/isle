@@ -4,6 +4,7 @@
 // phase, today's total and controls. See docs/product-spec.md.
 
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
@@ -95,7 +96,11 @@ class TimerPage extends Page {
         const sessions = state.today_sessions ?? 0;
         const length = Format.hoursMinutes(state.duration_ms);
         const onBreak = state.phase === 'short_break' || state.phase === 'long_break';
-        if (sessions > 0)
+        // Running: when it ends, as the Clock's timer shows it.
+        if (state.running && state.ends_at_ms) {
+            const ends = Format.timeOfDay(GLib.DateTime.new_from_unix_local(Math.round(state.ends_at_ms / 1000)));
+            this._stats.text = sessions > 0 ? `Ends at ${ends} · ${sessions} today` : `Ends at ${ends}`;
+        } else if (sessions > 0)
             this._stats.text = `Today · ${sessions} ${sessions === 1 ? 'session' : 'sessions'} · ${Format.hoursMinutes(state.today_focus_ms ?? 0)}`;
         else
             this._stats.text = onBreak ? `${length} break, then back to focus` : `${length} of focus, then a break`;

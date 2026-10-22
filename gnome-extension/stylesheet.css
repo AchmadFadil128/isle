@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 /* Isle. island.js draws the island black; this styles what sits on it (see docs/product-spec.md).
- * iOS-like dark palette: surfaces #1c1c1e #2c2c2e #3a3a3c; accents #34d67a #ffb833 #ff5c5c #5aabff. */
+ * Apple's dark palette: surfaces #1c1c1e #2c2c2e #3a3a3c; accents #30d158 #ff453a #0a84ff #ff9f0a #5e5ce6. */
 
 /* ── Shared ───────────────────────────────────────────── */
 
@@ -76,8 +76,8 @@
   padding: 8px 14px;
   border: none;
   background-color: #1c1c1e;
-  caret-color: #5aabff;
-  selection-background-color: rgba(90, 171, 255, 0.5);
+  caret-color: #0a84ff;
+  selection-background-color: rgba(10, 132, 255, 0.5);
   selected-color: #ffffff;
 }
 
@@ -287,7 +287,7 @@
   width: 6px;
   height: 6px;
   border-radius: 3px;
-  background-color: #ff5c5c;
+  background-color: #ff453a;
 }
 .isle-header-date { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
 .isle-header-time { font-size: 13px; font-weight: 600; }
@@ -493,11 +493,11 @@
 
 /* ── Reminders ────────────────────────────────────────── */
 
-/* As macOS Reminders in dark mode: an orange title and count, rows of a ring and a title over a
- * hairline. 28 px of header and 29 px rows fill the 144 px page with four whole rows. */
+/* As macOS Reminders in dark mode: an orange title and count (as large as the timer's caption beside
+ * it), rows of a ring and a title over a hairline. 28 px of header and 29 px rows fill the 144 px page with four whole rows. */
 .isle-reminders-header { height: 28px; padding: 0 0 0 2px; spacing: 4px; }
-.isle-reminders-title { font-size: 19px; font-weight: 700; color: #ff9f0a; letter-spacing: -0.3px; }
-.isle-reminders-count { font-size: 19px; font-weight: 600; color: #ff9f0a; padding-right: 2px; }
+.isle-reminders-title { font-size: 17px; font-weight: 600; color: #ff9f0a; letter-spacing: -0.2px; }
+.isle-reminders-count { font-size: 17px; font-weight: 600; color: #ff9f0a; padding-right: 2px; }
 .isle-reminders-add { padding: 5px; border-radius: 99px; color: rgba(255, 255, 255, 0.55); }
 .isle-reminders-add:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
 
@@ -628,7 +628,7 @@
 .isle-cal-event-title { font-size: 13px; font-weight: 600; }
 .isle-cal-event-time { font-size: 11px; font-weight: 500; color: rgba(255, 255, 255, 0.65); }
 .isle-cal-empty { font-size: 13px; color: rgba(255, 255, 255, 0.55); }
-.isle-cal-accounts { font-size: 12px; color: rgba(90, 171, 255, 1); padding: 4px 8px; border-radius: 8px; }
+.isle-cal-accounts { font-size: 12px; color: rgba(10, 132, 255, 1); padding: 4px 8px; border-radius: 8px; }
 .isle-cal-accounts:hover { background-color: rgba(255, 255, 255, 0.08); }
 .isle-cal-accounts:focus { color: #ffffff; }
 
@@ -796,8 +796,8 @@
 }
 
 .isle-shelf-files:drop {
-  border-color: rgba(90, 171, 255, 0.45);
-  background-color: rgba(90, 171, 255, 0.07);
+  border-color: rgba(10, 132, 255, 0.45);
+  background-color: rgba(10, 132, 255, 0.07);
 }
 
 .isle-shelf-tiles { spacing: 6px; }

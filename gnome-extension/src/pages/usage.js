@@ -12,6 +12,7 @@ import St from 'gi://St';
 
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
+import * as Palette from '../palette.js';
 import {icon, label} from '../widgets.js';
 import {Page} from './page.js';
 
@@ -19,7 +20,7 @@ import {Page} from './page.js';
 const MARKS = {warn: 80, critical: 95};
 /** Each provider's colour, for its bars. */
 const ACCENTS = {claude: [0.85, 0.47, 0.34], codex: [0.06, 0.64, 0.5]};
-const FALLBACK = [0.04, 0.52, 1];
+const FALLBACK = Palette.BLUE;
 /** How far a scroll goes before it moves to the next provider, as the island's tabs do. */
 const WHEEL_STEP = 1;
 const SWIPE_STEP = 1.5;

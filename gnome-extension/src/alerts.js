@@ -43,6 +43,9 @@ const OSD_KINDS = [
     ['video-display', 'Display'],
 ];
 
+/** Where a level applies when GNOME names none, so every level alert has two lines, as Volume's "Speakers". */
+const OSD_PLACES = {'Brightness': 'Built-in Display', 'Keyboard light': 'Keyboard'};
+
 /** "touchpad-disabled-symbolic" → "Touchpad disabled", for OSDs not listed above. */
 function iconTitle(iconName) {
     const words = iconName.replace(/-symbolic$/, '').replace(/-/g, ' ').trim();
@@ -62,7 +65,7 @@ export function osd(gicon, text, level, maxLevel) {
         gicon,
         // Toggles (touchpad, airplane mode...) send only an icon; never show it alone.
         title: kind ?? (text || iconTitle(iconName)),
-        subtitle: kind && text && text !== kind ? text : '',
+        subtitle: kind && text && text !== kind ? text : hasLevel ? OSD_PLACES[kind] ?? '' : '',
         status: hasLevel ? null : state,
         level: hasLevel ? Math.min(fraction, 1) : null,
         levelText: hasLevel ? percentText(level * 100) : null,
@@ -338,7 +341,7 @@ export function serviceDown(restart) {
     return {
         key: 'service-down',
         icon: 'dialog-warning-symbolic',
-        title: 'Isle\'s service isn\'t running',
+        title: 'Isle’s service isn’t running',
         subtitle: 'Music, timer and reminders need it',
         tone: 'bad',
         action: {label: 'Restart', callback: restart},
@@ -376,6 +379,8 @@ export function assistant(state, open) {
         key: 'assistant',
         icon: failed ? 'dialog-warning-symbolic' : 'isle-mic-symbolic',
         title: text,
+        // An answer may take two lines, as a notification's text does on macOS.
+        titleLines: 2,
         subtitle: failed ? state.hint ?? '' : 'Isle Assistant',
         tone: failed ? 'bad' : 'good',
         // Long enough to read, as the open island gives it.

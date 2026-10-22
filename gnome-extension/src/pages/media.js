@@ -12,7 +12,7 @@ import {vividColorOfFile} from '../colors.js';
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import * as Playback from '../playback.js';
-import {Art, Bars, Slider, fence, icon, iconButton, label, setButtonIcon, smallCover} from '../widgets.js';
+import {Art, Bars, Slider, fence, icon, iconButton, label, ownIcon, setButtonIcon, smallCover} from '../widgets.js';
 import {LyricsPane} from './lyrics.js';
 import {Page} from './page.js';
 
@@ -374,7 +374,7 @@ class MediaPage extends Page {
         this._outputList.destroy_all_children();
         for (const output of outputs) {
             const row = new St.BoxLayout({style_class: 'isle-output-row', x_expand: true, x_align: Clutter.ActorAlign.FILL});
-            row.add_child(new St.Icon({gicon: output.gicon, fallback_icon_name: 'audio-speakers-symbolic', icon_size: 18, y_align: Clutter.ActorAlign.CENTER}));
+            row.add_child(new St.Icon({gicon: output.gicon ? ownIcon(output.gicon) : icon('audio-speakers-symbolic'), fallback_icon_name: 'audio-speakers-symbolic', icon_size: 18, y_align: Clutter.ActorAlign.CENTER}));
             const texts = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
             texts.add_child(label(output.name, 'isle-output-name'));
             if (output.detail)

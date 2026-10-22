@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Short-lived alerts the island grows to show. An alert: {key (same key replaces), icon | gicon | art, badge,
-// appIcon, ring, ringIconSize, title, subtitle, tone, value, status, level, action, duration, onActivate, page, priority, transient}.
+// appIcon, ring, ringIconSize, title, titleLines, subtitle, tone, value, status, level, action, duration, onActivate, page, priority, transient}.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -9,13 +9,16 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {VERTICAL} from './compat.js';
-import {Art, LevelBar, Ring, icon, isSymbolic, pillButton} from './widgets.js';
+import * as Palette from './palette.js';
+import {Art, LevelBar, Ring, icon, isSymbolic, ownIcon, pillButton, wrapLines} from './widgets.js';
 
 /** Narrowest and widest an alert gets; in between it fits its content. */
 const MIN_WIDTH = 220;
 const MAX_WIDTH = 380;
 /** Height of the part that hangs below the top bar: a line of text, or two. */
 const HEIGHT = {one: 44, two: 52};
+/** A two-line title's width: the widest alert less its padding (14 + 14), badge (32) and spacing (10). */
+const TITLE_WRAP_WIDTH = MAX_WIDTH - 70;
 
 /** The ring starts sweeping once the island has made room; a level bar grows a little sooner. */
 const RING_DELAY = 350;
@@ -24,14 +27,14 @@ const LEVEL_DELAY = 200;
 const FIGURE_SPACE = '\u2007';
 
 const TONE_COLORS = {
-    neutral: [1, 1, 1],
-    good: [0.2, 0.88, 0.48],
-    focus: [0.2, 0.88, 0.48],
-    bad: [1, 0.36, 0.36],
+    neutral: Palette.WHITE,
+    good: Palette.GREEN,
+    focus: Palette.GREEN,
+    bad: Palette.RED,
     // The plans' colours on the Usage page (see pages/usage.js).
     claude: [0.85, 0.47, 0.34],
     codex: [0.06, 0.64, 0.5],
-    break: [0.35, 0.67, 1],
+    break: Palette.BLUE,
 };
 
 const css = ([r, g, b], alpha = 1) =>
@@ -93,6 +96,11 @@ class PeekView extends St.Widget {
             text.clutter_text.ellipsize = Pango.EllipsizeMode.END;
             texts.add_child(text);
         }
+        // Set up to wrap without hyphens; it wraps only for an alert that asks (see `setAlert`).
+        wrapLines(this._title, Pango.EllipsizeMode.END);
+        this._title.clutter_text.line_wrap = false;
+        this._titleLines = 1;
+        this._lineHeight = 0;
         this._row.add_child(texts);
 
         // Trailing: a value, a level bar or a button.
@@ -129,7 +137,7 @@ class PeekView extends St.Widget {
     setAlert(alert, onDone = null) {
         const rgb = TONE_COLORS[alert.tone] ?? TONE_COLORS.neutral;
         const color = css(rgb);
-        const gicon = alert.gicon ?? icon(alert.icon ?? 'dialog-information-symbolic');
+        const gicon = alert.gicon ? ownIcon(alert.gicon) : icon(alert.icon ?? 'dialog-information-symbolic');
         const hasRing = alert.ring !== undefined && alert.ring !== null;
 
         if (alert.art !== undefined) {
@@ -168,7 +176,18 @@ class PeekView extends St.Widget {
         if (!hasRing)
             this._ringKey = null;
 
-        this._title.text = alert.title ?? '';
+        // Two lines at most for a title that may run long (an answer); the island widens and grows by the
+        // line. Cut here: with wrapping, Pango's own … would keep the first line alone.
+        let title = alert.title ?? '';
+        this._titleLines = 1;
+        if (alert.titleLines === 2)
+            [title, this._titleLines, this._lineHeight] = this._fitLines(title, 2);
+        const wrap = this._titleLines > 1;
+        this._title.clutter_text.line_wrap = wrap;
+        this._title.clutter_text.ellipsize = wrap ? Pango.EllipsizeMode.NONE : Pango.EllipsizeMode.END;
+        // Its height set: the column would measure a wrapped title as one line and sit off centre.
+        this._title.height = wrap ? Math.ceil(this._titleLines * this._lineHeight) : -1;
+        this._title.text = title;
         this._subtitle.text = alert.subtitle ?? '';
         this._subtitle.visible = Boolean(alert.subtitle);
 
@@ -217,12 +236,37 @@ class PeekView extends St.Widget {
 
     /** The height below the top bar this alert needs: less with a title alone. */
     get preferredHeight() {
-        return this._subtitle.visible ? HEIGHT.two : HEIGHT.one;
+        const height = this._subtitle.visible ? HEIGHT.two : HEIGHT.one;
+        return height + Math.round((this._titleLines - 1) * this._lineHeight);
+    }
+
+    /** `text` cut to whole words that fit in `max` lines of a two-line title, with … if cut: [text, lines,
+     * line height]. */
+    _fitLines(text, max) {
+        const layout = Pango.Layout.new(this._title.get_pango_context());
+        layout.set_font_description(this._title.get_theme_node().get_font());
+        layout.set_width(TITLE_WRAP_WIDTH * Pango.SCALE);
+        layout.set_wrap(Pango.WrapMode.WORD_CHAR);
+        const lines = candidate => {
+            layout.set_text(candidate, -1);
+            return layout.get_line_count();
+        };
+        const words = text.split(' ');
+        let fitted = text;
+        while (lines(fitted) > max && words.length > 1) {
+            words.pop();
+            fitted = `${words.join(' ').replace(/[\s,.;:]+$/, '')}…`;
+        }
+        const count = lines(fitted);
+        const [, logical] = layout.get_pixel_extents();
+        return [fitted, count, logical.height / count];
     }
 
     /** The width the island should have for this alert. */
     get preferredWidth() {
         const [, natural] = this._row.get_preferred_width(-1);
+        if (this._titleLines > 1)
+            return MAX_WIDTH;
         return Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, natural)));
     }
 
