@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Short-lived alerts the island grows to show. An alert: {key (same key replaces), icon | gicon | art, badge,
-// appIcon, ring, ringIconSize, volume, title, titleLines, subtitle, tone, value, status, level, action, duration, onActivate, page, priority, transient}.
+// appIcon, ring, ringIconSize, volume, title, titleLines, subtitle, tone, value, status, level, action, duration, onActivate, page,
+// priority, transient, motion (the icon's, once; see `playMotion` in widgets.js)}.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -10,7 +11,7 @@ import St from 'gi://St';
 
 import {VERTICAL} from './compat.js';
 import * as Palette from './palette.js';
-import {Art, LevelBar, Ring, VolumeGlyph, icon, isSymbolic, ownIcon, pillButton, wrapLines} from './widgets.js';
+import {Art, LevelBar, Ring, VolumeGlyph, icon, isSymbolic, ownIcon, pillButton, playMotion, wrapLines} from './widgets.js';
 
 /** Narrowest and widest an alert gets; in between it fits its content. */
 const MIN_WIDTH = 220;
@@ -124,7 +125,7 @@ class PeekView extends St.Widget {
         // Put away, the next alert here is a new one and animates in.
         this.connect('notify::mapped', () => {
             if (!this.mapped)
-                this._ringKey = this._levelKey = this._volumeKey = null;
+                this._ringKey = this._levelKey = this._volumeKey = this._motionKey = null;
         });
         this.connect('destroy', () => this._onDestroy());
     }
@@ -183,6 +184,12 @@ class PeekView extends St.Widget {
         if (!hasRing)
             this._ringKey = null;
         this._volumeKey = alert.volume ? alert.key : null;
+        // Its icon's motion plays once, for a new alert (not one updating in place), once the island made room.
+        const moving = hasRing ? this._ringIcon : alert.art === undefined && !alert.volume ? this._icon : null;
+        const motionKey = `${alert.key}:${alert.title}`;
+        if (moving && motionKey !== this._motionKey)
+            playMotion(moving, alert.motion, {delay: RING_DELAY});
+        this._motionKey = motionKey;
 
         // Two lines at most for a title that may run long (an answer); the island widens and grows by the
         // line. Cut here: with wrapping, Pango's own … would keep the first line alone.

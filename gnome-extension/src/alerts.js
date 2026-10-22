@@ -82,6 +82,7 @@ export function capsLock(on) {
         priority: 'instant',
         transient: true,
         icon: 'isle-capslock-symbolic',
+        motion: on ? 'rise' : undefined,
         title: 'Caps Lock',
         status: on ? 'On' : 'Off',
         tone: 'neutral',
@@ -98,6 +99,7 @@ export function system(event) {
         return {
             key: 'power',
             icon: event.plugged ? 'isle-bolt' : batteryIcon(event.percent),
+            motion: event.plugged ? 'pulse' : undefined,
             ringIconSize: event.plugged ? undefined : 14,
             ring: event.percent / 100,
             title: event.plugged ? 'Charging' : 'On Battery',
@@ -122,6 +124,7 @@ export function system(event) {
         return {
             key: 'power',
             icon: 'isle-bolt',
+            motion: 'pulse',
             ring: 1,
             title: 'Fully Charged',
             subtitle: 'You can unplug your charger',
@@ -168,6 +171,7 @@ export function pomodoroFinished(finished, next, state, daemon) {
         return {
             key: 'pomodoro',
             icon: 'isle-timer-symbolic',
+            motion: 'bounce',
             title: 'Focus session done',
             subtitle: waiting ? 'Take a break when you are ready' : `Enjoy a ${minutes}-minute break`,
             tone: 'good',
@@ -179,6 +183,7 @@ export function pomodoroFinished(finished, next, state, daemon) {
     return {
         key: 'pomodoro',
         icon: 'isle-timer-symbolic',
+        motion: 'bounce',
         title: next === 'focus' ? 'Break is over' : Format.phaseName(next),
         subtitle: waiting ? 'Ready for another focus session?' : `${minutes} minutes of focus`,
         tone: 'focus',
@@ -315,6 +320,7 @@ export function reminder({id, text}, onShown) {
         // Its own key, so reminders due together queue instead of replacing each other.
         key: `reminder:${id}`,
         icon: 'isle-bell',
+        motion: 'ring',
         title: text,
         subtitle: 'Reminder',
         tone: 'neutral',
@@ -330,6 +336,7 @@ export function update(version, howTo) {
     return {
         key: 'update',
         icon: 'software-update-available-symbolic',
+        motion: 'bounce',
         title: `Isle ${version} is out`,
         subtitle: 'Run the install command again to update',
         tone: 'good',
@@ -343,6 +350,7 @@ export function serviceDown(restart) {
     return {
         key: 'service-down',
         icon: 'dialog-warning-symbolic',
+        motion: 'shake',
         title: 'Isle’s service isn’t running',
         subtitle: 'Music, timer and reminders need it',
         tone: 'bad',
@@ -358,6 +366,7 @@ export function notificationsSummary(items) {
         key: 'notifications-summary',
         items,
         icon: 'isle-bell',
+        motion: 'bounce',
         title: count === 1 ? '1 new notification' : `${count} new notifications`,
         subtitle: count === 1 ? 'Open the island to read it' : 'Open the island to read them',
         tone: 'neutral',
@@ -380,6 +389,7 @@ export function assistant(state, open) {
     return {
         key: 'assistant',
         icon: failed ? 'dialog-warning-symbolic' : 'isle-mic-symbolic',
+        motion: failed ? 'shake' : 'bounce',
         title: text,
         // An answer may take two lines, as a notification's text does on macOS.
         titleLines: 2,
@@ -396,6 +406,7 @@ export function recordingStarted(stop) {
     return {
         key: 'recording',
         icon: 'media-record-symbolic',
+        motion: 'pulse',
         title: 'Recording screen',
         subtitle: 'Stop it from the red dot in the island',
         tone: 'bad',

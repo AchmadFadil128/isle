@@ -622,6 +622,73 @@ function allocateAt(actor, x, y, width, height) {
     actor.allocate(Clutter.ActorBox.new(x, y, x + width, y + height));
 }
 
+/**
+ * Motions an alert's icon makes once as it appears, as SF Symbols' effects: each a list of steps,
+ * [property values, ms, easing]. Transforms only, so nothing is laid out or restyled again.
+ */
+const MOTIONS = {
+    // A small hop: notifications, an answer, a new version.
+    bounce: [[{scale_x: 1.18, scale_y: 1.18}, 140, 'EASE_OUT_QUAD'], [{scale_x: 1, scale_y: 1}, 260, 'EASE_OUT_BACK']],
+    // Once bigger and back: the charging bolt, recording.
+    pulse: [[{scale_x: 1.24, scale_y: 1.24}, 170, 'EASE_OUT_SINE'], [{scale_x: 1, scale_y: 1}, 230, 'EASE_IN_OUT_SINE']],
+    // A bell ringing: a sway, a little bigger at first. Side to side rather than turned, which costs the GPU a
+    // slow first frame.
+    ring: [[{translation_x: -1.6, scale_x: 1.08, scale_y: 1.08}, 90, 'EASE_OUT_SINE'],
+        [{translation_x: 1.6}, 110, 'EASE_IN_OUT_SINE'], [{translation_x: -1.1}, 100, 'EASE_IN_OUT_SINE'],
+        [{translation_x: 0.6}, 90, 'EASE_IN_OUT_SINE'], [{translation_x: 0, scale_x: 1, scale_y: 1}, 100, 'EASE_OUT_SINE']],
+    // Coming up from below: Caps Lock turned on.
+    rise: [[{translation_y: 0, opacity: 255}, 260, 'EASE_OUT_BACK']],
+    // Side to side, as macOS answers a wrong password: something stopped.
+    shake: [[{translation_x: -3}, 60, 'EASE_OUT_SINE'], [{translation_x: 3}, 80, 'EASE_IN_OUT_SINE'],
+        [{translation_x: -2}, 70, 'EASE_IN_OUT_SINE'], [{translation_x: 0}, 60, 'EASE_OUT_SINE']],
+};
+const REST = {scale_x: 1, scale_y: 1, translation_x: 0, translation_y: 0, opacity: 255};
+/** Motions waiting for their actor to be on screen (GNOME skips eases on actors that are not). */
+const pendingMotions = new WeakMap();
+
+/** Plays `motion` (see `MOTIONS`) on `actor` once, `delay` ms after it is on screen; none with animations off. */
+export function playMotion(actor, motion, {delay = 0} = {}) {
+    const steps = MOTIONS[motion];
+    actor.remove_all_transitions();
+    actor.set(REST);
+    const pending = pendingMotions.get(actor);
+    if (pending)
+        pending.run = null;
+    if (!steps || !St.Settings.get().enable_animations)
+        return;
+    actor.set_pivot_point(0.5, 0.5);
+    if (motion === 'rise')
+        actor.set({translation_y: 4, opacity: 0});
+    const run = () => {
+        const next = i => {
+            if (i >= steps.length)
+                return;
+            const [values, duration, mode] = steps[i];
+            actor.ease({...values, duration, delay: i === 0 ? delay : 0, mode: Clutter.AnimationMode[mode],
+                onComplete: () => next(i + 1)});
+        };
+        next(0);
+    };
+    if (actor.mapped) {
+        run();
+        return;
+    }
+    // Once, when it shows; a newer motion replaces this one.
+    if (!pending) {
+        const waiting = {run};
+        pendingMotions.set(actor, waiting);
+        actor.connect('notify::mapped', () => {
+            if (actor.mapped && waiting.run) {
+                const later = waiting.run;
+                waiting.run = null;
+                later();
+            }
+        });
+    } else {
+        pending.run = run;
+    }
+}
+
 /** How long a speaker's wave takes to come or go, and the gap between waves coming in turn. */
 const WAVE_MS = 180;
 const WAVE_STAGGER_MS = 70;

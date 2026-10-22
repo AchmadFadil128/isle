@@ -494,8 +494,9 @@
 /* ── Reminders ────────────────────────────────────────── */
 
 /* As macOS Reminders in dark mode: an orange title and count (as large as the timer's caption beside
- * it), rows of a ring and a title over a hairline. 28 px of header and 29 px rows fill the 144 px page with four whole rows. */
-.isle-reminders-header { height: 28px; padding: 0 0 0 2px; spacing: 4px; }
+ * it), rows of a ring and a title over a hairline. A 24 px header and 24 px rows fill the 144 px page with five
+ * whole rows, close as macOS's Reminders widget sets them. */
+.isle-reminders-header { height: 24px; padding: 0 0 0 2px; spacing: 4px; }
 .isle-reminders-title { font-size: 17px; font-weight: 600; color: #ff9f0a; letter-spacing: -0.2px; }
 .isle-reminders-count { font-size: 17px; font-weight: 600; color: #ff9f0a; padding-right: 2px; }
 .isle-reminders-add { padding: 5px; border-radius: 99px; color: rgba(255, 255, 255, 0.55); }
@@ -503,7 +504,7 @@
 
 /* Lists fade out at an edge that scrolls on, instead of being cut. */
 .isle-reminder-scroll { -st-vfade-offset: 14px; }
-.isle-reminder { height: 29px; spacing: 10px; padding-left: 2px; }
+.isle-reminder { height: 24px; spacing: 10px; padding-left: 2px; }
 
 /* An 18 px ring; ticked, it turns orange with a 10 px dot inside, as on macOS. */
 .isle-reminder-check {
