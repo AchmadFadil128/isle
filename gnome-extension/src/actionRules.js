@@ -7,16 +7,40 @@ export function describeActions(actions = []) {
     const [first] = actions;
     if (!first)
         return 'Working…';
+    const turning = (name, on) => `Turning ${name} ${on === false ? 'off' : 'on'}…`;
     const what = {
         open_app: `Opening ${first.app ?? 'the app'}…`,
         open_url: 'Opening the page…',
         open_file: 'Opening the file…',
+        reveal_file: 'Showing the file in Files…',
         open_folder: 'Opening the folder…',
+        chrome_profile: 'Opening Chrome…',
         window: 'Moving the window…',
         arrange: 'Arranging the windows…',
         play_music: 'Playing music…',
         media: 'Controlling the music…',
         close_app: `Closing ${first.app ?? 'the app'}…`,
+        volume: Number.isFinite(first.level) ? `Setting the volume to ${first.level}%…` : 'Changing the volume…',
+        brightness: Number.isFinite(first.level) ? `Setting the brightness to ${first.level}%…` : 'Changing the brightness…',
+        wifi: turning('Wi-Fi', first.on),
+        bluetooth: turning('Bluetooth', first.on),
+        dnd: turning('Do Not Disturb', first.on),
+        dark_mode: turning('dark style', first.on),
+        night_light: turning('Night Light', first.on),
+        settings: 'Opening Settings…',
+        add_task: 'Adding a to-do…',
+        done_task: 'Ticking off the to-do…',
+        remove_task: 'Removing the to-do…',
+        add_event: 'Adding it to your calendar…',
+        remove_event: 'Removing the event…',
+        remind: 'Setting a reminder…',
+        cancel_reminder: 'Cancelling the reminder…',
+        focus: 'Starting the focus timer…',
+        terminal: 'Opening a terminal…',
+        notifications: 'Opening your notifications…',
+        screenshot: 'Taking a screenshot…',
+        lock: 'Locking the screen…',
+        write: 'Typing it out…',
     }[first.type] ?? 'Working on it…';
     return actions.length > 1 ? `${what.replace(/…$/, '')} and ${actions.length - 1} more…` : what;
 }

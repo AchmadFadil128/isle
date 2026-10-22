@@ -199,6 +199,8 @@ class PeekView extends St.Widget {
     _setChild(bin, child) {
         if (bin.child !== child)
             bin.child = child;
+        // An empty slot takes no room (nor the row's spacing), so the rest stays centred.
+        bin.visible = child !== null;
     }
 
     _onDestroy() {

@@ -6,6 +6,23 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-22
+
+### Changed
+
+- The assistant's steps read as what it does ("Setting the volume to
+  30%…", "Turning Wi-Fi off…"), with each step done ticked on a line of its
+  own; a long answer is set smaller and lighter, as a paragraph.
+- New screenshots in the README: the notifications page, the files tray,
+  the assistant at work and its three ways in, and the alerts.
+
+### Fixed
+
+- Alerts with nothing on the right (a reminder, a new song, a summary of
+  notifications) sat off-centre; the alert's sides are now even.
+- "5-hour limit" and other text in alerts and the assistant no longer has
+  the clock's wide digits and dashes.
+
 ## [0.7.0] - 2026-10-22
 
 ### Added

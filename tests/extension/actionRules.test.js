@@ -22,6 +22,8 @@ test('steps in progress read as people would say them', () => {
     assert.equal(describeActions([{type: 'window'}, {type: 'arrange'}]), 'Moving the window and 1 more…');
     assert.equal(describeActions([]), 'Working…');
     assert.equal(describeActions([{type: 'teleport'}]), 'Working on it…');
+    assert.equal(describeActions([{type: 'volume', level: 30}]), 'Setting the volume to 30%…');
+    assert.equal(describeActions([{type: 'wifi', on: false}]), 'Turning Wi-Fi off…');
 });
 
 test('windows are laid out over the whole screen', () => {

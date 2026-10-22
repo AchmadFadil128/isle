@@ -175,7 +175,7 @@
 
 /* ── Alerts (peek) ────────────────────────────────────── */
 
-.isle-peek-row { padding: 0 16px 0 12px; spacing: 10px; }
+.isle-peek-row { padding: 0 14px; spacing: 10px; }
 
 /* The badge's colour comes from the alert (peek.js); a hairline on top
  * gives it depth. */
@@ -211,10 +211,19 @@
 /* The orb on the left, then what was heard above the answer (voice.js sizes them to match). */
 .isle-voice-row { padding: 14px 16px 20px 16px; spacing: 12px; }
 .isle-voice-orb { border-radius: 999px; }
+/* Prose: proportional figures (the island's tabular ones space out "5-hour" and the like). */
+.isle-voice-heard, .isle-voice-text, .isle-voice-hint, .isle-voice-step-text, .isle-peek-subtitle {
+  font-feature-settings: normal;
+}
 .isle-voice-heard { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-bottom: 2px; }
 .isle-voice-text { font-size: 15px; font-weight: 500; }
 .isle-voice-text-dim { color: rgba(255, 255, 255, 0.6); font-weight: 600; }
+.isle-voice-text-long { font-size: 14px; font-weight: 400; color: rgba(255, 255, 255, 0.92); }
 .isle-voice-hint { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-top: 4px; }
+.isle-voice-steps { spacing: 3px; padding-top: 5px; }
+.isle-voice-step { spacing: 6px; }
+.isle-voice-step-tick { color: rgba(255, 255, 255, 0.45); }
+.isle-voice-step-text { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
 .isle-voice-sign-in { margin-top: 10px; }
 
 /* The round button at the row's end: 32 px with any of its icons (see ACTION_SIZE in voice.js). */

@@ -38,6 +38,8 @@ const MIN_HEIGHT = FACE_SIZE + ROW_PADDING;
 const MAX_HEIGHT = 230;
 /** Answers past this many characters are cut, the panel being small. */
 const MAX_REPLY = 360;
+/** Answers longer than this read as a paragraph: set smaller and lighter, as Siri's. */
+const LONG_REPLY = 90;
 /** Selected text past this many characters is cut before it goes to the AI. */
 const MAX_SELECTION = 4000;
 const SELECTION_TIMEOUT_MS = 500;
@@ -284,6 +286,8 @@ export const VoiceView = GObject.registerClass({
         this._setUp.x_align = Clutter.ActorAlign.START;
         /** The steps of the request being worked on, done ones first. */
         this._steps = [];
+        // Those done, below the one now: a tick and a line each.
+        this._stepsBox = new St.BoxLayout({...VERTICAL, style_class: 'isle-voice-steps', visible: false});
         // A typed request, instead of a spoken one (see `startTyping`).
         this._entry = new St.Entry({style_class: 'isle-voice-entry', hint_text: 'Ask anything…', can_focus: true,
             x_expand: true, visible: false});
@@ -308,6 +312,7 @@ export const VoiceView = GObject.registerClass({
         this._texts.add_child(this._heard);
         this._texts.add_child(this._entry);
         this._texts.add_child(this._text);
+        this._texts.add_child(this._stepsBox);
         this._texts.add_child(this._hint);
         this._texts.add_child(this._signIn);
         this._texts.add_child(this._setUp);
@@ -361,12 +366,16 @@ export const VoiceView = GObject.registerClass({
             this._text.add_style_class_name('isle-voice-text-dim');
         else
             this._text.remove_style_class_name('isle-voice-text-dim');
+        if (!dim && main.length > LONG_REPLY)
+            this._text.add_style_class_name('isle-voice-text-long');
+        else
+            this._text.remove_style_class_name('isle-voice-text-long');
         const working = WORKING.includes(state.phase);
-        // While it works, the steps already done, dimmed below the current one.
-        const hint = state.phase === 'error' ? this._withShortcut(state.hint ?? '')
-            : working ? this._steps.slice(0, -1).slice(-MAX_DONE_STEPS).map(done => `✓ ${done}`).join('\n') : '';
+        const hint = state.phase === 'error' ? this._withShortcut(state.hint ?? '') : '';
         this._hint.text = hint;
         this._hint.visible = Boolean(hint);
+        // While it works, the steps already done, dimmed below the current one.
+        this._showSteps(working ? this._steps.slice(0, -1).slice(-MAX_DONE_STEPS) : []);
         this._signIn.visible = state.phase === 'error' && Boolean(state.sign_in);
         this._setUp.visible = state.phase === 'error' && Boolean(state.set_up);
         // Stop while it works; else typing instead (to follow up, too).
@@ -390,6 +399,20 @@ export const VoiceView = GObject.registerClass({
             this._sendButton.add_style_class_name('isle-voice-send-empty');
     }
 
+    _showSteps(done) {
+        this._stepsBox.destroy_all_children();
+        for (const step of done) {
+            const row = new St.BoxLayout({style_class: 'isle-voice-step'});
+            row.add_child(new St.Icon({gicon: icon('isle-check-symbolic'), icon_size: 11, style_class: 'isle-voice-step-tick',
+                y_align: Clutter.ActorAlign.CENTER}));
+            const line = new St.Label({text: step, style_class: 'isle-voice-step-text', y_align: Clutter.ActorAlign.CENTER});
+            line.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            row.add_child(line);
+            this._stepsBox.add_child(row);
+        }
+        this._stepsBox.visible = done.length > 0;
+    }
+
     /** `text` naming the shortcut as set instead of the default one isled's hints name. */
     _withShortcut(text) {
         return this.shortcut ? text.replaceAll('Super+I', this.shortcut) : text.replace(/Press Super\+I and /, '');
@@ -407,6 +430,7 @@ export const VoiceView = GObject.registerClass({
         this._entry.show();
         this._text.hide();
         this._hint.hide();
+        this._stepsBox.hide();
         this._signIn.hide();
         this._setUp.hide();
         this._showAction(null);
@@ -472,7 +496,7 @@ export const VoiceView = GObject.registerClass({
         // Typing, the field takes the button's place too (its send is inside it).
         const width = this.preferredWidth - TEXT_INSET + (this._action.visible ? 0 : ACTION_SIZE + 12);
         // Measured per label: the box's own answer is the size set below.
-        const natural = [this._heard, this._entry, this._text, this._hint, this._signIn, this._setUp].filter(part => part.visible)
+        const natural = [this._heard, this._entry, this._text, this._stepsBox, this._hint, this._signIn, this._setUp].filter(part => part.visible)
             .reduce((sum, part) => sum + part.get_preferred_height(width)[1], 0);
         // Set outright: the row kept an earlier, shorter height for them.
         this._texts.set_size(width, Math.min(natural, MAX_HEIGHT - ROW_PADDING));
