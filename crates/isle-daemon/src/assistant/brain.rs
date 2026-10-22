@@ -240,7 +240,7 @@ pub fn explain(provider: Provider, error: &str) -> Failure {
     };
     if says(&["could not start", "no such file"]) {
         return Failure::from((
-            &*format!("{name} isn't installed"),
+            &*format!("{name} isn’t installed"),
             "Install it, or pick another in Settings.",
         ));
     }
@@ -286,7 +286,7 @@ pub fn explain(provider: Provider, error: &str) -> Failure {
         "overloaded",
     ]) {
         return Failure::from((
-            &*format!("{name} isn't available"),
+            &*format!("{name} isn’t available"),
             "Its limit may be used up for now; try again later, or pick another in Settings.",
         ));
     }
@@ -300,7 +300,7 @@ pub fn explain(provider: Provider, error: &str) -> Failure {
         "dns",
     ]) {
         return Failure::from((
-            "You're offline",
+            "You’re offline",
             "Check the internet connection and try again.",
         ));
     }
@@ -334,7 +334,7 @@ mod tests {
                 "could not start agy: No such file or directory"
             )
             .error,
-            "Antigravity isn't installed"
+            "Antigravity isn’t installed"
         );
         let signed_out = explain(Provider::Claude, "Invalid API key · Please run /login");
         assert!(signed_out.sign_in && signed_out.error == "Sign in to Claude Code");
@@ -347,11 +347,11 @@ mod tests {
         );
         assert_eq!(
             explain(Provider::Codex, "You've hit your usage limit").error,
-            "Codex isn't available"
+            "Codex isn’t available"
         );
         assert_eq!(
             explain(Provider::Agy, "dial tcp: lookup example.com: no such host").error,
-            "You're offline"
+            "You’re offline"
         );
         assert_eq!(
             explain(Provider::Codex, "weird").error,
@@ -364,12 +364,12 @@ mod tests {
         );
         assert_eq!(
             explain(Provider::Claude, "HTTP 429 Too Many Requests").error,
-            "Claude Code isn't available"
+            "Claude Code isn’t available"
         );
         assert!(explain(Provider::Claude, "No credentials found").sign_in);
         assert_eq!(
             explain(Provider::Codex, "account not eligible").error,
-            "Codex isn't available"
+            "Codex isn’t available"
         );
     }
 

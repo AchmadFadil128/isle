@@ -180,12 +180,17 @@ class TasksPage extends Page {
         row.clip_to_allocation = true;
         row.height = 0;
         row.opacity = 0;
+        // Rebuilt by the next update before it ended, it is stopped while torn down: leave it be then.
+        let gone = false;
+        row.connect('destroy', () => (gone = true));
         row.ease({
             height,
             opacity: 255,
             duration: ARRIVE_MS,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
             onStopped: () => {
+                if (gone)
+                    return;
                 row.height = -1;
                 row.clip_to_allocation = false;
             },

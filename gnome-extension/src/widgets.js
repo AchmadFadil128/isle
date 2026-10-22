@@ -35,16 +35,21 @@ const OWN_ICONS = {
     'keyboard-brightness': 'isle-sun-min-symbolic',
     'microphone-sensitivity-muted': 'isle-mic-off-symbolic',
     'microphone-disabled': 'isle-mic-off-symbolic',
+    'microphone-hardware-disabled': 'isle-mic-off-symbolic',
     'microphone-sensitivity': 'isle-mic-symbolic',
     'audio-input-microphone': 'isle-mic-symbolic',
     'touchpad-disabled': 'isle-touchpad-off-symbolic',
     'input-touchpad': 'isle-touchpad-symbolic',
     'airplane-mode': 'isle-airplane-symbolic',
     'camera-disabled': 'isle-video-off-symbolic',
+    'camera-hardware-disabled': 'isle-video-off-symbolic',
     'camera': 'isle-video-symbolic',
+    'bluetooth-disabled': 'isle-bluetooth-off-symbolic',
+    'bluetooth-hardware-disabled': 'isle-bluetooth-off-symbolic',
     'bluetooth': 'isle-bluetooth-symbolic',
     'network-wireless-disabled': 'isle-wifi-off-symbolic',
     'network-wireless-offline': 'isle-wifi-off-symbolic',
+    'network-wireless-hardware-disabled': 'isle-wifi-off-symbolic',
     'network-wireless': 'isle-wifi-symbolic',
     'video-display': 'isle-display-symbolic',
     'input-mouse': 'isle-mouse-symbolic',
@@ -56,11 +61,14 @@ const OWN_ICONS = {
     'media-record': 'isle-record-symbolic',
 };
 const OWN_KEYS = Object.keys(OWN_ICONS).sort((a, b) => b.length - a.length);
+// A state a key's glyph doesn't show ("bluetooth-disabled" isn't "bluetooth"): left to GNOME unless listed.
+const OTHER_STATE = /(^|-)(disabled|muted|off|offline|disconnected|none|no-route|acquiring|error|blocked)(-|$)/;
 
 /** Isle's own icon for GNOME's `name` ("audio-volume-high-symbolic"), or null. */
 function ownName(name) {
     const base = name.replace(/-symbolic$/, '');
-    const key = OWN_KEYS.find(k => base === k || base.startsWith(`${k}-`));
+    const key = OWN_KEYS.find(k => base === k ||
+        (base.startsWith(`${k}-`) && !OTHER_STATE.test(base.slice(k.length + 1))));
     return key ? OWN_ICONS[key] : null;
 }
 
@@ -218,7 +226,11 @@ export const Ring = GObject.registerClass({
         this._pendingFill ??= sweeping;
         if (this._pendingFill) {
             this._pendingFill.progress = progress;
-            if (sweeping)
+            // Still waiting out its delay, it only needs a new end; else it carries on from where it is.
+            const transition = sweeping && this._progress === 0 && this.get_transition('progress');
+            if (transition)
+                transition.set_to(progress);
+            else if (sweeping)
                 this._restart(this._progress);
             return;
         }
@@ -263,11 +275,11 @@ export const Ring = GObject.registerClass({
                     this._sweeping = null;
             },
         });
-        if (this._child?.scale_x < 1) {
+        if (this._child?.scale_x < 1 && !this._child.get_transition('scale-x')) {
             this._child.ease({
                 scale_x: 1,
                 scale_y: 1,
-                delay: fill.delay,
+                delay: this._progress > 0 ? 0 : fill.delay,
                 duration: 450,
                 mode: Clutter.AnimationMode.EASE_OUT_BACK,
             });
@@ -737,6 +749,10 @@ class VolumeGlyph extends St.Widget {
                 wave.set_scale(0.6, 0.6);
                 wave.on = false;
             }
+            this._body.remove_all_transitions();
+            this._off.remove_all_transitions();
+            this._body.opacity = muted ? 0 : 255;
+            this._off.opacity = muted ? 255 : 0;
             this._pending = !this._off.mapped;
         }
         if (!this._pending)

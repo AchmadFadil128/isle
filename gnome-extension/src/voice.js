@@ -93,7 +93,7 @@ const EXPRESSIONS = {
 };
 const copyExpression = ({eyes, ...turn}) => ({...turn, eyes: eyes.map(eye => ({...eye}))});
 /** Errors that come from not hearing you (isled's wording): it looks confused at them, sad at others. */
-const NOT_HEARD = /^(Didn't catch that|The microphone is muted|No microphone)/;
+const NOT_HEARD = /^(Didn[’']t catch that|The microphone is muted|No microphone)/;
 /** Blinks come every few seconds, at random, and take this long (s). */
 const BLINK_S = 0.15;
 /** Without the pointer moving for this long (s), the eyes wander on their own. */
@@ -104,23 +104,41 @@ const KEY_LEVEL = 0.32;
 const easeOutBack = x => 1 + 2.2 * (x - 1) ** 3 + 1.2 * (x - 1) ** 2;
 const clamp = (value, limit = 1) => Math.max(-limit, Math.min(limit, value));
 const RAD = Math.PI / 180;
+const TURN_KEYS = ['yaw', 'pitch', 'roll', 'split'];
 
-/** `u` turned towards `v` by `angle` (radians), with `v` turned along: one rotation of two axes. */
+/** Turns `u` towards `v` by `angle` (radians), and `v` along: one rotation of two axes, in place. */
 function rotate(u, v, angle) {
-    const [c, s] = [Math.cos(angle), Math.sin(angle)];
-    return [u.map((x, i) => x * c + v[i] * s), v.map((x, i) => x * c - u[i] * s)];
+    const c = Math.cos(angle), s = Math.sin(angle);
+    for (let i = 0; i < 3; i++) {
+        const x = u[i], y = v[i];
+        u[i] = x * c + y * s;
+        v[i] = y * c - x * s;
+    }
 }
+
+// Reused each frame: a frame's garbage, 60 times a second, is what makes GJS pause to collect.
+const HEAD = {forward: new Float64Array(3), across: new Float64Array(3), up: new Float64Array(3)};
+const PLACES = [-1, 1].map(() => ({x: 0, y: 0, at: new Float64Array(3), across: new Float64Array(3), up: HEAD.up}));
 
 /** Where each eye sits on the turned head, and its axes there: the eyes lie on a ball, as bloub's. */
 function placeEyes({yaw, pitch, roll, split}) {
-    let [forward, across, up] = [[0, 0, 1], [1, 0, 0], [0, 1, 0]];
-    [forward, across] = rotate(forward, across, yaw * RAD);
-    [up, forward] = rotate(up, forward, pitch * RAD);
-    [across, up] = rotate(across, up, roll * RAD);
-    return [-1, 1].map(side => {
-        const [at, eyeAcross] = rotate(forward, across, split * side * RAD);
-        return {x: at[0] * EYE_BALL, y: at[1] * EYE_BALL, across: eyeAcross, up};
-    });
+    const {forward, across, up} = HEAD;
+    forward.fill(0);
+    across.fill(0);
+    up.fill(0);
+    forward[2] = across[0] = up[1] = 1;
+    rotate(forward, across, yaw * RAD);
+    rotate(up, forward, pitch * RAD);
+    rotate(across, up, roll * RAD);
+    for (let index = 0; index < 2; index++) {
+        const place = PLACES[index];
+        place.at.set(forward);
+        place.across.set(across);
+        rotate(place.at, place.across, split * (index ? 1 : -1) * RAD);
+        place.x = place.at[0] * EYE_BALL;
+        place.y = place.at[1] * EYE_BALL;
+    }
+    return PLACES;
 }
 
 // The character: a white head that turns to the pointer, sways, glances about and blinks; its eyes
@@ -154,6 +172,7 @@ class Face extends St.DrawingArea {
         this._heard = false;
         this._voiceAt = 0;
         this._shape = copyExpression(EXPRESSIONS.attentive);
+        this._turn = {yaw: 0, pitch: 0, roll: 0, split: 0};
     }
 
     /** listening, typing, thinking, searching, reply, confused or error; each new form pops in. */
@@ -184,21 +203,24 @@ class Face extends St.DrawingArea {
         }
 
         // The first word heard surprises it, for a moment.
+        // Still speaking, if quietly: not sleepy then.
+        if (this._form === 'listening' && this.level > 0.12)
+            this._voiceAt = time;
         if (this._form === 'listening' && this.level > 0.3) {
             if (!this._heard)
                 this._surpriseAt = time;
             this._heard = true;
-            this._voiceAt = time;
         }
         const goal = EXPRESSIONS[this._expression(time)];
         const morph = 1 - Math.exp(-dt * MORPH_RATE);
         const shape = this._shape;
-        for (const key of ['yaw', 'pitch', 'roll', 'split'])
+        for (const key of TURN_KEYS)
             shape[key] += (goal[key] - shape[key]) * morph;
-        shape.eyes.forEach((eye, index) => {
+        for (let index = 0; index < shape.eyes.length; index++) {
+            const eye = shape.eyes[index];
             for (const key in eye)
                 eye[key] += (goal.eyes[index][key] - eye[key]) * morph;
-        });
+        }
 
         if (time >= this._nextBlink) {
             this._blinkAt = time;
@@ -276,14 +298,15 @@ class Face extends St.DrawingArea {
         // The expression's turn, plus where it looks and a slow sway, as if it breathed.
         const t = this.time * 2 * Math.PI;
         const shape = this._shape;
-        const turn = {
-            yaw: clamp(shape.yaw + gx * LOOK_TURN.yaw + 2.2 * Math.sin(t / 11.3 + 0.4) + 0.7 * Math.sin(t / 3.7 + 2.1), MAX_TURN.yaw),
-            pitch: clamp(shape.pitch - gy * LOOK_TURN.pitch + 1.7 * Math.sin(t / 9.1 + 1.3) + 0.5 * Math.sin(t / 4.3 + 0.7), MAX_TURN.pitch),
-            roll: shape.roll + 0.9 * Math.sin(t / 13.7 + 3.2),
-            split: shape.split,
-        };
+        const turn = this._turn;
+        turn.yaw = clamp(shape.yaw + gx * LOOK_TURN.yaw + 2.2 * Math.sin(t / 11.3 + 0.4) + 0.7 * Math.sin(t / 3.7 + 2.1), MAX_TURN.yaw);
+        turn.pitch = clamp(shape.pitch - gy * LOOK_TURN.pitch + 1.7 * Math.sin(t / 9.1 + 1.3) + 0.5 * Math.sin(t / 4.3 + 0.7), MAX_TURN.pitch);
+        turn.roll = shape.roll + 0.9 * Math.sin(t / 13.7 + 3.2);
+        turn.split = shape.split;
         cr.setSourceRGBA(0.08, 0.08, 0.09, 1);
-        placeEyes(turn).forEach((place, index) => this._eye(cr, hx + place.x, hy + place.y, place, shape.eyes[index]));
+        const places = placeEyes(turn);
+        for (let index = 0; index < 2; index++)
+            this._eye(cr, hx + places[index].x, hy + places[index].y, places[index], shape.eyes[index]);
         cr.$dispose();
     }
 
@@ -297,8 +320,8 @@ class Face extends St.DrawingArea {
         const w = EYE_UNIT * eye.w;
         const h = EYE_UNIT * eye.h * listening;
         const r = Math.min(w, h) / 2;
-        const [ax, ay] = place.across;
-        const [ux, uy] = place.up;
+        const ax = place.across[0], ay = place.across[1];
+        const ux = place.up[0], uy = place.up[1];
         const angle = Math.atan2(ay, ax);
         cr.save();
         cr.translate(x, y);

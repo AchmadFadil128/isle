@@ -84,8 +84,8 @@ fn describe(call: &Value) -> String {
             Some(term) => format!("Looking for an app for “{term}”…"),
             None => "Looking through your apps…".into(),
         },
-        Some("top_processes") => "Checking what's using the computer…".into(),
-        Some("chrome_profiles") => "Looking at Chrome's profiles…".into(),
+        Some("top_processes") => "Checking what’s using the computer…".into(),
+        Some("chrome_profiles") => "Looking at Chrome’s profiles…".into(),
         _ => "Working…".into(),
     }
 }

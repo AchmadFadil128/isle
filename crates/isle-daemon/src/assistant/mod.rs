@@ -80,7 +80,7 @@ fn action_kinds() -> &'static [String] {
 
 /// Said instead when the answer needed actions the running extension cannot do.
 const NEEDS_RELOGIN: &str =
-    "I can't do that yet: Isle was updated, and the update starts once you log out and back in.";
+    "I can’t do that yet: Isle was updated, and the update starts once you log out and back in.";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -1014,10 +1014,10 @@ async fn until_cancelled<T>(
 }
 
 const NOT_SET_UP: (&str, &str) = (
-    "Voice isn't set up",
+    "Voice isn’t set up",
     "Set up downloads the speech model once (or run isle-setup-voice).",
 );
-const NOTHING_HEARD: (&str, &str) = ("Didn't catch that", "Press Super+I and speak again.");
+const NOTHING_HEARD: (&str, &str) = ("Didn’t catch that", "Press Super+I and speak again.");
 const MUTED: (&str, &str) = (
     "The microphone is muted",
     "Unmute it, then press Super+I again.",

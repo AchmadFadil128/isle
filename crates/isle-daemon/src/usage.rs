@@ -537,7 +537,7 @@ fn codex_limits(file: &Path) -> Option<Provider> {
         plan: plan_name(limits["plan_type"].as_str().unwrap_or_default()),
         windows: codex_windows(&limits),
         updated_ms: if at > 0 { at } else { modified },
-        note: "As of Codex's last use".into(),
+        note: "As of Codex’s last use".into(),
     })
 }
 

@@ -45,6 +45,8 @@ const REST_DISTANCE_PX = 10;
 /** The views and pages are laid out ahead this long after starting, a step at a time (see `_warmUp`). */
 const WARM_START_MS = 3000;
 const WARM_STEP_MS = 60;
+/** What the alert views are laid out with ahead (see `_warmUp`): the parts most alerts have. */
+const WARM_ALERT = {key: 'warm', title: 'Charging', subtitle: 'Isle', icon: 'isle-bolt', ring: 0, value: '0%', tone: 'good'};
 /** And again this long after the island closes, or a page changes out of sight, while it stays closed... */
 const WARM_AFTER_CLOSE_MS = 1500;
 /** ...but for changes, at most this often: a notification updating every second (a download) costs little. */
@@ -513,10 +515,16 @@ export class Controller {
             return;
         const pages = expanded.pages.filter(page => page.cold);
         // The voice view only while the assistant is turned on.
-        const steps = all
-            ? [...this._peeks, ...this._voiceBound ? [this._voice] : []]
-                .map(view => () => island.warmView(view, true) && island.warmView(view, false))
-            : [];
+        const steps = [];
+        if (all) {
+            // Each alert view shown with a ring alert's parts until the next step: a frame lays them out.
+            for (const peek of this._peeks) {
+                steps.push(() => island.warmView(peek, true) && peek.setAlert(WARM_ALERT, null, {fresh: true}));
+                steps.push(() => island.warmView(peek, false));
+            }
+            if (this._voiceBound)
+                steps.push(() => island.warmView(this._voice, true) && island.warmView(this._voice, false));
+        }
         if (pages.length || all) {
             steps.push(() => {
                 this._warmShown = island.warmView(expanded, true);
@@ -809,7 +817,7 @@ export class Controller {
             return;
         }
         if (this._alert && this._alert.key === alert.key) {
-            this._showAlert(alert); // update in place
+            this._showAlert(alert, {inPlace: true});
             return;
         }
         if (this._expandWanted || this._voiceOpen) {
@@ -852,7 +860,8 @@ export class Controller {
         }
     }
 
-    _showAlert(alert) {
+    /** `inPlace` for a newer version of the alert on screen (the volume moving): it doesn't animate in again. */
+    _showAlert(alert, {inPlace = false} = {}) {
         // Another alert on screen takes the other view; the same one (the volume moving) updates in place.
         if (this._presentation === 'peek' && this._shownAlertKey !== alert.key)
             this._peek = this._peeks[1 - this._peeks.indexOf(this._peek)];
@@ -866,7 +875,7 @@ export class Controller {
         this._peek.setAlert(alert, () => {
             if (this._alert === alert)
                 this._dismissAlert(true);
-        });
+        }, {fresh: !inPlace});
         this._timeAlert();
         this._render();
         // Parts shown for the first time are only measured right once styled;
@@ -975,7 +984,7 @@ export class Controller {
         // A message on screen as sharing starts loses its text at once.
         const redone = this._alert?.fresh?.(this._sharing);
         if (redone && redone !== this._alert)
-            this._showAlert(redone);
+            this._showAlert(redone, {inPlace: true});
     }
 
     // Updates
