@@ -191,12 +191,23 @@ export function track(nowPlaying) {
     };
 }
 
+/** Notifications already watched, and those since withdrawn (destroyed). */
+const watched = new WeakSet();
+const withdrawn = new WeakSet();
+
+/** Watches `item` for being withdrawn, once however often it is shown (updates come as the same one). */
+function watchWithdrawal(item) {
+    if (watched.has(item))
+        return;
+    watched.add(item);
+    item.connect('destroy', () => withdrawn.add(item));
+}
+
 /** A GNOME notification, shown in place of GNOME's own banner. */
 export function notification(item, urgent) {
     // The app or GNOME may withdraw the notification while it is shown;
     // clicking the alert afterwards must not touch the destroyed object.
-    let withdrawn = false;
-    item.connect('destroy', () => (withdrawn = true));
+    watchWithdrawal(item);
     const body = plainBody(item).replace(/\s+/g, ' ').trim();
     const title = item.title || item.source?.title || '';
     return {
@@ -213,7 +224,7 @@ export function notification(item, urgent) {
         duration: urgent ? REMINDER_DURATION : NOTIFICATION_DURATION,
         page: 'notifications',
         onActivate: () => {
-            if (!withdrawn)
+            if (!withdrawn.has(item))
                 item.activate();
         },
     };

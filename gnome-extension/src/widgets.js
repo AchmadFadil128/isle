@@ -10,19 +10,23 @@ import Gio from 'gi://Gio';
 import St from 'gi://St';
 
 let iconDir = null;
+/** Icons by name, made once: a GIcon never changes, and looking for the file is a disk access. */
+const icons = new Map();
 
 /** Tells `icon()` where the extension's bundled icons live. */
 export function setIconDir(dir) {
     iconDir = dir;
+    icons.clear();
 }
 
 // A `Gio.Icon` for `name`: a bundled one (in `icons/`) if it exists, else a themed icon. Bundled
 // icons are not named `-symbolic`: GNOME would fill every shape, turning outlines into blobs.
 export function icon(name) {
-    const file = iconDir?.get_child(`${name}.svg`);
-    if (file?.query_exists(null))
-        return new Gio.FileIcon({file});
-    return new Gio.ThemedIcon({name});
+    if (!icons.has(name)) {
+        const file = iconDir?.get_child(`${name}.svg`);
+        icons.set(name, file?.query_exists(null) ? new Gio.FileIcon({file}) : new Gio.ThemedIcon({name}));
+    }
+    return icons.get(name);
 }
 
 export function label(text, styleClass, props = {}) {
@@ -185,8 +189,10 @@ class Bars extends St.BoxLayout {
         this._playing = false;
         this._bars = [];
         for (let i = 0; i < count; i++) {
-            const bar = new St.Widget({style_class: 'isle-bar', y_align: Clutter.ActorAlign.CENTER});
-            bar.height = this._restHeight(i);
+            // Full height, scaled about its middle: a scale moves below a pixel and lays nothing out again.
+            const bar = new St.Widget({style_class: 'isle-bar', y_align: Clutter.ActorAlign.CENTER, height});
+            bar.set_pivot_point(0.5, 0.5);
+            bar.scale_y = this._rest(i);
             // A bar's bounce pauses off screen. Each bar is watched itself: the box maps a moment before them.
             bar.connect('notify::mapped', () => this._bounce(bar));
             this._bars.push(bar);
@@ -199,13 +205,12 @@ class Bars extends St.BoxLayout {
     set maxHeight(height) {
         this._maxHeight = height;
         this.height = height;
-        if (!this._playing)
-            this._bars.forEach((bar, index) => (bar.height = this._restHeight(index)));
+        this._bars.forEach(bar => (bar.height = height));
     }
 
-    _restHeight(index) {
+    _rest(index) {
         // A fixed "|ılı" silhouette when not animating.
-        return this._maxHeight * [0.45, 1, 0.7, 0.35, 0.8][index % 5];
+        return [0.45, 1, 0.7, 0.35, 0.8][index % 5];
     }
 
     /** Animates the bars. Costs a redraw per frame, so only use when visible. */
@@ -218,9 +223,9 @@ class Bars extends St.BoxLayout {
             if (playing)
                 this._bounce(bar);
             else if (this.mapped)
-                bar.ease({height: this._restHeight(index), duration: 200});
+                bar.ease({scale_y: this._rest(index), duration: 200});
             else
-                bar.height = this._restHeight(index);
+                bar.scale_y = this._rest(index);
         });
     }
 
@@ -230,7 +235,7 @@ class Bars extends St.BoxLayout {
         if (!this._playing || !bar.mapped || !St.Settings.get().enable_animations)
             return;
         bar.ease({
-            height: this._maxHeight * (0.25 + Math.random() * 0.75),
+            scale_y: 0.25 + Math.random() * 0.75,
             duration: 180 + Math.random() * 220,
             mode: Clutter.AnimationMode.EASE_IN_OUT_SINE,
             onStopped: finished => {
@@ -255,7 +260,34 @@ export function isSymbolic(gicon) {
 }
 
 /** Whether the image at `path` looks like an icon, not a cover: its corners are see-through. */
-function isIcon(path) {
+/** A key for `path`'s current contents: a player may write new art under the same name. */
+export function fileKey(path) {
+    try {
+        const info = Gio.File.new_for_path(path).query_info('time::modified', Gio.FileQueryInfoFlags.NONE, null);
+        return `${path}\u001f${info.get_attribute_uint64('time::modified')}`;
+    } catch {
+        return null;
+    }
+}
+
+/** Remembers the last few results of `compute(path)`, by `fileKey`, so a cover is decoded once. */
+export function memoByFile(compute, size = 20) {
+    const cache = new Map();
+    return path => {
+        const key = path ? fileKey(path) : null;
+        if (key === null)
+            return compute(path);
+        if (!cache.has(key)) {
+            if (cache.size >= size)
+                cache.delete(cache.keys().next().value);
+            cache.set(key, compute(path));
+        }
+        return cache.get(key);
+    };
+}
+
+// Whether the image at `path` is an icon (a logo with transparent corners) rather than a cover.
+const isIcon = memoByFile(path => {
     try {
         const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(path, 32, 32);
         if (!pixbuf.has_alpha)
@@ -267,7 +299,7 @@ function isIcon(path) {
     } catch {
         return false;
     }
-}
+});
 
 /** Square cover art with rounded corners and a placeholder. */
 export const Art = GObject.registerClass(

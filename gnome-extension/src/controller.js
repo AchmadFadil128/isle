@@ -36,6 +36,9 @@ import {ShelfPage} from './pages/shelf.js';
 /** The pointer must rest this long before the island opens, moving at most this far meanwhile. */
 const EXPAND_DELAY_MS = 120;
 const REST_DISTANCE_PX = 10;
+/** Outside an island that shrank under it, the pointer is checked this often, and left this long. */
+const MOVE_CHECK_MS = 250;
+const STILL_OUTSIDE_MS = 30000;
 /** Grace period before closing when the pointer leaves. */
 const COLLAPSE_DELAY_MS = 300;
 /** A page picked by hand is kept for this long before smart defaults resume. */
@@ -92,12 +95,14 @@ export class Controller {
         if (hasSfPro())
             this._island.add_style_class_name(SF_PRO_CLASS);
         this._compact = new CompactView(this._daemon, this._settings, this._privacy, this._call);
-        this._peek = new PeekView();
+        // Two, taking turns: a new alert fades in over the one it replaces, rather than swapping in a frame.
+        this._peeks = [new PeekView(), new PeekView()];
+        this._peek = this._peeks[0];
         this._expanded = this._buildExpanded();
         this._shelf = this._expanded.pageNamed('shelf');
         this._shelfHelper = new ShelfHelper(this._island, this._shelf);
 
-        for (const view of [this._compact, this._peek, this._expanded])
+        for (const view of [this._compact, ...this._peeks, this._expanded])
             this._island.addView(view);
         Main.layoutManager.addChrome(this._island, {trackFullscreen: true});
         this._connectSignals();
@@ -326,14 +331,14 @@ export class Controller {
         });
     }
 
-    // Closes after the pointer, outside the island, moves away from `[x, y]`.
-    _collapseOnMove([x, y]) {
-        this._later('collapse', 100, () => {
+    // Closes after the pointer, outside the island, moves away from `[x, y]`, or has rested there a while.
+    _collapseOnMove([x, y], waited = 0) {
+        this._later('collapse', MOVE_CHECK_MS, () => {
             const [nowX, nowY] = global.get_pointer();
-            if (Math.hypot(nowX - x, nowY - y) > 2)
+            if (Math.hypot(nowX - x, nowY - y) > 2 || waited >= STILL_OUTSIDE_MS)
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
             else
-                this._collapseOnMove([x, y]);
+                this._collapseOnMove([x, y], waited + MOVE_CHECK_MS);
         });
     }
 
@@ -493,6 +498,10 @@ export class Controller {
     }
 
     _showAlert(alert) {
+        // Another alert on screen takes the other view; the same one (the volume moving) updates in place.
+        if (this._presentation === 'peek' && this._shownAlertKey !== alert.key)
+            this._peek = this._peeks[1 - this._peeks.indexOf(this._peek)];
+        this._shownAlertKey = alert.key;
         this._alert = alert;
         // Its button does what it says, and that is the end of the alert.
         this._peek.setAlert(alert, () => this._dismissAlert(true));

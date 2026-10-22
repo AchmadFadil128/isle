@@ -247,8 +247,9 @@
 .isle-tab:hover,
 .isle-tab:focus { background-color: rgba(255, 255, 255, 0.05); }
 .isle-tab:checked { background-color: rgba(255, 255, 255, 0.09); }
-.isle-tab-box { spacing: 6px; }
-.isle-tab-label { font-size: 13px; font-weight: 600; }
+.isle-tab-box { spacing: 0; }
+/* The gap from the icon is the name's own margin, so a closed name takes no room (expanded.js). */
+.isle-tab-label { font-size: 13px; font-weight: 600; margin-left: 6px; }
 
 /* A dot on a tab whose page has news. */
 .isle-tab-badge {
@@ -429,7 +430,7 @@
 
 /* ── Focus ────────────────────────────────────────────── */
 
-.isle-timer-time { font-size: 26px; font-weight: 600; letter-spacing: -0.5px; }
+.isle-timer-time { font-size: 23px; font-weight: 600; letter-spacing: -0.5px; }
 .isle-timer-side { spacing: 2px; }
 .isle-timer-caption { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
 .isle-timer-stats { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
@@ -445,7 +446,12 @@
 
 /* The Focus page: the timer, a hairline, then today's reminders (focus.js). */
 .isle-focus-divider { width: 1px; height: 112px; margin: 0 16px; background-color: rgba(255, 255, 255, 0.1); }
-.isle-timer .isle-chip { padding: 7px 12px; }
+/* The phases, as round buttons lit in their colour (timer.js). */
+.isle-phase { padding: 7px; }
+.isle-phase-focus:checked { background-color: #5e5ce6; }
+.isle-phase-focus:checked:hover { background-color: #6e6cf0; }
+.isle-phase-break:checked { background-color: #2fb35a; }
+.isle-phase-break:checked:hover { background-color: #36c264; }
 
 /* ── Lists (notifications, calendar) ──────────────────── */
 

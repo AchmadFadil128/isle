@@ -11,9 +11,6 @@ import {Page} from './page.js';
 import {TasksPage} from './tasks.js';
 import {TimerPage} from './timer.js';
 
-/** Wider than the other pages, to fit both halves. */
-const WIDTH = 720;
-
 export const FocusPage = GObject.registerClass(
 class FocusPage extends Page {
     _init(daemon, {height}) {
@@ -35,10 +32,6 @@ class FocusPage extends Page {
 
     get relevant() {
         return this._timer.relevant;
-    }
-
-    get preferredWidth() {
-        return WIDTH;
     }
 
     onActivate() {

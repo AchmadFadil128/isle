@@ -61,8 +61,10 @@ class NotificationsPage extends Page {
         this.add_child(this._buildList());
 
         this._centerHandlers = [
+            // Closed, the list is only rebuilt when next shown (see `onActivate`).
             center.connect('changed', () => {
-                this._update();
+                if (this.active)
+                    this._update();
                 this.emit('news-changed');
             }),
             center.connect('dnd-changed', () => this._updateDnd()),

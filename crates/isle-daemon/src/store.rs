@@ -147,11 +147,57 @@ pub fn cache_dir() -> PathBuf {
         .join("isle")
 }
 
+/// Keeps the `keep` newest files in `dir` and deletes the rest (cover art and lyrics, one per song, would
+/// otherwise pile up). Never follows links, and leaves folders alone.
+pub fn prune_newest(dir: &Path, keep: usize) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut files: Vec<(std::time::SystemTime, PathBuf)> = entries
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+        .filter_map(|entry| Some((entry.metadata().ok()?.modified().ok()?, entry.path())))
+        .collect();
+    if files.len() <= keep {
+        return;
+    }
+    files.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
+    for (_, path) in files.into_iter().skip(keep) {
+        fs::remove_file(path).ok();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     use super::*;
+
+    #[test]
+    fn keeps_only_the_newest_files() {
+        let dir = std::env::temp_dir().join(format!("isle-prune-{}", std::process::id()));
+        fs::create_dir_all(dir.join("folder")).unwrap();
+        for i in 0..5 {
+            fs::write(dir.join(format!("{i}")), "x").unwrap();
+            // Distinct times, oldest first.
+            let at = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000 + i);
+            fs::File::options()
+                .write(true)
+                .open(dir.join(format!("{i}")))
+                .unwrap()
+                .set_modified(at)
+                .unwrap();
+        }
+        prune_newest(&dir, 2);
+        let mut left: Vec<String> = fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(left, ["3", "4", "folder"]);
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     /// A fresh, empty directory for one test.
     fn scratch(name: &str) -> PathBuf {

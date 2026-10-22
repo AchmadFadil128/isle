@@ -122,6 +122,8 @@ export const CompactView = GObject.registerClass({
 
     /** Shows a dot for unseen notifications when nothing else is on the left. */
     set unseenNotifications(unseen) {
+        if (unseen === this._unseen)
+            return;
         this._unseen = unseen;
         this._refresh();
     }

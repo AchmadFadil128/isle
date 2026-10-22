@@ -13,6 +13,10 @@ import {GENTLE, Spring, SpringDriver} from './spring.js';
 
 /** Sideways speed (px/s) `nudge` gives: a ~15 px stretch that springs back, as iOS does at a volume limit. */
 const NUDGE_VELOCITY = 220;
+/** How long a view takes to glide to its new place when its width changes. */
+const GLIDE_MS = 360;
+/** The shape layer reaches this far past the island on each side (see `_repaint`). */
+const SHAPE_PAD = 1;
 
 /** How long a tint takes to come and go: a wash, and a glow (which lingers out). */
 const TINT_FADE = {wash: [450, 450], glow: [380, 1100]};
@@ -49,6 +53,10 @@ export const Island = GObject.registerClass({
         this._tintStyle = 'wash';
         this._tintStrength = 0;
 
+        /** Where the island and its views' frame were last put, in whole pixels (see `_sync`). */
+        this._islandX = 0;
+        this._islandFraction = 0;
+        this._stageX = 0;
         this._width = new Spring(0);
         this._height = new Spring(0);
         this._radius = new Spring(0, GENTLE);
@@ -115,11 +123,8 @@ export const Island = GObject.registerClass({
     restingRect(actor) {
         if (!this._monitor || !this._view)
             return null;
-        const margin = Math.max(0, this._shoulder.target);
-        const width = Math.max(0, this._width.target);
-        // As `_sync` and `_placeView` will place the view.
-        const viewX = Math.round(this._monitor.x + (this._monitor.width - width - 2 * margin) / 2) +
-            margin + Math.round((Math.ceil(width) - this._view.width) / 2);
+        // Views stay put on screen, centred on the monitor (see `_placeView`).
+        const viewX = this._screenX(this._view);
         const [viewLeft, viewTop] = this._view.get_transformed_position();
         const [left, top] = actor.get_transformed_position();
         const [actorWidth, actorHeight] = actor.get_transformed_size();
@@ -167,7 +172,7 @@ export const Island = GObject.registerClass({
 
     /** Adds a view, hidden. All views are added up front so they are always on the stage. */
     addView(view) {
-        view.connect('notify::width', () => this._placeView(view));
+        view.connect('notify::width', () => this._onViewWidth(view));
         view.opacity = 0;
         view.reactive = false;
         view.hide();
@@ -182,9 +187,33 @@ export const Island = GObject.registerClass({
         this._driver.start();
     }
 
-    /** Centres `view` at the top of the island's body. */
+    // A view that changes width moves its edges at once; the one shown glides there instead (FLIP: it is
+    // put in its new place, offset back to where it was, and eased to none), as the shape springs after.
+    _onViewWidth(view) {
+        const before = this._monitor ? view.x + this._islandX + this._stageX : null;
+        this._placeView(view);
+        if (before === null || view !== this._view || !view.mapped || !St.Settings.get().enable_animations)
+            return;
+        const offset = view.translation_x + before - (view.x + this._islandX + this._stageX);
+        if (offset === 0)
+            return;
+        view.remove_transition('translation-x');
+        view.translation_x = offset;
+        view.ease({translation_x: 0, duration: GLIDE_MS, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+    }
+
+    /** Where `view` sits on screen: centred on the monitor, in whole pixels. */
+    _screenX(view) {
+        return Math.round(this._monitor.x + (this._monitor.width - view.width) / 2);
+    }
+
+    // Centres `view` on the monitor, not on the island: as the island grows or shrinks around it, the
+    // view stays still on screen, where two separate roundings would shake it by a pixel each frame.
     _placeView(view) {
-        view.set_position(Math.round((Math.ceil(Math.max(0, this._width.value)) - view.width) / 2), 0);
+        const x = this._monitor
+            ? this._screenX(view) - this._islandX - this._stageX
+            : Math.round((Math.ceil(Math.max(0, this._width.value)) - view.width) / 2);
+        view.set_position(x, 0);
     }
 
     _showView(view) {
@@ -207,13 +236,17 @@ export const Island = GObject.registerClass({
         }
 
         this._view = view;
+        // Still fading out (shown again within a moment): it comes back from where it is, without a blink.
+        const returning = view.visible && view.opacity > 0;
         view.remove_all_transitions();
+        view.translation_x = 0;
         view.reactive = true;
         view.show();
-        view.opacity = 0;
+        if (!returning)
+            view.opacity = 0;
         view.ease({
             opacity: 255,
-            delay: previous ? FADE_IN_DELAY : 0,
+            delay: previous && !returning ? FADE_IN_DELAY : 0,
             duration: FADE_IN,
             mode: Clutter.AnimationMode.EASE_OUT_QUAD,
         });
@@ -227,24 +260,31 @@ export const Island = GObject.registerClass({
         const outerWidth = width + 2 * margin;
 
         this.set_size(Math.ceil(outerWidth), Math.ceil(height));
-        this._shape.set_size(Math.ceil(outerWidth), Math.ceil(height));
-        this._stage.set_position(margin, 0);
+        // A pixel wider on each side, for the fraction the island is drawn off its whole-pixel place.
+        this._shape.set_position(-SHAPE_PAD, 0);
+        this._shape.set_size(Math.ceil(outerWidth) + 2 * SHAPE_PAD, Math.ceil(height));
+        // Whole pixels keep text sharp while the island resizes.
+        this._stageX = Math.round(margin);
+        this._stage.set_position(this._stageX, 0);
         this._stage.set_size(Math.ceil(width), Math.ceil(height));
+        if (this._monitor) {
+            const {x, y, width: monitorWidth} = this._monitor;
+            const exact = x + (monitorWidth - outerWidth) / 2;
+            this._islandX = Math.round(exact);
+            this._islandFraction = exact - this._islandX;
+            this.set_position(this._islandX, y);
+        }
         for (const view of this._stage.get_children())
             this._placeView(view);
         this._shape.queue_repaint();
-
-        if (this._monitor) {
-            const {x, y, width: monitorWidth} = this._monitor;
-            // Whole pixels keep text sharp while the island resizes.
-            this.set_position(Math.round(x + (monitorWidth - outerWidth) / 2), y);
-        }
         this.emit('geometry-changed');
     }
 
     _repaint(area) {
         const cr = area.get_context();
-        const [, height] = area.get_surface_size();
+        // At the island's exact place (its actor sits on a whole pixel), so its edges never step back.
+        cr.translate(SHAPE_PAD + this._islandFraction, 0);
+        const height = Math.max(0, this._height.value);
         const top = Math.min(this._topInset, height);
         // Shoulders and corners must share the part below the top bar; an
         // island without shoulders may round its corners inside the bar.

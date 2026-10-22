@@ -44,6 +44,33 @@ pub struct NowPlaying {
     pub can_seek: bool,
 }
 
+/// Within this, a position sampled again is the same moment of the song.
+const SAME_POSITION_MS: f64 = 250.0;
+
+impl NowPlaying {
+    /// Whether `next` says nothing new: the same song and state, at the position this one predicts.
+    /// Players send their properties again often (volume, shuffle, a browser's metadata), each time
+    /// with a fresh sample of the position.
+    pub fn continues_as(&self, next: &NowPlaying) -> bool {
+        let without_time = |n: &NowPlaying| NowPlaying {
+            position_us: 0,
+            sampled_at_ms: 0,
+            ..n.clone()
+        };
+        if without_time(self) != without_time(next) {
+            return false;
+        }
+        let elapsed_ms = (next.sampled_at_ms - self.sampled_at_ms) as f64;
+        let advance = if self.status == "Playing" {
+            elapsed_ms * self.rate
+        } else {
+            0.0
+        };
+        let predicted_us = self.position_us as f64 + advance * 1000.0;
+        (predicted_us - next.position_us as f64).abs() < SAME_POSITION_MS * 1000.0
+    }
+}
+
 #[derive(Default)]
 pub struct MediaService {
     now_playing: NowPlaying,
@@ -132,5 +159,52 @@ impl MediaService {
     #[zbus(property)]
     fn lyrics(&self) -> String {
         serde_json::to_string(&self.lyrics).unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_fresh_sample_of_the_same_moment_is_nothing_new() {
+        let playing = NowPlaying {
+            available: true,
+            status: "Playing".into(),
+            title: "Midnight Drive".into(),
+            position_us: 60_000_000,
+            sampled_at_ms: 1_000,
+            rate: 1.0,
+            ..NowPlaying::default()
+        };
+        // Two seconds on, two seconds further: the same.
+        let later = NowPlaying {
+            position_us: 62_010_000,
+            sampled_at_ms: 3_000,
+            ..playing.clone()
+        };
+        assert!(playing.continues_as(&later));
+        // A seek, a pause or another song is news.
+        assert!(!playing.continues_as(&NowPlaying {
+            position_us: 90_000_000,
+            ..later.clone()
+        }));
+        assert!(!playing.continues_as(&NowPlaying {
+            status: "Paused".into(),
+            ..later.clone()
+        }));
+        assert!(!playing.continues_as(&NowPlaying {
+            title: "Other".into(),
+            ..later
+        }));
+        // Paused, the position stays put.
+        let paused = NowPlaying {
+            status: "Paused".into(),
+            ..playing
+        };
+        assert!(paused.continues_as(&NowPlaying {
+            sampled_at_ms: 9_000,
+            ..paused.clone()
+        }));
     }
 }

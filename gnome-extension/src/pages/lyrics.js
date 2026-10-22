@@ -96,6 +96,11 @@ class LyricsPane extends St.Widget {
         this._rows = [];
         this._current = -2;
         this._manualUntil = 0;
+        // Hidden (island closed, or the player shown), it has no layout to scroll; it catches up when shown.
+        this.connect('notify::mapped', () => {
+            if (this.mapped)
+                this._scrollTo(this._current);
+        });
 
         this._column = new St.BoxLayout({...VERTICAL, style_class: 'isle-lyrics-column', x_expand: true});
         this._scroll = new St.ScrollView({
@@ -256,7 +261,7 @@ class LyricsPane extends St.Widget {
 
     _scrollTo(index) {
         const target = this._rows[Math.max(index, 0)];
-        if (!target)
+        if (!target || !this.mapped)
             return;
         // Allocation may lag a frame behind a rebuild; wait for it.
         if (!target.has_allocation() || !this._scroll.has_allocation()) {

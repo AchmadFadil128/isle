@@ -93,6 +93,9 @@ export const Page = GObject.registerClass({
     /** Runs `callback` after `ms`, replacing any pending timeout of the same name. */
     later(name, ms, callback) {
         this.cancel(name);
+        // An await that ends after the page went (the extension turned off) schedules nothing.
+        if (this._destroyed)
+            return;
         const id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Math.max(0, Math.round(ms)), () => {
             this._timeouts.delete(name);
             callback();
@@ -115,6 +118,7 @@ export const Page = GObject.registerClass({
     }
 
     _onPageDestroy() {
+        this._destroyed = true;
         this.cancelAll();
         for (const id of this._daemonHandlers)
             this.daemon.disconnect(id);

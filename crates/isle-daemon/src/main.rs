@@ -14,6 +14,7 @@ mod system;
 mod todo;
 
 use anyhow::Context;
+use futures_util::StreamExt;
 use log::{info, warn};
 use zbus::connection;
 
@@ -27,6 +28,8 @@ use crate::todo::TodoService;
 
 const BUS_NAME: &str = "io.github.zickrian.isle.Daemon";
 const OBJECT_PATH: &str = "/io/github/zickrian/isle/Daemon";
+/// Songs whose cover and lyrics stay cached.
+const CACHED_SONGS: usize = 500;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -40,6 +43,12 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
+    // One cover and one lyrics file per song: only the latest few hundred are kept.
+    tokio::task::spawn_blocking(|| {
+        for kind in ["art", "lyrics"] {
+            store::prune_newest(&store::cache_dir().join(kind), CACHED_SONGS);
+        }
+    });
     let session = connection::Builder::session()?
         .serve_at(OBJECT_PATH, MediaService::default())?
         .serve_at(OBJECT_PATH, PomodoroService::load())?
@@ -81,6 +90,19 @@ async fn main() -> anyhow::Result<()> {
     // and clients only see its PhaseFinished signal if it comes from the claimed name.
     tokio::spawn(pomodoro::run(pomodoro));
 
-    std::future::pending::<()>().await;
+    // Runs until the session bus goes (the session ended) or the name is lost; never outlives its
+    // session, which would leave it polling with nobody to tell.
+    let lost = zbus::MatchRule::builder()
+        .msg_type(zbus::message::Type::Signal)
+        .sender("org.freedesktop.DBus")?
+        .interface("org.freedesktop.DBus")?
+        .member("NameLost")?
+        .build();
+    let mut events = zbus::MessageStream::for_match_rule(lost, &session, None).await?;
+    match events.next().await {
+        Some(Ok(_)) => info!("lost {BUS_NAME}; stopping"),
+        Some(Err(err)) => info!("the session bus went away ({err}); stopping"),
+        None => info!("the session bus went away; stopping"),
+    }
     Ok(())
 }

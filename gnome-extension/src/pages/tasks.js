@@ -145,13 +145,20 @@ class TasksPage extends Page {
         const shown = open.filter(task => !this._gone.has(task.id)).sort((a, b) => a.id - b.id);
         this._count.text = String(shown.length);
 
-        // The field stays (with what is typed in it) while the rows around it are rebuilt.
-        if (this._newRow.get_parent())
-            this._list.remove_child(this._newRow);
-        this._list.destroy_all_children();
+        // The field stays in place, with what is typed in it and its focus, while the rows above it are
+        // rebuilt: taking it off the stage, even for a moment, would drop the keyboard focus.
+        if (!this._newRow.get_parent())
+            this._list.add_child(this._newRow);
+        // A row's field losing its focus as it is destroyed upsets the input method: let go of it first.
+        const focus = global.stage.get_key_focus();
+        if (focus && this._list.contains(focus) && !this._newRow.contains(focus))
+            global.stage.set_key_focus(null);
+        for (const child of this._list.get_children()) {
+            if (child !== this._newRow)
+                child.destroy();
+        }
         for (const task of shown)
-            this._list.add_child(this._row(task));
-        this._list.add_child(this._newRow);
+            this._list.insert_child_below(this._row(task), this._newRow);
         this._empty.visible = shown.length === 0;
         this._empty.text = tasks.length > shown.length ? 'All Done' : 'No Reminders';
     }
@@ -178,7 +185,8 @@ class TasksPage extends Page {
         title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         // Click the title to rename it in place.
         title.connect('button-release-event', () => {
-            if (!this._leaving.has(task.id))
+            // One rename at a time: starting another would rebuild the list mid focus change.
+            if (this._renaming === null && !this._leaving.has(task.id))
                 this._startRenaming(titleBox, title, task);
             return Clutter.EVENT_STOP;
         });
@@ -206,6 +214,9 @@ class TasksPage extends Page {
     // Ticks a reminder: the ring turns orange with a dot in it, the title is struck through, it lingers
     // a moment (a second tap undoes it), then fades and folds away.
     _tick(task, {row, check, dot, title, strike}) {
+        // Folding away already: too late to undo.
+        if (!check.reactive)
+            return;
         const name = `leave-${task.id}`;
         const pop = shown => {
             dot.remove_all_transitions();
@@ -227,7 +238,8 @@ class TasksPage extends Page {
             return;
         }
         // The text's own width, as laid out (cut short with … when long); measured before restyling.
-        const box = title.get_parent().width;
+        // The strike's box, not the title's: the title is off it while being renamed.
+        const box = strike.get_parent()?.width ?? 0;
         const [textWidth] = title.clutter_text.get_layout().get_pixel_size();
         this._leaving.add(task.id);
         check.add_style_pseudo_class('checked');
@@ -237,7 +249,8 @@ class TasksPage extends Page {
         // Struck through at once.
         strike.scale_x = box > 0 ? Math.min(1, textWidth / box) : 1;
         this.later(name, LINGER_MS, () => {
-            // Folds away: the rows below slide up into its place.
+            // Folds away: the rows below slide up into its place; too late now to undo.
+            check.reactive = false;
             row.clip_to_allocation = true;
             row.ease({
                 opacity: 0,
@@ -245,7 +258,9 @@ class TasksPage extends Page {
                 duration: LEAVE_MS,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onStopped: () => {
-                    this._leaving.delete(task.id);
+                    // Already settled by `onDeactivate`, whose rebuild is what stopped this.
+                    if (!this._leaving.delete(task.id))
+                        return;
                     this._gone.add(task.id);
                     this.daemon.call('todo', 'SetDone', task.id, true);
                     this._update();
@@ -270,11 +285,15 @@ class TasksPage extends Page {
                 return;
             finished = true;
             const text = entry.text.trim();
-            this._renaming = null;
+            if (this._renaming === task.id)
+                this._renaming = null;
             if (save && text && text !== task.title)
                 this.daemon.call('todo', 'Rename', task.id, text);
-            this.emit('request-keyboard', false);
-            this._update();
+            // After this event: it may come as focus moves, and the entry must outlive the move.
+            this.later('renamed', 0, () => {
+                this._update();
+                this._releaseKeyboard();
+            });
         };
         entry.clutter_text.connect('activate', () => finish(true));
         // Clicking elsewhere keeps the new name, as in Files.
@@ -287,8 +306,16 @@ class TasksPage extends Page {
         });
     }
 
+    /** Gives the keyboard back, unless a field here still has it (focus moved from one to another). */
+    _releaseKeyboard() {
+        const focus = global.stage.get_key_focus();
+        if (!focus || !this.contains(focus))
+            this.emit('request-keyboard', false);
+    }
+
     onDeactivate() {
         this._stopAdding();
+        this._renaming = null;
         // Closing cancels the linger: ticked ones are done now, so the list never stays frozen.
         for (const id of this._leaving) {
             this._gone.add(id);

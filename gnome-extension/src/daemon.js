@@ -94,6 +94,8 @@ export class Daemon extends Signals.EventEmitter {
         super();
         /** Parsed state; a key is `null` until the daemon has reported it. */
         this.state = {};
+        /** The JSON each key last had, to tell a real change from the same value sent again. */
+        this._raw = {};
         this._proxies = {};
         this._cancellable = new Gio.Cancellable();
 
@@ -137,7 +139,13 @@ export class Daemon extends Signals.EventEmitter {
                 for (const [property, key] of Object.entries(properties))
                     this._update(key, proxy[property]);
             };
-            proxy.connect('g-properties-changed', refresh);
+            // Only what changed: NowPlaying changing many times a song should not re-read the lyrics.
+            proxy.connect('g-properties-changed', (_proxy, changed, invalidated) => {
+                for (const property of [...Object.keys(changed.deep_unpack()), ...invalidated]) {
+                    if (property in properties)
+                        this._update(properties[property], proxy[property]);
+                }
+            });
             // The daemon restarted (or stopped): re-read everything.
             proxy.connect('notify::g-name-owner', refresh);
             proxy.connect('g-signal', (_proxy, _sender, signal, parameters) =>
@@ -147,6 +155,10 @@ export class Daemon extends Signals.EventEmitter {
     }
 
     _update(key, json) {
+        // isled may send a value again unchanged; nobody needs to hear it twice.
+        if (key in this._raw && this._raw[key] === json)
+            return;
+        this._raw[key] = json;
         let value = null;
         try {
             value = json ? JSON.parse(json) : null;

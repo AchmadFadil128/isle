@@ -33,7 +33,7 @@ sizes are logical pixels.
 | Compact | 144 × P; 232 with an activity | 10 | 7 | Clock; activity slots left/right |
 | Compact, hanging | 164 × (P + 30); 256 with an activity | 16 | 10 | As above |
 | Peek (alert) | fits its content, 220–380 wide × (P + 56); 62 high off a black bar | 22 | 13 | Badge · title/subtitle · value, level bar or button, centred |
-| Expanded | 720 × (P + 164), the same on every page | 32 | 22 | Header row (tabs) · page |
+| Expanded | 600 × (P + 164) on every page; 720 for lyrics | 32 | 22 | Header row (tabs) · page |
 
 The top bar is slimmed to a thin bezel (status icons and the tray stay in
 it) and see-through like glass, with no colour of its own. The
@@ -190,7 +190,8 @@ headphones, earbuds, HDMI) with a check on the current one; click one to
 switch. The output button lights up and fills in while this is shown; it
 returns to the player when the island closes.
 
-**Lyrics** (Music page, toggled), like Apple Music's. Left, in a column: a 64 px cover, title, artist and the music bars
+**Lyrics** (Music page, toggled), like Apple Music's. The island widens to
+720, its contents gliding to their new place. Left, in a column: a 64 px cover, title, artist and the music bars
 (dancing while it plays), the scrubber, then the lyrics toggle (lit),
 previous · play/pause · next and the output button. Right: synced lines;
 the one being sung is white and full size, the others a little smaller,
@@ -227,8 +228,10 @@ during breaks) with the remaining time inside. Beside it the phase ("Focus
 time", "Short break", "Long break", "· paused"), then today's total ("Today
 · 3 sessions · 1h 15m") or, before the first session, what comes ("25m of
 focus, then a break"), and one row of controls: white play/pause, reset,
-**Break** and **Focus**; the chips start that phase at once and the current
-one is lit. No glows.
+and the phases as round buttons (a cup for a break, a target for focus) that
+start that phase at once, the current one lit in its colour. The timer's
+column has a fixed width, so a longer phase name never moves the reminders.
+No glows.
 
 While a focus phase runs (paused included), Do Not Disturb is on, like a
 Focus mode; it goes off when the phase ends. Isle only undoes what it did:

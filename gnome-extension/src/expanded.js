@@ -33,6 +33,8 @@ const TABS = {
 /** How bright a tab's icon is: open, under the pointer, otherwise. */
 const TAB_OPACITY = {open: 255, hover: 230, idle: 140};
 
+/** The music bars' opacity while the song is paused, as on the closed island. */
+const PAUSED_BARS_OPACITY = 110;
 const SLIDE_DISTANCE = 48;
 const SLIDE_DURATION = 260;
 /** Touchpad travel (in wheel clicks) that flips a page; one flip a swipe. */
@@ -80,6 +82,11 @@ export const ExpandedView = GObject.registerClass({
         this.connect('captured-event', (_actor, event) => this._captureScroll(event));
 
         this._header = this._buildHeader();
+        // The open tab's name is only measured right once on the stage.
+        this.connect('notify::mapped', () => {
+            if (this.mapped)
+                this._syncTabs();
+        });
         this.add_child(this._header);
         this.add_child(this._buildPager());
         this.add_child(new St.Widget({height: BOTTOM_PADDING}));
@@ -167,9 +174,12 @@ export const ExpandedView = GObject.registerClass({
             });
             glyph.add_child(badge);
             const name = label(text, 'isle-tab-label', {y_align: Clutter.ActorAlign.CENTER});
+            // The name opens and closes by width, so the tabs beside it slide over instead of jumping.
+            const nameClip = new St.Widget({layout_manager: new Clutter.BinLayout(), clip_to_allocation: true, width: 0, y_align: Clutter.ActorAlign.CENTER});
+            nameClip.add_child(name);
             const box = new St.BoxLayout({style_class: 'isle-tab-box'});
             box.add_child(glyph);
-            box.add_child(name);
+            box.add_child(nameClip);
             const tab = new St.Button({
                 style_class: `isle-tab isle-tab-${page.name}`,
                 child: box,
@@ -181,22 +191,38 @@ export const ExpandedView = GObject.registerClass({
             tab.connect('clicked', () => this.showPage(index));
             tab.connect('notify::hover', () => this._syncTabs());
             tabs.add_child(tab);
-            return {tab, icon: tabIcon, name, badge};
+            return {tab, icon: tabIcon, name, nameClip, badge};
         });
         return tabs;
     }
 
     /** Lights the open page's tab and shows which pages have news. */
     _syncTabs() {
-        this._tabs.forEach(({tab, icon: tabIcon, name, badge}, index) => {
+        const animate = this.mapped && St.Settings.get().enable_animations;
+        this._tabs.forEach(({tab, icon: tabIcon, name, nameClip, badge}, index) => {
             const open = index === this._index;
             if (open)
                 tab.add_style_pseudo_class('checked');
             else
                 tab.remove_style_pseudo_class('checked');
-            name.visible = open;
+            // Measured once on the stage (styled); until then the open name keeps its width.
+            const width = open ? (this.get_stage() ? name.get_preferred_width(-1)[1] : nameClip.width) : 0;
+            if (nameClip.width !== width || nameClip.get_transition('width')) {
+                nameClip.remove_all_transitions();
+                name.remove_all_transitions();
+                if (animate) {
+                    nameClip.ease({width, duration: SLIDE_DURATION, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+                    name.ease({opacity: open ? 255 : 0, duration: SLIDE_DURATION, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+                } else {
+                    nameClip.width = width;
+                    name.opacity = open ? 255 : 0;
+                }
+            }
             tab.visible = this._pages[index].available;
-            tabIcon.opacity = TAB_OPACITY[open ? 'open' : tab.hover ? 'hover' : 'idle'];
+            // Fades with the tab's background (150 ms in the stylesheet).
+            const opacity = TAB_OPACITY[open ? 'open' : tab.hover ? 'hover' : 'idle'];
+            if (tabIcon.opacity !== opacity)
+                tabIcon.ease({opacity, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
             badge.visible = !open && Boolean(this._pages[index].hasNews);
         });
         // The open tab's name may need more room.
@@ -245,10 +271,14 @@ export const ExpandedView = GObject.registerClass({
         // are measured in the open one's font: the others, never shown yet, may not be styled.
         const openName = this._tabs[this._index]?.name;
         const open = openName?.get_preferred_width(-1)[1] ?? 0;
-        const names = this._tabs.map(({name}) => openName?.clutter_text.create_pango_layout(name.text).get_pixel_size()[0] ?? 0);
+        // The open name's own margin (its gap from the icon), the same for every name.
+        const gap = open - (openName?.clutter_text.get_preferred_width(-1)[1] ?? open);
+        const names = this._tabs.map(({name}) => gap + (openName?.clutter_text.create_pango_layout(name.text).get_pixel_size()[0] ?? 0));
+        // The tabs without their names, whose widths ease while switching, then room for the longest name.
+        const shown = this._tabs.reduce((sum, {nameClip}) => sum + nameClip.width, 0);
         const [, tabs] = this._tabsBox.get_preferred_width(-1);
         const [, status] = this._status.get_preferred_width(-1);
-        return Math.ceil(tabs - open + Math.max(open, ...names) + status +
+        return Math.ceil(tabs - shown + Math.max(open, ...names) + status +
             this._header.get_theme_node().get_horizontal_padding() + HEADER_GAP);
     }
 
@@ -387,7 +417,10 @@ export const ExpandedView = GObject.registerClass({
             this._headerRing.progress = 1 - remaining / pomodoro.duration_ms;
         }
         const playing = Playback.isPlaying(nowPlaying);
-        this._headerBars.visible = playing;
+        // There for as long as there is a song, dimmed while paused as on the closed island: play and
+        // pause never change the header's width.
+        this._headerBars.visible = Playback.hasTrack(nowPlaying);
+        this._headerBars.opacity = playing ? 255 : PAUSED_BARS_OPACITY;
         this._headerBars.playing = this._active && playing;
 
         const privacy = this._settings.get_boolean('privacy-indicators') ? this._privacy : {};

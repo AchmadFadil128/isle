@@ -5,12 +5,13 @@
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {timerColor} from '../compact.js';
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
-import {Ring, chipButton, iconButton, label, setButtonIcon, setChip, setEnabled} from '../widgets.js';
+import {Ring, iconButton, label, setButtonIcon, setEnabled} from '../widgets.js';
 import {Page} from './page.js';
 
 const CAPTIONS = {
@@ -19,7 +20,9 @@ const CAPTIONS = {
     short_break: 'Short break',
     long_break: 'Long break',
 };
-const RING_SIZE = 96;
+const RING_SIZE = 88;
+/** The phase, today's total and the controls beside the ring. */
+const SIDE_WIDTH = 172;
 /** Shown until isled reports the timer: a fresh 25-minute focus session. */
 const DEFAULT_STATE = {phase: 'idle', running: false, remaining_ms: 25 * 60000, duration_ms: 25 * 60000, today_sessions: 0};
 
@@ -29,7 +32,7 @@ class TimerPage extends Page {
         super._init(daemon, {
             style_class: 'isle-timer',
             // St's `spacing` only reaches St.BoxLayout, so it is set here.
-            layout_manager: new Clutter.BoxLayout({spacing: 16}),
+            layout_manager: new Clutter.BoxLayout({spacing: 14}),
             height,
         });
         this.name = 'focus';
@@ -40,10 +43,13 @@ class TimerPage extends Page {
         this._ring.y_align = Clutter.ActorAlign.CENTER;
         this.add_child(this._ring);
 
-        const side = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-timer-side'});
+        // A fixed width, so a longer phase name never moves the reminders beside it.
+        const side = new St.BoxLayout({...VERTICAL, width: SIDE_WIDTH, y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-timer-side'});
         this._caption = label('', 'isle-timer-caption');
+        this._caption.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         // Today's focus, or how to begin.
         this._stats = label('', 'isle-timer-stats');
+        this._stats.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         side.add_child(this._caption);
         side.add_child(this._stats);
 
@@ -52,10 +58,11 @@ class TimerPage extends Page {
             {size: 16, accessibleName: 'Start or pause'});
         this._reset = iconButton('isle-reset', 'isle-button-round isle-button-small',
             () => daemon.call('pomodoro', 'Stop'), {size: 14, accessibleName: 'Reset the timer'});
-        this._shortBreak = chipButton('isle-coffee', 'Break',
-            () => daemon.call('pomodoro', 'StartPhase', 'short_break'), 'isle-chip-break');
-        this._focus = chipButton('isle-target', 'Focus',
-            () => daemon.call('pomodoro', 'StartPhase', 'focus'), 'isle-chip-focus');
+        // The phases as round buttons, the current one lit in its colour, like Control Center's.
+        this._shortBreak = iconButton('isle-coffee', 'isle-button-round isle-phase isle-phase-break',
+            () => daemon.call('pomodoro', 'StartPhase', 'short_break'), {size: 14, accessibleName: 'Take a break'});
+        this._focus = iconButton('isle-target', 'isle-button-round isle-phase isle-phase-focus',
+            () => daemon.call('pomodoro', 'StartPhase', 'focus'), {size: 14, accessibleName: 'Focus'});
         for (const button of [this._play, this._reset, this._shortBreak, this._focus])
             buttons.add_child(button);
         side.add_child(buttons);
@@ -97,14 +104,10 @@ class TimerPage extends Page {
         // Reset only acts once started.
         setEnabled(this._reset, !idle);
 
-        // The chip of the current phase lights up in its colour and its icon
-        // fills in, like Do Not Disturb.
+        // The current phase's button lights up in its colour and its icon fills in, like Do Not Disturb.
         const focus = state.phase === 'focus';
-        setChip(this._shortBreak, {
-            active: onBreak,
-            icon: onBreak ? 'isle-coffee-fill' : 'isle-coffee',
-        });
-        setChip(this._focus, {active: focus, icon: focus ? 'isle-target-fill' : 'isle-target'});
+        light(this._shortBreak, onBreak, onBreak ? 'isle-coffee-fill' : 'isle-coffee');
+        light(this._focus, focus, focus ? 'isle-target-fill' : 'isle-target');
 
         this._scheduleTick(state);
     }
@@ -128,3 +131,12 @@ class TimerPage extends Page {
         this._update();
     }
 });
+
+/** Lights `button` (or not) and shows `iconName` on it. */
+function light(button, on, iconName) {
+    setButtonIcon(button, iconName);
+    if (on)
+        button.add_style_pseudo_class('checked');
+    else
+        button.remove_style_pseudo_class('checked');
+}

@@ -6,6 +6,8 @@
 import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 
+import {memoByFile} from './widgets.js';
+
 /** Pictures are averaged at this size, which costs next to nothing. */
 const SAMPLE_SIZE = 12;
 
@@ -83,7 +85,7 @@ function hue(r, g, b, max, chroma) {
 }
 
 /** `vividColor` of the picture file at `path`, read small; null if unreadable. */
-export function vividColorOfFile(path) {
+export const vividColorOfFile = memoByFile(path => {
     if (!path)
         return null;
     try {
@@ -91,7 +93,7 @@ export function vividColorOfFile(path) {
     } catch {
         return null;
     }
-}
+});
 
 // The colours of iOS's system palette, toned like `vividColor`'s.
 const TYPE_COLORS = [

@@ -318,8 +318,15 @@ class MediaPage extends Page {
         this._volumeSlider.value = audio.muted ? 0 : audio.volume;
         this._volumeText.text = audio.muted ? 'Muted' : `${Math.round(audio.volume * 100)}%`;
 
+        // Volume and mute come here too, many times a second while a slider moves; the rows only change
+        // with the outputs themselves.
+        const outputs = audio.outputs;
+        const key = JSON.stringify(outputs.map(({id, name, detail, active}) => [id, name, detail, active]));
+        if (key === this._outputsKey)
+            return;
+        this._outputsKey = key;
         this._outputList.destroy_all_children();
-        for (const output of audio.outputs) {
+        for (const output of outputs) {
             const row = new St.BoxLayout({style_class: 'isle-output-row', x_expand: true, x_align: Clutter.ActorAlign.FILL});
             row.add_child(new St.Icon({gicon: output.gicon, fallback_icon_name: 'audio-speakers-symbolic', icon_size: 18, y_align: Clutter.ActorAlign.CENTER}));
             const texts = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});

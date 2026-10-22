@@ -356,7 +356,7 @@ impl Watcher {
 
         let mut service = self.iface.get_mut().await;
         service.active = active;
-        if service.now_playing != now_playing {
+        if !service.now_playing.continues_as(&now_playing) {
             service.now_playing = now_playing;
             if let Err(err) = service
                 .now_playing_changed(self.iface.signal_emitter())
