@@ -62,7 +62,9 @@ find_package() {
             return
         fi
         # x86_64 is always built: a release without it is still getting its files.
-        [ "$ARCH" = x86_64 ] && [ "$attempt" -lt "$RETRIES" ] || break
+        if [ "$ARCH" != x86_64 ] || [ "$attempt" -ge "$RETRIES" ]; then
+            break
+        fi
         echo "The release is still being published; trying again in $RETRY_WAIT s." >&2
         sleep "$RETRY_WAIT"
     done
