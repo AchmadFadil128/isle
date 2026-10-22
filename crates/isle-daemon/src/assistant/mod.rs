@@ -190,8 +190,9 @@ fn soften(text: &str) -> String {
 }
 
 pub enum Command {
-    Listen(Context),
-    Ask(String, Context),
+    // Boxed: a context is large, and a command is carried in every Result that may hand one back.
+    Listen(Box<Context>),
+    Ask(String, Box<Context>),
     Stop,
     End,
 }
@@ -229,12 +230,15 @@ impl AssistantService {
     /// Records a request and answers it; `context` is JSON
     /// `{apps, provider, agy_model, claude_model, codex_model, whisper_model, language, selection, …}`.
     fn listen(&self, context_json: &str) -> fdo::Result<()> {
-        self.send(Command::Listen(context(context_json)?))
+        self.send(Command::Listen(Box::new(context(context_json)?)))
     }
 
     /// Answers a typed request.
     fn ask(&self, text: &str, context_json: &str) -> fdo::Result<()> {
-        self.send(Command::Ask(text.to_owned(), context(context_json)?))
+        self.send(Command::Ask(
+            text.to_owned(),
+            Box::new(context(context_json)?),
+        ))
     }
 
     /// Stops recording and answers what was said so far.
@@ -577,12 +581,12 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
         next = match command {
             Command::Listen(context) => {
                 session.resume(today());
-                session.adopt(context);
+                session.adopt(*context);
                 turn(&iface, &data, &mut session, None, &mut commands).await
             }
             Command::Ask(text, context) => {
                 session.resume(today());
-                session.adopt(context);
+                session.adopt(*context);
                 turn(&iface, &data, &mut session, Some(text), &mut commands).await
             }
             Command::End => {
