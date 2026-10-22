@@ -49,6 +49,24 @@ Alt+F2, type `r` and press Enter.)
 The island now sits in the middle of the top bar, in place of the clock.
 Rest the pointer on it to open it.
 
+## 4. The voice assistant (optional)
+
+Everything else works without it. To ask the island things out loud with
+Super+I:
+
+1. Install and sign in to one of Claude Code, Codex or Antigravity (the
+   [README](../README.md#voice-assistant) says how; each uses your own plan).
+2. Set up speech recognition once, in a terminal. It needs Python's venv
+   (`sudo apt install python3-venv` on Ubuntu and Debian) and downloads about
+   0.5 GB:
+
+   ```sh
+   isle-setup-voice
+   ```
+
+3. Pick the AI in Isle's Settings → Voice, or leave it on Automatic, and
+   press Super+I.
+
 ## Updating
 
 Run the same command again; it installs the newest release over the old one

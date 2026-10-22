@@ -6,6 +6,30 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-22
+
+### Added
+
+- **A voice assistant.** Press Super+I (or the mic in the open island) and
+  ask, in English or Indonesian: play a song, find a file, open or close an
+  app, put windows side by side or in a 2×2 grid, add a reminder or an event,
+  change the volume, brightness or dark style, write where your cursor is,
+  or ask a question. It works as an agent, looking things up on your computer
+  and on the web and showing each step, with the AI you already use: Claude
+  Code, Codex or Antigravity, picked in Settings → Voice. Speech is
+  recognised on your computer; set it up once with `isle-setup-voice`.
+- **AI usage**: how much of your Claude and ChatGPT plans' limits is used,
+  one plan at a time with its logo, with a warning as a limit nears its end.
+  Only the plans you are signed in to show.
+- Reminders the assistant sets show as alerts when due.
+
+### Security
+
+- Each AI is started with only web search and reading pages; Isle runs the
+  actions it answers with, opens documents and media but never programs,
+  never reads folders that hold keys or passwords, even through a link, and
+  treats text from other apps and the web as data, never as instructions.
+
 ## [0.4.1] - 2026-10-22
 
 ### Fixed
@@ -325,7 +349,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/zickrian/isle/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/zickrian/isle/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/zickrian/isle/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/zickrian/isle/compare/v0.2.0...v0.3.0

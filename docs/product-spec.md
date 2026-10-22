@@ -119,7 +119,7 @@ call starts → Call during a call → Notifications if some arrived unseen
 runs → Music.
 
 Pages, in order: **Call** (only during a call) **· Music · Notifications ·
-Focus · Shelf · Calendar**, one tab each in the header. Lists scroll with the wheel or touchpad and never show
+Focus · Shelf · Calendar · Usage** (Usage only with an AI plan found), one tab each in the header. Lists scroll with the wheel or touchpad and never show
 a scrollbar.
 
 ## 4. Closed island

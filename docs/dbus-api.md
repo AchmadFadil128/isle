@@ -92,6 +92,49 @@ it was. Beyond 20 unpinned items the oldest are
 dropped; pinned items are only removed by hand. Unknown ids and invalid
 content are rejected with `InvalidArgs`.
 
+## io.github.zickrian.isle.Reminders1
+
+Reminders the voice assistant sets ("remind me in ten minutes to…"), kept in
+`~/.local/share/isle/reminders.json`. The extension shows each as an alert
+when it is due, then dismisses it.
+
+| Member | Signature | |
+|---|---|---|
+| `Add(t delay_ms, s text) → t id` | | A reminder due `delay_ms` from now. |
+| `Dismiss(t id)` | | Forgets one, once shown (or cancelled). |
+| `Items` | `s` | `[{id, text, due_ms}]`, soonest first. |
+
+## io.github.zickrian.isle.Assistant1
+
+The voice assistant. isled records the microphone, turns speech into text
+(faster-whisper, through `isle-whisper.py`), asks the AI picked in Settings
+(Claude Code, Codex or agy, with the user's own sign-in), runs the look-up
+tools the AI asks for (finding files and apps, reading small text files), and
+publishes the answer; the extension runs its actions.
+
+| Member | Signature | |
+|---|---|---|
+| `Listen(s context)` | | Records a request until the user pauses, then answers it. `context` is JSON from the extension: `{apps, running, windows, actions, provider, agy_model, claude_model, codex_model, whisper_model, language, selection, notifications}`; `actions` lists the action types it can run, and the AI is offered only those. |
+| `Ask(s text, s context)` | | Answers a typed request, with the same context. |
+| `Stop()` | | Stops recording and answers what was said so far. |
+| `End()` | | Ends the conversation; the AI and the speech model quit. |
+| `State` | `s` | `{phase, heard, reply, actions, error, hint, sign_in, listen, heard_nothing, activity, provider, turn}`. `phase` is `idle`, `listening`, `transcribing`, `thinking`, `reply` or `error`; `actions` are what the reply asks the extension to do, run once per `turn`; `activity` says what the AI is doing while it thinks ("Searching ~/Downloads for “ttd”…"). |
+| `Level` (signal) | `d` | The microphone's level (0..1) while listening, 20 times a second. |
+
+## io.github.zickrian.isle.Usage1
+
+How much of the user's AI plans is used. Claude's numbers come from
+`api.anthropic.com/api/oauth/usage` with Claude Code's sign-in (asked every
+ten minutes, at most every two when refreshed, backing off after failures,
+never refreshing the sign-in); ChatGPT's are read from Codex's own logs.
+
+| Member | Signature | |
+|---|---|---|
+| `SetConfig(s config)` | | `{enabled, claude, codex, warn, critical}`, from Settings; off until set. |
+| `Refresh()` | | Reads again now (Claude at most every two minutes). |
+| `Usage` | `s` | `{providers: [{id, name, plan, windows: [{label, percent, resets_at_ms}], updated_ms, note}]}`; a provider not signed in is left out. |
+| `Alert` (signal) | `ssdx` | `(provider, window, percent, resets_at_ms)`: a limit passed the warning or the critical share, once per window. |
+
 ## io.github.zickrian.isle.System1
 
 | Member | Signature | |
