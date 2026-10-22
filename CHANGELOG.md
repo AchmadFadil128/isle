@@ -6,6 +6,12 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The one-line install works when GitHub's API has had enough questions
+  from the address for the hour (an office or campus network): it finds
+  the latest release from its page instead.
+
 ## [0.8.0] - 2026-10-23
 
 ### Added

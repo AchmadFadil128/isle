@@ -36,6 +36,20 @@ check() {
     fi
 }
 
+# The download found without GitHub's API, which answers an address 60 times an hour: the latest
+# release's tag from where its page leads, and the file by its name.
+web_package() {
+    local tag="v${ISLE_VERSION:-}" url
+    if [ -z "${ISLE_VERSION:-}" ]; then
+        tag="$(curl -fsLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")" || return 1
+        tag="${tag##*/}"
+    fi
+    [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+    url="https://github.com/$REPO/releases/download/$tag/isle-${tag#v}-$ARCH-linux.tar.gz"
+    curl -fsLI -o /dev/null "$url" || return 1
+    printf '%s\n' "$url"
+}
+
 # The release's download for this computer, waiting a little for one just published.
 find_package() {
     local api reply url attempt
@@ -50,7 +64,10 @@ find_package() {
         fi
         case "${reply##*$'\n'}" in
             200) ;;
-            403 | 429) fail "GitHub limits how often it is asked; try again in an hour." ;;
+            403 | 429)
+                url="$(web_package)" || fail "GitHub limits how often it is asked; try again in an hour."
+                printf '%s\n' "$url"
+                return ;;
             404) fail "no release ${ISLE_VERSION:+v$ISLE_VERSION }was found at github.com/$REPO/releases." ;;
             *) fail "GitHub answered ${reply##*$'\n'}; try again later." ;;
         esac
