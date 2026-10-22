@@ -170,6 +170,7 @@ export class OsdHook {
     constructor(handler) {
         const manager = Main.osdWindowManager;
         this._manager = manager;
+        const self = this;
         const perMonitor = typeof manager.showAll === 'function';
         const adapters = perMonitor
             ? {
@@ -185,8 +186,9 @@ export class OsdHook {
             };
         this._hooks = Object.entries(adapters).map(([name, handled]) => {
             const original = manager[name];
+            // Left in place under another extension's wrapper once Isle stops: then it only passes through.
             const hook = function (...args) {
-                if (handled(...args))
+                if (!self._destroyed && handled(...args))
                     return;
                 original.apply(this, args);
             };
@@ -198,6 +200,7 @@ export class OsdHook {
     }
 
     destroy() {
+        this._destroyed = true;
         // Only undo our own overrides; another extension may have wrapped
         // them since. GNOME's methods live on the prototype.
         for (const {name, hook, ownOriginal} of this._hooks) {

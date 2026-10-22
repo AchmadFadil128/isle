@@ -414,6 +414,8 @@ export const ShelfPage = GObject.registerClass({
     onActivate() {
         if (this._stale.delete('clips'))
             this._updateClips();
+        else
+            this._clips.refreshAges();
         if (this._stale.delete('files')) {
             this._files.update();
             this._updateFilesHint();

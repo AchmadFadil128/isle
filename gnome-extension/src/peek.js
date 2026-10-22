@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Short-lived alerts the island grows to show. An alert: {key (same key replaces), icon | gicon | art, badge,
-// appIcon, ring, title, subtitle, tone, value, status, level, action, duration, onActivate, page, priority, transient}.
+// appIcon, ring, ringIconSize, title, subtitle, tone, value, status, level, action, duration, onActivate, page, priority, transient}.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -17,8 +17,11 @@ const MAX_WIDTH = 380;
 /** Height of the part that hangs below the top bar: a line of text, or two. */
 const HEIGHT = {one: 44, two: 52};
 
-/** The ring starts sweeping once the island has made room. */
+/** The ring starts sweeping once the island has made room; a level bar grows a little sooner. */
 const RING_DELAY = 350;
+const LEVEL_DELAY = 200;
+/** As wide as a digit in tabular figures: a counting "7%" keeps the width of "64%". */
+const FIGURE_SPACE = '\u2007';
 
 const TONE_COLORS = {
     neutral: [1, 1, 1],
@@ -105,6 +108,15 @@ class PeekView extends St.Widget {
 
         this._actionButton = null;
         this._ringKey = null;
+        this._levelKey = null;
+        /** A value counting up with the ring's sweep: {final, digits, target}. */
+        this._count = null;
+        this._ring.connect('notify::progress', () => this._syncCount());
+        // Put away, the next alert here is a new one and animates in.
+        this.connect('notify::mapped', () => {
+            if (!this.mapped)
+                this._ringKey = this._levelKey = null;
+        });
         this.connect('destroy', () => this._onDestroy());
     }
 
@@ -129,6 +141,7 @@ class PeekView extends St.Widget {
         } else if (hasRing) {
             this._ring.color = rgb;
             this._ringIcon.gicon = gicon;
+            this._ringIcon.icon_size = alert.ringIconSize ?? 12;
             this._ringIcon.style = `color: ${color};`;
             this._ringBadge.style = badgeStyle(rgb, (alert.tone ?? 'neutral') === 'neutral');
             this._setChild(this._badge, this._ring);
@@ -138,7 +151,7 @@ class PeekView extends St.Widget {
             if (ringKey !== this._ringKey)
                 this._ring.fillTo(alert.ring, {delay: RING_DELAY});
             else
-                this._ring.progress = alert.ring;
+                this._ring.jumpTo(alert.ring);
             this._ringKey = ringKey;
         } else {
             // An app's own colour icon stands alone; a symbolic one gets a badge.
@@ -161,6 +174,7 @@ class PeekView extends St.Widget {
 
         this._actionButton?.destroy();
         this._actionButton = null;
+        this._count = null;
         if (alert.action) {
             this._actionButton = pillButton(alert.action.label, 'isle-pill-small', () => {
                 alert.action.callback();
@@ -168,13 +182,20 @@ class PeekView extends St.Widget {
             });
             this._setChild(this._accessory, this._actionButton);
         } else if (alert.level !== undefined && alert.level !== null) {
-            this._level.level = alert.level;
+            if (alert.key !== this._levelKey)
+                this._level.growTo(alert.level, {delay: LEVEL_DELAY});
+            else
+                this._level.level = alert.level;
+            this._levelKey = alert.key;
             this._level.fillColor = color;
             this._levelText.text = alert.levelText ?? '';
             this._levelText.visible = Boolean(alert.levelText);
             this._setChild(this._accessory, this._levelBox);
         } else if (alert.value) {
+            const counted = hasRing && alert.ring > 0 && /^(\d+)%$/.exec(alert.value);
+            this._count = counted ? {final: Number(counted[1]), digits: counted[1].length, target: alert.ring} : null;
             this._value.text = alert.value;
+            this._syncCount();
             this._setChild(this._accessory, this._value);
         } else if (alert.status) {
             this._status.text = alert.status;
@@ -183,6 +204,15 @@ class PeekView extends St.Widget {
         } else {
             this._setChild(this._accessory, null);
         }
+    }
+
+    /** A ring's percentage counts up as it sweeps. */
+    _syncCount() {
+        if (!this._count)
+            return;
+        const {final, digits, target} = this._count;
+        const shown = Math.min(final, Math.round(final * this._ring.progress / target));
+        this._value.text = `${String(shown).padStart(digits, FIGURE_SPACE)}%`;
     }
 
     /** The height below the top bar this alert needs: less with a title alone. */

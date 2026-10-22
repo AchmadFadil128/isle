@@ -258,8 +258,8 @@ class TasksPage extends Page {
                 duration: LEAVE_MS,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onStopped: () => {
-                    // Already settled by `onDeactivate`, whose rebuild is what stopped this.
-                    if (!this._leaving.delete(task.id))
+                    // Already settled by `onDeactivate`, whose rebuild is what stopped this; or Isle stopped.
+                    if (this._destroyed || !this._leaving.delete(task.id))
                         return;
                     this._gone.add(task.id);
                     this.daemon.call('todo', 'SetDone', task.id, true);
@@ -318,6 +318,7 @@ class TasksPage extends Page {
         // Nothing in the middle of anything: the list stays as it is, with no rebuild as the page goes.
         if (this._renaming === null && this._leaving.size === 0)
             return;
+        const renaming = this._renaming !== null;
         this._renaming = null;
         // Closing cancels the linger: ticked ones are done now, so the list never stays frozen.
         for (const id of this._leaving) {
@@ -326,5 +327,8 @@ class TasksPage extends Page {
         }
         this._leaving.clear();
         this._update();
+        // The rename ends with the rebuild, but its own release is cancelled as the page goes.
+        if (renaming)
+            this.emit('request-keyboard', false);
     }
 });

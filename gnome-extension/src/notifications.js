@@ -131,14 +131,19 @@ export class NotificationCenter extends Signals.EventEmitter {
         const critical = notification.urgency === MessageTray.Urgency.CRITICAL;
         if (!critical && !notification.source.policy.showBanners)
             return;
-        notification.playSound();
-        this.emit('banner', notification);
+        // An app updating one sets its text before its buttons: shown once the update is complete.
+        Promise.resolve().then(() => {
+            const source = notification.source;
+            if (this._sources.has(source) && source.notifications.includes(notification) && !notification.acknowledged)
+                this.emit('banner', notification);
+        });
     }
 
-    /** Marks `notification` seen, once it was actually shown (see `banner`). */
+    /** Marks `notification` seen, with its sound, once it was actually shown (see `banner`), as GNOME does. */
     acknowledge(notification) {
         if (notification.acknowledged)
             return;
+        notification.playSound();
         notification.acknowledged = true;
         this.emit('changed');
     }

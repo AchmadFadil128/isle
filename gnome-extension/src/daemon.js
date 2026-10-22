@@ -203,9 +203,16 @@ export class Daemon extends Signals.EventEmitter {
                 if (proxy.g_name_owner)
                     this.emit('appeared', name);
             });
-            // Whatever it was doing for the voice assistant is lost with it.
-            if (name === 'assistant')
-                proxy.connect('notify::g-name-owner', () => this.emit('assistant-lost'));
+            // Whatever it was doing for the voice assistant is lost with it; not when it first starts.
+            if (name === 'assistant') {
+                let owner = proxy.g_name_owner;
+                proxy.connect('notify::g-name-owner', () => {
+                    const was = owner;
+                    owner = proxy.g_name_owner;
+                    if (was && was !== owner)
+                        this.emit('assistant-lost');
+                });
+            }
             proxy.connect('g-signal', (_proxy, _sender, signal, parameters) =>
                 this._onSignal(signal, parameters.deep_unpack()));
             refresh();

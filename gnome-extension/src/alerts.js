@@ -15,11 +15,9 @@ const NOTIFICATION_DURATION = 5000;
 /** A critical notification stays this long once someone is there to see it. */
 const CRITICAL_DURATION = 20000;
 
-function batteryIcon(percent, plugged) {
-    const level = Math.min(100, Math.max(0, Math.round(percent / 10) * 10));
-    if (plugged && level === 100)
-        return 'battery-level-100-charged-symbolic';
-    return `battery-level-${level}${plugged ? '-charging' : ''}-symbolic`;
+/** A battery on its side, like macOS's; the ring around it shows the level. */
+function batteryIcon(percent) {
+    return percent <= 20 ? 'isle-battery-low-symbolic' : 'isle-battery-symbolic';
 }
 
 function percentText(value) {
@@ -94,7 +92,8 @@ export function system(event) {
     case 'power':
         return {
             key: 'power',
-            icon: event.plugged ? 'isle-bolt' : batteryIcon(event.percent, false),
+            icon: event.plugged ? 'isle-bolt' : batteryIcon(event.percent),
+            ringIconSize: event.plugged ? undefined : 14,
             ring: event.percent / 100,
             title: event.plugged ? 'Charging' : 'On Battery',
             subtitle: event.plugged ? 'Charger connected' : 'Charger disconnected',
@@ -105,7 +104,8 @@ export function system(event) {
     case 'battery_low':
         return {
             key: 'power',
-            icon: batteryIcon(event.percent, false),
+            icon: batteryIcon(event.percent),
+            ringIconSize: 14,
             ring: event.percent / 100,
             title: 'Low Battery',
             subtitle: 'Plug in your charger soon',
@@ -213,6 +213,11 @@ function watchWithdrawal(item) {
     });
 }
 
+/** Whether a notification still waits to be seen: not withdrawn, nor read in the list meanwhile. */
+function unseen(item) {
+    return !withdrawn.has(item) && !item.acknowledged;
+}
+
 /** A GNOME notification, shown in place of GNOME's own banner; `onShown` once it is on screen. While the
  * screen is `shared`, only who it is from shows. */
 export function notification(item, urgent, onShown, shared = false) {
@@ -223,7 +228,7 @@ export function notification(item, urgent, onShown, shared = false) {
         numbers.set(item, ++lastNumber);
     const body = shared ? '' : plainBody(item).replace(/\s+/g, ' ').trim();
     const title = shared ? item.source?.title || 'New notification' : item.title || item.source?.title || '';
-    return {
+    const alert = {
         // Its own key: one arriving behind another waits its turn; the same one updated replaces itself.
         key: `notification:${numbers.get(item)}`,
         kind: 'notification',
@@ -234,7 +239,7 @@ export function notification(item, urgent, onShown, shared = false) {
             label: item.actions[0].label,
             callback: () => {
                 if (!withdrawn.has(item))
-                    item.actions[0].activate();
+                    item.actions[0]?.activate();
             },
         } : undefined,
         onShown: () => {
@@ -255,7 +260,19 @@ export function notification(item, urgent, onShown, shared = false) {
             if (!withdrawn.has(item))
                 item.activate();
         },
+        item,
+        // When its turn comes: gone if withdrawn or read meanwhile, and as the screen is shared now.
+        fresh: sharedNow => {
+            if (withdrawn.has(item) || (item.acknowledged && !alert.shown))
+                return null;
+            if (sharedNow === shared)
+                return alert;
+            const redone = notification(item, urgent, onShown, sharedNow);
+            redone.shown = alert.shown;
+            return redone;
+        },
     };
+    return alert;
 }
 
 /** "5 hours" → "5-hour limit", "Week · Opus" → "weekly Opus limit". */
@@ -329,18 +346,25 @@ export function serviceDown(restart) {
     };
 }
 
-/** Several notifications that came while the island could not show them, summed up. */
-export function notificationsSummary(count) {
-    return {
+/** Several notifications (a Set) that came while the island could not show them, summed up. */
+export function notificationsSummary(items) {
+    const count = items.size;
+    const alert = {
         key: 'notifications-summary',
-        count,
+        items,
         icon: 'isle-bell',
-        title: `${count} new notifications`,
-        subtitle: 'Open the island to read them',
+        title: count === 1 ? '1 new notification' : `${count} new notifications`,
+        subtitle: count === 1 ? 'Open the island to read it' : 'Open the island to read them',
         tone: 'neutral',
         duration: NOTIFICATION_DURATION,
         page: 'notifications',
+        // Those read or withdrawn meanwhile no longer count.
+        fresh: () => {
+            const left = new Set([...items].filter(unseen));
+            return left.size === count ? alert : left.size ? notificationsSummary(left) : null;
+        },
     };
+    return alert;
 }
 
 /** The voice assistant finished a request the island closed on: its answer, or what went wrong. `open`

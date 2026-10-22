@@ -415,7 +415,10 @@ export const VoiceView = GObject.registerClass({
 
     /** `text` naming the shortcut as set instead of the default one isled's hints name. */
     _withShortcut(text) {
-        return this.shortcut ? text.replaceAll('Super+I', this.shortcut) : text.replace(/Press Super\+I and /, '');
+        if (this.shortcut)
+            return text.replaceAll('Super+I', this.shortcut);
+        // No shortcut set: "Press Super+I and speak again." is "Speak again."
+        return text.replace(/Press Super\+I and (\w)/, (_match, first) => first.toUpperCase());
     }
 
     /** Whether a request is being typed. */
@@ -467,8 +470,9 @@ export const VoiceView = GObject.registerClass({
                 this._steps = [];
             return;
         }
-        if (step && this._steps.at(-1) !== step)
-            this._steps.push(step.replace(/…$/, ''));
+        const done = step?.replace(/…$/, '');
+        if (done && this._steps.at(-1) !== done)
+            this._steps.push(done);
     }
 
     /** The microphone's level (0..1). */

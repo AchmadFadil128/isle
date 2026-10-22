@@ -60,7 +60,9 @@ export default class IslePreferences extends ExtensionPreferences {
             body: 'Every option goes back to its default. Your tasks, events, clipboard history and files stay.',
             action: 'Reset',
         }, () => {
-            for (const key of settings.settings_schema.list_keys())
+            // Not Isle's state: which update was announced, and a focus session's Do Not Disturb.
+            const state = ['update-shown', 'focus-dnd-owned'];
+            for (const key of settings.settings_schema.list_keys().filter(key => !state.includes(key)))
                 settings.reset(key);
         }));
         reset.add(resetRow);
@@ -522,7 +524,9 @@ function recordShortcut(window, done) {
         } else if (!modifiers && keyval === Gdk.KEY_BackSpace) {
             done('');
             dialog.close();
-        } else if (modifiers && Gtk.accelerator_valid(keyval, modifiers)) {
+        } else if (modifiers & (Gdk.ModifierType.SUPER_MASK | Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK) &&
+            Gtk.accelerator_valid(keyval, modifiers)) {
+            // Shift alone would take a capital letter from every app.
             done(Gtk.accelerator_name_with_keycode(null, keyval, keycode, modifiers));
             dialog.close();
         }

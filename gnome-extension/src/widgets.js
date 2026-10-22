@@ -103,14 +103,21 @@ export const Ring = GObject.registerClass({
         this._lineWidth = lineWidth;
         this._color = color;
         this._trackOpacity = trackOpacity;
+        /** A sweep to run once on screen ({progress, delay}): off screen, ease() skips to the end. */
+        this._pendingFill = null;
+        this._sweeping = null;
 
         this._area = new St.DrawingArea({x_expand: true, y_expand: true});
         this._area.connect('repaint', area => this._repaint(area));
         this.add_child(this._area);
+        this._child = child;
         if (child) {
             child.x_align = child.y_align = Clutter.ActorAlign.CENTER;
+            child.set_pivot_point(0.5, 0.5);
             this.add_child(child);
         }
+        // The innermost part that animates is mapped last: ease() skips actors not yet mapped.
+        (child ?? this._area).connect('notify::mapped', () => this._onMapped());
     }
 
     get progress() {
@@ -126,15 +133,72 @@ export const Ring = GObject.registerClass({
         this._area.queue_repaint();
     }
 
-    /** Sweeps from empty to `progress`, like the charging ring. */
+    /** Sweeps from empty to `progress`, like the charging ring, as the badge inside pops in. */
     fillTo(progress, {delay = 0} = {}) {
+        this._pendingFill = {progress, delay};
+        this._restart();
+    }
+
+    /** Moves to `progress` at once, or there at the end of a sweep under way. */
+    jumpTo(progress) {
+        const sweeping = this._sweeping;
+        this._pendingFill ??= sweeping;
+        if (this._pendingFill) {
+            this._pendingFill.progress = progress;
+            if (sweeping)
+                this._restart(this._progress);
+            return;
+        }
+        this.progress = progress;
+    }
+
+    // Hidden mid-sweep (an alert put away and back), it starts over when shown again.
+    _onMapped() {
+        const mapped = (this._child ?? this._area).mapped;
+        if (!mapped && this._sweeping) {
+            this._pendingFill = this._sweeping;
+            this._restart();
+        } else if (mapped && this._pendingFill) {
+            this._sweep();
+        }
+    }
+
+    _restart(from = 0) {
         this.remove_transition('progress');
-        this.progress = 0;
-        this.ease_property('progress', progress, {
-            delay,
-            duration: 1000,
+        this._sweeping = null;
+        this.progress = from;
+        if (from === 0) {
+            this._child?.remove_all_transitions();
+            this._child?.set_scale(0.6, 0.6);
+        }
+        if ((this._child ?? this._area).mapped)
+            this._sweep();
+    }
+
+    _sweep() {
+        const fill = this._pendingFill ?? this._sweeping;
+        if (!fill)
+            return;
+        this._pendingFill = null;
+        this._sweeping = fill;
+        this.ease_property('progress', fill.progress, {
+            delay: this._progress > 0 ? 0 : fill.delay,
+            duration: this._progress > 0 ? 300 : 1000,
             mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            onStopped: () => {
+                if (this._sweeping === fill)
+                    this._sweeping = null;
+            },
         });
+        if (this._child?.scale_x < 1) {
+            this._child.ease({
+                scale_x: 1,
+                scale_y: 1,
+                delay: fill.delay,
+                duration: 450,
+                mode: Clutter.AnimationMode.EASE_OUT_BACK,
+            });
+        }
     }
 
     set color(rgb) {
@@ -498,6 +562,13 @@ class LevelBar extends St.Widget {
         this.add_child(this._fill);
         this._width = width;
         this._level = 0;
+        /** The delay of a grow waiting for the bar to be on screen; see `growTo`. */
+        this._pendingGrow = null;
+        // The fill is mapped after the bar, and ease() skips it until then.
+        this._fill.connect('notify::mapped', () => {
+            if (this._fill.mapped && this._pendingGrow !== null)
+                this._grow();
+        });
     }
 
     // Sized by its `width`; the fill inside never widens it.
@@ -508,6 +579,8 @@ class LevelBar extends St.Widget {
     /** Sets the level; on screen, the fill glides to it. */
     set level(value) {
         this._level = Math.min(1, Math.max(0, value));
+        if (this._pendingGrow !== null)
+            return;
         const fill = Math.round(this._width * this._level);
         this._fill.remove_transition('width');
         if (this.mapped)
@@ -518,6 +591,27 @@ class LevelBar extends St.Widget {
 
     get level() {
         return this._level;
+    }
+
+    /** Grows from empty to `value`, for an alert just shown; off screen, once shown. */
+    growTo(value, {delay = 0} = {}) {
+        this._fill.remove_transition('width');
+        this._fill.width = 0;
+        this._pendingGrow = delay;
+        this.level = value;
+        if (this._fill.mapped)
+            this._grow();
+    }
+
+    _grow() {
+        const delay = this._pendingGrow;
+        this._pendingGrow = null;
+        this._fill.ease({
+            width: Math.round(this._width * this._level),
+            delay,
+            duration: 500,
+            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+        });
     }
 
     /** CSS colour of the filled part. */
@@ -606,7 +700,8 @@ export const Slider = GObject.registerClass({
     }
 
     vfunc_button_press_event(event) {
-        this._grab = global.stage.grab(this);
+        // A second button pressed mid-drag keeps the one grab.
+        this._grab ??= global.stage.grab(this);
         this._moveTo(event);
         return Clutter.EVENT_STOP;
     }

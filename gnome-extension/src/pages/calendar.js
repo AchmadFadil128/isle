@@ -270,8 +270,18 @@ class CalendarPage extends Page {
     /** Draws the month ahead, so the first time the page opens costs no frames. */
     warmUp() {
         this._bindSource();
+        this._followToday();
         this._requestMonth();
         this._refresh(true);
+    }
+
+    /** A new day since it was drawn: today is picked, unless another day was. */
+    _followToday() {
+        const today = startOfDay(new Date());
+        if (today.getTime() === this._today.getTime() || this._selected.getTime() !== this._today.getTime())
+            return false;
+        this._goToToday();
+        return true;
     }
 
     _refresh(force = false) {
@@ -363,7 +373,9 @@ class CalendarPage extends Page {
         this._dayName.text = `${name}, ${dateTime(day).format('%-d %B')}`;
         this._todayButton.visible = offset !== 0 || this._month.getMonth() !== this._today.getMonth() ||
             this._month.getFullYear() !== this._today.getFullYear();
-        this._entry.hint_text = 'Add event · e.g. Dinner 8:00 pm';
+        // "8:00 pm" or "20:00", as the clock is set.
+        const eight = Format.timeOfDay(GLib.DateTime.new_local(2000, 1, 1, 20, 0, 0)).toLowerCase();
+        this._entry.hint_text = `Add event · e.g. Dinner ${eight}`;
 
         this._list.destroy_all_children();
         // Another day's list starts at its top.
@@ -483,10 +495,7 @@ class CalendarPage extends Page {
     _scheduleMidnight() {
         const now = new Date();
         this.later('midnight', addDays(startOfDay(now), 1) - now + 1000, () => {
-            // Following today unless another day was picked.
-            if (this._selected.getTime() === this._today.getTime())
-                this._goToToday();
-            else
+            if (!this._followToday())
                 this._refresh();
             this._scheduleMidnight();
         });
@@ -494,11 +503,7 @@ class CalendarPage extends Page {
 
     onActivate() {
         this._bindSource();
-        // A new day since: back to today, unless another day was picked.
-        const today = startOfDay(new Date());
-        if (today.getTime() !== this._today.getTime() && this._selected.getTime() === this._today.getTime()) {
-            this._goToToday();
-        } else {
+        if (!this._followToday()) {
             this._requestMonth();
             this._refresh();
         }

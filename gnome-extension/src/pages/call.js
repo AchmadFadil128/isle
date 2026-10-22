@@ -295,8 +295,8 @@ class CallPage extends Page {
         const {window} = this._call;
         if (!this.active || !window || !this._settings.get_boolean('call-preview'))
             return {};
-        // Whoever watches the shared screen should not see the call.
-        if (this._privacy.screenShare)
+        // Whoever watches the shared or recorded screen should not see the call.
+        if (this._privacy.screenShare || this._privacy.recording)
             return {hint: 'Hidden while sharing'};
         return {window};
     }

@@ -97,6 +97,11 @@ export const ClipsView = GObject.registerClass({
         this.add_child(this._empty);
     }
 
+    /** Moves the cards' ages ("2m") on, for the page opening again later. */
+    refreshAges() {
+        this._ages?.forEach(([ageLabel, age]) => (ageLabel.text = Format.ago(age)));
+    }
+
     /** Shows only items of `kind` ('text', 'link', 'image', 'files'), or all. */
     set kind(kind) {
         this._kind = kind;
@@ -111,8 +116,8 @@ export const ClipsView = GObject.registerClass({
     }
 
     /** Redraws the cards; `off` means clipboard history is switched off, `hidden` that the screen is
-     * shared or recorded: either way no card shows, and the empty state says why. */
-    update({off = false, hidden = false} = {}) {
+     * shared or recorded: either way no card shows, and the empty state says why. Left out, both stay. */
+    update({off = this._off, hidden = this._hidden} = {}) {
         this._off = off;
         this._hidden = hidden;
         // Pinned items stay at the front, the rest newest first (as isled
@@ -127,6 +132,7 @@ export const ClipsView = GObject.registerClass({
         this._cancelPending();
         this._strip.destroy_all_children();
         this._cards = [];
+        this._ages = [];
         this._addCards(FIRST_CARDS);
         if (this._cards.length < this._shown.length) {
             this._pending = GLib.idle_add(GLib.PRIORITY_LOW, () => {
@@ -345,7 +351,9 @@ export const ClipsView = GObject.registerClass({
         if (app)
             header.add_child(new St.Icon({gicon: app.get_icon(), icon_size: 13, y_align: Clutter.ActorAlign.CENTER}));
         const age = GLib.DateTime.new_from_unix_local(Math.floor(item.at_ms / 1000));
-        header.add_child(label(Format.ago(age), 'isle-clip-age', {y_align: Clutter.ActorAlign.CENTER}));
+        const ageLabel = label(Format.ago(age), 'isle-clip-age', {y_align: Clutter.ActorAlign.CENTER});
+        this._ages.push([ageLabel, age]);
+        header.add_child(ageLabel);
         return header;
     }
 

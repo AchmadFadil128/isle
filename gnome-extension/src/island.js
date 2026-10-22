@@ -241,7 +241,7 @@ export const Island = GObject.registerClass({
 
     /** Whether the island is still changing shape. */
     get morphing() {
-        return this._driver.running;
+        return this._driver?.running ?? false;
     }
 
     /** Adds a view, hidden. All views are added up front so they are always on the stage. */

@@ -701,7 +701,9 @@ export class Controller {
         // An action finishing after Isle was turned off.
         if (this._destroying)
             return;
+        // A close still pending (the pointer just left) would shut it again.
         this._cancel('expand');
+        this._cancel('collapse');
         if (this._voiceOpen)
             this._closeVoice();
         const target = pageName ?? this._alert?.page ?? this._defaultPage();
@@ -820,8 +822,9 @@ export class Controller {
             this._enqueue(alert);
             return;
         }
-        if (this._alert && this._alert.priority !== 'instant')
-            this._queue.unshift(this._alert); // show it again afterwards
+        // Shown again afterwards, unless it was a passing one (the volume); a critical notification stays.
+        if (this._alert && !this._alert.transient)
+            this._queue.unshift(this._alert);
         this._showAlert(alert);
     }
 
@@ -840,11 +843,12 @@ export class Controller {
         this._queue.push(alert);
         // Many notifications waiting (a long fullscreen video) come as one; each stays unread in the list.
         const waiting = this._queue.filter(queued => queued.kind === 'notification' && queued.priority !== 'instant');
-        const summed = this._queue.some(queued => queued.key === 'notifications-summary');
-        if (waiting.length > (summed ? 0 : MAX_QUEUED_NOTIFICATIONS)) {
-            const before = this._queue.find(queued => queued.key === 'notifications-summary')?.count ?? 0;
-            this._queue = this._queue.filter(queued => !waiting.includes(queued) && queued.key !== 'notifications-summary');
-            this._queue.push(Alerts.notificationsSummary(before + waiting.length));
+        const summary = this._queue.find(queued => queued.key === 'notifications-summary');
+        if (waiting.length > (summary ? 0 : MAX_QUEUED_NOTIFICATIONS)) {
+            // Counted once each, however often one was updated meanwhile.
+            const items = new Set([...summary?.items ?? [], ...waiting.map(queued => queued.item)]);
+            this._queue = this._queue.filter(queued => !waiting.includes(queued) && queued !== summary);
+            this._queue.push(Alerts.notificationsSummary(items));
         }
     }
 
@@ -858,8 +862,11 @@ export class Controller {
             alert.shown = true;
             alert.onShown?.();
         }
-        // Its button does what it says, and that is the end of the alert.
-        this._peek.setAlert(alert, () => this._dismissAlert(true));
+        // Its button does what it says, and that is the end of the alert (not of one fading in over it).
+        this._peek.setAlert(alert, () => {
+            if (this._alert === alert)
+                this._dismissAlert(true);
+        });
         this._timeAlert();
         this._render();
         // Parts shown for the first time are only measured right once styled;
@@ -894,7 +901,16 @@ export class Controller {
             this._render();
             return;
         }
-        this._showAlert(this._queue.shift());
+        // What waited may have been read, withdrawn or become private meanwhile.
+        while (this._queue.length) {
+            const queued = this._queue.shift();
+            const alert = queued.fresh ? queued.fresh(this._sharing) : queued;
+            if (alert) {
+                this._showAlert(alert);
+                return;
+            }
+        }
+        this._render();
     }
 
     _showOsd(icon, label, level, maxLevel) {
@@ -956,6 +972,10 @@ export class Controller {
     _syncSharing() {
         this._shelf.sharing = this._sharing;
         this._expanded.pageNamed('notifications').sharing = this._sharing;
+        // A message on screen as sharing starts loses its text at once.
+        const redone = this._alert?.fresh?.(this._sharing);
+        if (redone && redone !== this._alert)
+            this._showAlert(redone);
     }
 
     // Updates

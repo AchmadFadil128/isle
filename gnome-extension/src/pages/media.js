@@ -350,7 +350,8 @@ class MediaPage extends Page {
 
     /** Which app plays it, unless the cover already is that app's logo. */
     _syncBadges() {
-        const appIcon = Playback.playerApp(this.daemon.state.nowPlaying)?.get_icon() ?? null;
+        const nowPlaying = this.daemon.state.nowPlaying;
+        const appIcon = nowPlaying ? Playback.playerApp(nowPlaying)?.get_icon() ?? null : null;
         for (const {badge, icon: badgeIcon} of this._badges) {
             badgeIcon.gicon = appIcon;
             badge.visible = Boolean(appIcon) && !this._arts[0].showsIcon;
