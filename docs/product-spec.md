@@ -415,7 +415,8 @@ hovering opens the Notifications page.
 - Idle, nothing playing: one wake-up per minute (the clock, GNOME's own WallClock, which also catches
   waking from suspend and time-zone changes). No polling.
 - `isled` sleeps until its next real deadline (a timer phase, a reminder, midnight) and re-checks the
-  clock on waking from suspend; AI usage asks nothing while it is off.
+  clock on waking from suspend; AI usage asks nothing while it is off, nor Claude while the screen is
+  locked.
 - The assistant's AI and speech recognition run only while a request is worked on, at a lower
   priority, in a process group of their own that is killed whole; transcribing uses at most half the
   cores. The files tray's helper quits a minute after the tray closes.

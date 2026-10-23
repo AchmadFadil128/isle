@@ -294,7 +294,8 @@ you are not signed in to does not show at all.
 
 Claude's numbers come from the same page Claude Code's `/usage` reads; it is
 not a documented API, so it may change. Isle asks it every ten minutes (at
-most every two while the Usage page is open). Offline, as at login before the
+most every two while the Usage page is open), and not while the screen is
+locked. Offline, as at login before the
 network is up, it tries again within a minute; when Claude's server fails it
 waits longer each time. It never signs in or refreshes a sign-in itself, and
 with usage turned off it asks nothing at all. ChatGPT's numbers

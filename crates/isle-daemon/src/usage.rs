@@ -18,14 +18,17 @@ use zbus::{fdo, interface};
 use crate::clock::now_ms;
 use crate::store::Store;
 
-/// Codex's logs are looked at this often (cheap, local); Claude is asked this often (one request),
-/// and after its server failed ever less often, up to `CLAUDE_BACKOFF`, so it is never pressed. Off,
-/// or with no AI signed in, nothing runs until Settings or the page asks.
+/// Codex's logs are looked at this often while it is signed in (cheap, local); Claude is asked this
+/// often (one request), and after its server failed ever less often, up to `CLAUDE_BACKOFF`, so it is
+/// never pressed, and not at all while the screen is locked. Off, nothing runs until Settings or the
+/// page asks.
 const LOCAL_EVERY: Duration = Duration::from_secs(60);
 const CLAUDE_EVERY: Duration = Duration::from_secs(10 * 60);
 const CLAUDE_BACKOFF: Duration = Duration::from_secs(60 * 60);
-/// With no AI signed in, the sign-in files are looked for this often.
+/// Without Codex signed in, the sign-in files are looked for this often, or when Claude is due.
 const NOTHING_SIGNED_IN_EVERY: Duration = Duration::from_secs(30 * 60);
+/// The shortest sleep, so a deadline just missed never spins.
+const MIN_WAIT: Duration = Duration::from_secs(1);
 /// Offline (as at login, before the network is up), Claude is asked again after these, then as usual.
 const OFFLINE_RETRIES: [Duration; 4] = [
     Duration::from_secs(30),
@@ -157,6 +160,8 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
     let mut failures = 0;
     let mut server_failing = false;
     let mut codex = CodexReader::default();
+    // Unlocking wakes the loop, to ask Claude if it came due meanwhile.
+    let mut locked = crate::system::locked();
     // Until Settings sends its config, and while usage is off, no timer at all: `None`.
     let mut next = None;
     loop {
@@ -168,8 +173,10 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
             Some(wait) => tokio::select! {
                 () = tokio::time::sleep(wait) => false,
                 () = refresh.notified() => true,
+                Ok(()) = locked.changed() => false,
             },
         };
+        let paused = *locked.borrow_and_update();
         let config = iface.get().await.config.clone();
         if !config.enabled {
             next = None;
@@ -182,7 +189,7 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
             let due = |every| asked_claude.is_none_or(|at: Instant| at.elapsed() >= every);
             // Opening the page asks sooner, but never while Claude's server is given time after failing.
             if (forced && !server_failing && due(OFFLINE_RETRIES[0].min(CLAUDE_AT_MOST)))
-                || due(claude_wait)
+                || (!paused && due(claude_wait))
             {
                 asked_claude = Some(Instant::now());
                 let at = home.clone();
@@ -243,18 +250,45 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
                 warn!("could not send a usage alert: {err}");
             }
         }
-        // Nothing signed in: only now and then, for a sign-in to come.
-        next = Some(
-            if providers.is_empty() && !(config.codex && codex_signed_in(&home)) {
-                NOTHING_SIGNED_IN_EVERY
-            } else if claude.is_some() {
-                claude_wait.min(LOCAL_EVERY)
-            } else {
-                LOCAL_EVERY
-            },
-        );
+        let claude_due_in = claude.as_ref().filter(|_| !paused).map(|_| {
+            claude_wait.saturating_sub(asked_claude.map_or(Duration::ZERO, |at| at.elapsed()))
+        });
+        next = Some(next_wait(
+            config.codex && codex_signed_in(&home),
+            claude_due_in,
+            next_reset(&providers, now_ms()),
+        ));
         publish(&iface, Usage { providers }).await;
     }
+}
+
+/// How long to sleep: until Claude is due (`None`: not asked) or a window resets, and at most a minute
+/// while Codex is signed in; otherwise only now and then, for a sign-in to come.
+fn next_wait(
+    codex_signed_in: bool,
+    claude_due_in: Option<Duration>,
+    next_reset: Option<Duration>,
+) -> Duration {
+    let longest = if codex_signed_in {
+        LOCAL_EVERY
+    } else {
+        NOTHING_SIGNED_IN_EVERY
+    };
+    [claude_due_in, next_reset]
+        .into_iter()
+        .flatten()
+        .fold(longest, Duration::min)
+        .max(MIN_WAIT)
+}
+
+/// How long until the next window resets, when `settle` starts it over.
+fn next_reset(providers: &[Provider], now: i64) -> Option<Duration> {
+    providers
+        .iter()
+        .flat_map(|provider| &provider.windows)
+        .filter(|window| window.resets_at_ms > now)
+        .map(|window| Duration::from_millis((window.resets_at_ms - now) as u64))
+        .min()
 }
 
 /// How long until Claude is asked again after `outcome` (`None` when the read itself broke), the
@@ -620,6 +654,45 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn sleeps_until_something_is_due() {
+        let minutes = |m: u64| Duration::from_secs(m * 60);
+        // Codex signed in: its logs each minute.
+        assert_eq!(next_wait(true, Some(minutes(10)), None), LOCAL_EVERY);
+        // Only Claude: until it is due, not each minute.
+        assert_eq!(next_wait(false, Some(minutes(10)), None), minutes(10));
+        assert_eq!(next_wait(false, Some(minutes(60)), None), minutes(30));
+        // A window that resets sooner wakes it, to start that window over.
+        assert_eq!(
+            next_wait(false, Some(minutes(10)), Some(minutes(3))),
+            minutes(3)
+        );
+        // Claude not asked (locked, or signed out): only for a sign-in.
+        assert_eq!(next_wait(false, None, None), NOTHING_SIGNED_IN_EVERY);
+        // Overdue never spins.
+        assert_eq!(next_wait(true, Some(Duration::ZERO), None), MIN_WAIT);
+    }
+
+    #[test]
+    fn finds_the_next_reset() {
+        let provider = |resets: &[i64]| Provider {
+            windows: resets
+                .iter()
+                .map(|&resets_at_ms| Window {
+                    resets_at_ms,
+                    ..Window::default()
+                })
+                .collect(),
+            ..Provider::default()
+        };
+        let providers = [provider(&[0, 5_000]), provider(&[900, 3_000])];
+        assert_eq!(
+            next_reset(&providers, 1_000),
+            Some(Duration::from_millis(2_000))
+        );
+        assert_eq!(next_reset(&providers, 6_000), None);
+    }
 
     #[test]
     fn offline_is_tried_again_soon_and_a_failing_server_ever_later() {
