@@ -23,6 +23,7 @@ mod usage;
 use anyhow::{Context, bail};
 use futures_util::StreamExt;
 use log::{info, warn};
+use tokio::signal::unix::{SignalKind, signal};
 use zbus::connection;
 use zbus::fdo::{DBusProxy, RequestNameFlags, RequestNameReply};
 
@@ -164,11 +165,22 @@ async fn main() -> anyhow::Result<()> {
         .member("NameLost")?
         .build();
     let mut events = zbus::MessageStream::for_match_rule(lost, &session, None).await?;
-    match events.next().await {
-        Some(Ok(_)) => info!("lost {BUS_NAME}; stopping"),
-        Some(Err(err)) => info!("the session bus went away ({err}); stopping"),
-        None => info!("the session bus went away; stopping"),
+    // systemd stops it with SIGTERM (at logout too).
+    let mut terminate = signal(SignalKind::terminate())?;
+    tokio::select! {
+        event = events.next() => match event {
+            Some(Ok(_)) => info!("lost {BUS_NAME}; stopping"),
+            Some(Err(err)) => info!("the session bus went away ({err}); stopping"),
+            None => info!("the session bus went away; stopping"),
+        },
+        _ = terminate.recv() => {
+            info!("asked to stop");
+            store::flush();
+            // At once, as the signal itself did: a download or helper still running goes with it.
+            std::process::exit(0);
+        }
     }
+    store::flush();
     Ok(())
 }
 

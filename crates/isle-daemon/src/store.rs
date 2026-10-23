@@ -7,13 +7,18 @@ use std::io::{self, Write};
 use std::marker::PhantomData;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 
 use log::{debug, warn};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+/// Every store's writer, for [`flush`] on the way out.
+static WRITERS: Mutex<Vec<Weak<Writer>>> = Mutex::new(Vec::new());
+
 pub struct Store<T> {
     path: PathBuf,
+    writer: Arc<Writer>,
     /// Set when the file exists but could not be read (e.g. permission
     /// denied). Saving would replace data we never saw, so it is skipped.
     read_only: bool,
@@ -30,8 +35,17 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
     }
 
     fn at(path: PathBuf) -> Self {
+        let writer = Arc::new(Writer {
+            path: path.clone(),
+            pending: Mutex::default(),
+            writing: Mutex::default(),
+        });
+        let mut writers = lock(&WRITERS);
+        writers.retain(|writer| writer.strong_count() > 0);
+        writers.push(Arc::downgrade(&writer));
         Self {
             path,
+            writer,
             read_only: false,
             fell_back: false,
             _value: PhantomData,
@@ -81,16 +95,65 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
         self.read_only || self.fell_back
     }
 
-    /// Saves atomically, so a crash mid-write never leaves a truncated file.
+    /// Saves atomically, so a crash mid-write never leaves a truncated file. The disk work runs on a
+    /// blocking thread; saves made meanwhile are merged into the newest, which always lands last.
     pub fn save(&self, value: &T) {
         if self.read_only {
             debug!("not saving {}: it could not be loaded", self.path.display());
             return;
         }
-        if let Err(err) = write_atomic(&self.path, value) {
+        let mut bytes = match serde_json::to_vec(value) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                warn!("could not save {}: {err}", self.path.display());
+                return;
+            }
+        };
+        bytes.push(b'\n');
+        // A write already waiting takes these bytes instead of its own.
+        let waiting = lock(&self.writer.pending).replace(bytes).is_some();
+        match tokio::runtime::Handle::try_current() {
+            Ok(runtime) if !waiting => {
+                let writer = self.writer.clone();
+                runtime.spawn_blocking(move || writer.write());
+            }
+            Ok(_) => {}
+            Err(_) => self.writer.write(),
+        }
+    }
+}
+
+/// Writes a store's file, one write at a time.
+struct Writer {
+    path: PathBuf,
+    /// The newest value not yet taken for writing.
+    pending: Mutex<Option<Vec<u8>>>,
+    /// Held from taking a value until it is written, so writes land in the order they were taken.
+    writing: Mutex<()>,
+}
+
+impl Writer {
+    fn write(&self) {
+        let _writing = lock(&self.writing);
+        let Some(bytes) = lock(&self.pending).take() else {
+            return;
+        };
+        if let Err(err) = write_atomic(&self.path, &bytes) {
             warn!("could not save {}: {err}", self.path.display());
         }
     }
+}
+
+/// Writes every save still waiting, before isled exits.
+pub fn flush() {
+    let writers: Vec<Arc<Writer>> = lock(&WRITERS).iter().filter_map(Weak::upgrade).collect();
+    for writer in writers {
+        writer.write();
+    }
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// Creates `dir` (and its parents) readable by the user alone: the clipboard
@@ -118,14 +181,13 @@ fn private_file(path: &Path) -> io::Result<fs::File> {
         .open(path)
 }
 
-fn write_atomic(path: &Path, value: &impl Serialize) -> anyhow::Result<()> {
+fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         create_private_dir(parent)?;
     }
     let temp = path.with_extension("json.tmp");
     let mut file = private_file(&temp)?;
-    serde_json::to_writer_pretty(&mut file, value)?;
-    file.write_all(b"\n")?;
+    file.write_all(bytes)?;
     file.sync_all()?;
     fs::rename(temp, path)?;
     // Flush the rename itself too, so the new file survives a power cut.
@@ -221,6 +283,38 @@ mod tests {
         );
         store.save(&vec![1]);
         assert_eq!(store.load(), [1]);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn reads_the_pretty_files_older_versions_wrote() {
+        let dir = scratch("pretty");
+        let path = dir.join("list.json");
+        fs::write(&path, "[\n  1,\n  2\n]\n").unwrap();
+        let mut store = Store::<Vec<u32>>::at(path.clone());
+        assert_eq!(store.load(), [1, 2]);
+        store.save(&vec![3, 4]);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "[3,4]\n");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_last_save_lands_last() {
+        let dir = scratch("latest");
+        let path = dir.join("list.json");
+        let store = Store::<Vec<u32>>::at(path.clone());
+        for i in 0..50 {
+            store.save(&vec![i]);
+            if i % 7 == 0 {
+                tokio::task::yield_now().await;
+            }
+        }
+        // As isled does on the way out: whatever still waits is written now.
+        flush();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "[49]\n");
+        // Nothing written later puts an older value back.
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert_eq!(fs::read_to_string(&path).unwrap(), "[49]\n");
         fs::remove_dir_all(dir).unwrap();
     }
 

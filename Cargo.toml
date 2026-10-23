@@ -38,7 +38,7 @@ libc = "0.2"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["fs", "io-util", "macros", "process", "rt", "sync", "time"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "process", "rt", "signal", "sync", "time"] }
 # No gzip: the few small JSON answers are not worth a deflate implementation.
 ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
 x11rb = "0.14"
