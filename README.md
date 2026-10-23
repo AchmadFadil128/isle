@@ -385,14 +385,14 @@ computer.
 ## Resource usage
 
 Isle is built to run all day unnoticed. Measured on Ubuntu 24.04 with
-GNOME 46 (version 0.9.0):
+GNOME 46 (version 1.0.0):
 
 | Part | Memory | CPU when idle |
 |---|---|---|
-| `isled` (background service) | about 9 MB resident, of which about 1.5 MB its own | 0% (no polling: it wakes for real events and deadlines only) |
+| `isled` (background service) | about 7.5 MB resident, of which under 1 MB its own | 0% (no polling: it wakes for real events and deadlines only) |
 | Extension, inside GNOME Shell | about 10 MB more for the shell, flat over hours of use | 0% when nothing moves |
 | `isle-shelf` (drag and drop) | about 43 MB (GTK 4, drawn on the CPU, no GPU driver loaded); only while the files tray is open, and 20 seconds after | 0% |
-| Voice assistant | the AI and speech recognition only while it works on a request | 0% between requests |
+| Voice assistant | the AI only while it works and for 3 minutes after, so a follow-up starts at once (Claude Code about 290 MB, Codex about 160 MB); speech recognition only while the island listens | 0% between requests |
 
 | On disk | Size |
 |---|---|
@@ -403,7 +403,8 @@ GNOME 46 (version 0.9.0):
 | Cache (`~/.cache/isle`) | about 100 KB per song's cover and 6 KB per lyrics |
 
 Animations run on the display's frame clock only while a spring moves and
-stop when it settles. The clock wakes once a minute, lyrics exactly when the
+stop when it settles: closed and idle, Isle draws no frames at all, and over 40
+openings, page changes, lyrics and alerts 99.8% of frames came in time for 60 Hz. The clock wakes once a minute, lyrics exactly when the
 next line starts, and pages only tick while they are open. The call preview
 reuses the window's picture already on the graphics card, so it costs about
 nothing, and only exists while the Call page is open; Isle never opens the

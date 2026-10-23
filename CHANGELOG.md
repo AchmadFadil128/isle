@@ -6,6 +6,92 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-24
+
+The first stable release: the assistant can install and fix things for
+you, Claude Code and Codex ask you on the island, and the bot is yours to
+shape and colour.
+
+### Added
+
+- **The assistant does things on the computer.** Ask it to install
+  LibreOffice or the Codex CLI and it first checks what is already there
+  (which Linux, which package managers, whether it is installed), searches
+  the web when unsure, then shows the command it wants to run on a card:
+  what it is for, the command, and what to know (it needs your password,
+  it runs a script from the web, it removes files), with **Run** (Enter)
+  and **Deny** (Esc). It runs in the background as a systemd unit of its
+  own, so closing the island, locking the screen or restarting isled
+  leaves it running; the card shows how long it has been at it and its last
+  lines, and **Stop** ends it (a package manager asks twice, since stopping
+  one halfway can leave things half installed). When it ends, the
+  assistant checks it worked before saying so. Commands that need root ask
+  with GNOME's own password dialog. Checks that only look run at once;
+  anything that changes the computer waits for you, and clearly
+  destructive commands are refused outright.
+- **Answer Claude Code and Codex from the island.** When one asks
+  permission to run something, an alert at the top shows the project and
+  the command with **Deny**, **Allow** and, for Claude Code, **Always**
+  (the rule Claude Code itself suggests). When one is done, an alert shows
+  the first line of its answer. Answered in the agent's terminal instead,
+  put away, or with the agent's window in front, it asks in its terminal
+  as before. On by default for each agent found, also one installed later,
+  with a one-time alert that it is connected; Settings → AI Usage → AI
+  Agents turns each one off. Codex needs 0.124 or later, and asks once at
+  its next start to trust Isle's hook.
+- **The conversation.** The sparkle (or scrolling up) grows the pill into
+  the conversation so far, with a field to type in and the mic beside it.
+  Select text to copy it; click a command to copy it. **+** starts a new
+  one, with **Undo** for 5 seconds. Settings → Assistant sets how long a
+  quiet conversation is kept (until midnight, the default, 2 hours or 30
+  minutes) and has **Clear the conversation now**; the AI's own copy goes
+  with it. Your voice is never kept, only the words recognised.
+- **A bot of your own.** Settings → Assistant → Look: eight shapes
+  (circle, pebble, squircle, capsule, cloud, hexagon, drop, ghost), eleven
+  colours or your own, shaded rather than flat, and a glow that matches the
+  bot, the classic violet and blue, or a colour you pick, with a live
+  preview.
+- **The shelf lights up as you drop files.** A dashed drop zone brightens
+  in the dragged files' colours as they come over it and flares as they
+  land; a full shelf turns red and the island shakes; new tiles pop into
+  place.
+
+### Changed
+
+- The bot has real eyelids, glances about on a spring, perks up and
+  bounces with your voice, reads its answer along, nods at a yes, shakes
+  at a no, and looks pleased, focused, puzzled or sleepy.
+- The glow around the island is livelier: two highlights travel round the
+  rim, and it brightens as you speak.
+- The assistant answers sooner: its AI starts as the island opens and
+  stays ready for 3 minutes after, Codex runs as an app server, and the
+  answer shows as it is written. "Still working · 0:12" shows when a step
+  takes a while, and the closed island's bot moves while it works.
+- The assistant's page in Settings is named Assistant.
+- Automatic uses the first AI you are signed in to, in the order Claude
+  Code, Codex, Antigravity.
+- Your own AI setup is followed: Isle finds the AI tools wherever npm (with
+  a prefix of your own), nvm, volta, fnm, pnpm, bun, Homebrew, mise, asdf
+  or Nix put them, and takes what your login shell sets for them (another
+  config folder, an API key, a proxy). Claude Code signed in through an API
+  key helper, Bedrock or Vertex works; Codex with `CODEX_HOME` or a
+  provider of your own works; signing out of Codex or agy is no longer
+  undone by Isle's copy.
+- A model the AI cannot use (not on your plan, renamed) gives way to its
+  own default, and a too-old AI tool or a missing Node.js says so.
+- Sign in finds the AI tool where Isle found it, and opens Kitty,
+  Alacritty, Konsole, Ghostty, WezTerm, foot and others too.
+
+### Removed
+
+- Alerts from Antigravity (agy), whose hooks never ran. agy still answers
+  as the assistant's AI.
+
+### Fixed
+
+- An AI tool that runs on Node.js installed as a snap no longer fails to
+  start.
+
 ## [0.9.0] - 2026-10-23
 
 ### Added
@@ -657,7 +743,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/zickrian/isle/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/zickrian/isle/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/zickrian/isle/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/zickrian/isle/compare/v0.7.3...v0.8.0
