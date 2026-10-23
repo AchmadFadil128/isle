@@ -21,7 +21,7 @@ const FACE_SIZE = 18;
 /** Messages this far apart (ms) get the time between them. */
 const TIME_GAP_MS = 5 * 60000;
 /** A bubble of yours is at most this wide; longer ones wrap. */
-const BUBBLE_MAX = 300;
+const BUBBLE_MAX = 420;
 /** What a risk badge says, and its icon (see `risksOf` in isled). */
 const RISKS = {
     removes: ['isle-trash', 'Removes files or apps'],

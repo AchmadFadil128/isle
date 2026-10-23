@@ -24,9 +24,9 @@ import {icon, iconButton, pillButton, wrapLines} from './widgets.js';
 
 
 const FACE_SIZE = 36;
-/** The pill while listening, and the panel an answer opens into. */
+/** The pill while listening, and the panel an answer and the conversation open into: as wide as the open island. */
 const LISTENING_WIDTH = 280;
-const ANSWER_WIDTH = 460;
+const ANSWER_WIDTH = 600;
 /** The round button at the row's end: type instead, stop or send (see stylesheet.css). */
 const ACTION_SIZE = 32;
 /** Row padding, the face, the action and the gaps between them (see stylesheet.css). */
