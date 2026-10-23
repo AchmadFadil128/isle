@@ -651,6 +651,8 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                     }
                 })
                 .await;
+                // The turn's replies, prompts and helpers are gone now.
+                crate::trim_memory();
                 None
             }
             // Nothing being answered, so nothing to stop or report to.

@@ -17,6 +17,10 @@ RestartSteps=8
 RestartMaxDelaySec=60
 # isled and what it runs (the AI CLIs, the speech helper) never gain privileges.
 NoNewPrivileges=yes
+# Few malloc arenas: isled mostly waits, and each arena keeps memory it freed.
+Environment=MALLOC_ARENA_MAX=2
+# Its timers (the clock, retries) may fire a little late, so wakeups bunch up.
+TimerSlackNSec=50ms
 
 [Install]
 WantedBy=graphical-session.target

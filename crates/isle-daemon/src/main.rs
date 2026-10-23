@@ -184,6 +184,15 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Hands memory freed after big, passing work (an image, an assistant's turn) back to the system.
+fn trim_memory() {
+    // SAFETY: malloc_trim only walks the allocator's own free lists.
+    #[cfg(target_env = "gnu")]
+    unsafe {
+        libc::malloc_trim(0);
+    }
+}
+
 /// Whether an isled already owns the name on this session's bus.
 async fn running() -> bool {
     let Ok(bus) = zbus::Connection::session().await else {

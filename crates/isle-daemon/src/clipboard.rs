@@ -189,7 +189,10 @@ impl ClipboardService {
             height,
         };
         let added = self.history.add(clip, app_id, now_ms());
-        self.added(added, &emitter).await
+        let added = self.added(added, &emitter).await;
+        // The image and its decoded pixels are gone now.
+        crate::trim_memory();
+        added
     }
 
     /// Records copied files (`file://` URIs) and returns the item's id.

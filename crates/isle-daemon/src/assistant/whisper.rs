@@ -169,6 +169,8 @@ impl Whisper {
             .args(["--model", model, "--language", language])
             // Half the cores at most: transcribing never takes the whole computer.
             .env("ISLE_WHISPER_THREADS", threads().to_string())
+            // isled's own allocator limit would slow its threads down.
+            .env_remove("MALLOC_ARENA_MAX")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
