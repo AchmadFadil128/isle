@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Lyrics from LRCLIB (<https://lrclib.net>), a free database of synced lyrics,
-//! cached on disk so each song is only looked up once.
+//! cached on disk so each song is only looked up once (a song without any, once a week).
 
 use std::fmt;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
@@ -34,6 +34,8 @@ const BUSY_RETRIES: u32 = 2;
 /// most we wait however long it asks for.
 const BUSY_WAIT: Duration = Duration::from_secs(1);
 const BUSY_WAIT_MAX: Duration = Duration::from_secs(5);
+/// A song LRCLIB had no lyrics for is looked up again after this, as they may have been added.
+const NOT_FOUND_RETRY: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -147,15 +149,18 @@ impl Failure {
 
 /// Looks up lyrics, consulting the disk cache first. Blocking.
 pub fn fetch(query: &TrackQuery) -> Lyrics {
+    let (title, artist) = search_terms(&query.title, &query.artist);
+    // Without an artist it is rarely a song (a browser tab called
+    // "Instagram"), and searching would match any song of that name.
+    if title.is_empty() || artist.is_empty() {
+        return query.status(LyricsStatus::NotFound);
+    }
     let cache = cache_path(query);
-    if let Some(cached) = fs::read_to_string(&cache)
-        .ok()
-        .and_then(|text| serde_json::from_str::<Lyrics>(&text).ok())
-    {
+    if let Some(cached) = cached(&cache) {
         return cached;
     }
 
-    let lyrics = match lookup(query) {
+    let lyrics = match lookup(query, title, artist) {
         Ok(Some(record)) => from_record(query, record),
         Ok(None) => query.status(LyricsStatus::NotFound),
         Err(err) => {
@@ -163,37 +168,34 @@ pub fn fetch(query: &TrackQuery) -> Lyrics {
             return query.status(err.status());
         }
     };
-    // Misses are not cached: the lyrics may be added to LRCLIB later.
-    if lyrics.status != LyricsStatus::NotFound {
-        if let Some(parent) = cache.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        if let Ok(json) = serde_json::to_string(&lyrics) {
-            let _ = fs::write(cache, json);
-        }
+    // Misses too, with the file's time saying when (see `cached`).
+    if let Some(parent) = cache.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string(&lyrics) {
+        let _ = fs::write(cache, json);
     }
     lyrics
 }
 
-fn lookup(query: &TrackQuery) -> Result<Option<Record>, Failure> {
-    let (title, artist) = search_terms(&query.title, &query.artist);
-    // Without an artist it is rarely a song (a browser tab called
-    // "Instagram"), and searching would match any song of that name.
-    if title.is_empty() || artist.is_empty() {
-        return Ok(None);
+/// The cached lyrics at `path`; a miss only while younger than [`NOT_FOUND_RETRY`].
+fn cached(path: &Path) -> Option<Lyrics> {
+    let lyrics: Lyrics = serde_json::from_slice(&fs::read(path).ok()?).ok()?;
+    if lyrics.status == LyricsStatus::NotFound {
+        let written = fs::metadata(path).and_then(|m| m.modified()).ok()?;
+        if written.elapsed().unwrap_or_default() >= NOT_FOUND_RETRY {
+            return None;
+        }
     }
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(TIMEOUT))
-        .user_agent(USER_AGENT)
-        .http_status_as_error(false)
-        .build()
-        .into();
+    Some(lyrics)
+}
+
+fn lookup(query: &TrackQuery, title: String, artist: String) -> Result<Option<Record>, Failure> {
     let duration = format!("{:.0}", query.length_s);
 
     // An exact match on title, artist, album and duration is the most precise.
     if !artist.is_empty() && query.length_s > 0.0 {
         let exact = get_json::<Record>(
-            &agent,
             "get",
             &[
                 ("track_name", &title),
@@ -213,7 +215,7 @@ fn lookup(query: &TrackQuery) -> Result<Option<Record>, Failure> {
     if !artist.is_empty() {
         params.push(("artist_name", artist.as_str()));
     }
-    let results = get_json::<Vec<Record>>(&agent, "search", &params)?.unwrap_or_default();
+    let results = get_json::<Vec<Record>>("search", &params)?.unwrap_or_default();
     if let Some(record) = best_match(results, query.length_s, &artist, artist.is_empty()) {
         return Ok(Some(record));
     }
@@ -224,21 +226,23 @@ fn lookup(query: &TrackQuery) -> Result<Option<Record>, Failure> {
     if text == title && !text.contains(" - ") {
         return Ok(None);
     }
-    let results = get_json::<Vec<Record>>(&agent, "search", &[("q", &text)])?.unwrap_or_default();
+    let results = get_json::<Vec<Record>>("search", &[("q", &text)])?.unwrap_or_default();
     Ok(best_match(results, query.length_s, &artist, true))
 }
 
 /// GETs `{API}/{endpoint}` and reads the JSON answer; `None` on HTTP 404.
 /// Asks again a few times while LRCLIB says it is busy.
 fn get_json<T: DeserializeOwned>(
-    agent: &ureq::Agent,
     endpoint: &str,
     params: &[(&str, &str)],
 ) -> Result<Option<T>, Failure> {
     let mut attempt = 0;
     loop {
-        let mut response = agent
-            .get(format!("{API}/{endpoint}"))
+        let mut response = crate::http::get(&format!("{API}/{endpoint}"), TIMEOUT)
+            .config()
+            .user_agent(USER_AGENT)
+            .http_status_as_error(false)
+            .build()
             .query_pairs(params.iter().copied())
             .call()
             .map_err(Failure::Network)?;
@@ -402,6 +406,43 @@ mod tests {
         let mut empty = record("Lumen Coast", Some(216.0), false);
         empty.plain_lyrics = Some("  ".into());
         assert!(best_match(vec![empty], 216.0, "Lumen Coast", false).is_none());
+    }
+
+    #[test]
+    fn misses_are_cached_for_a_week() {
+        let dir = std::env::temp_dir().join(format!("isle-lyrics-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let query = TrackQuery {
+            title: "Song".into(),
+            artist: "Lumen Coast".into(),
+            album: String::new(),
+            length_s: 216.0,
+        };
+        let path = dir.join("miss.json");
+        fs::write(
+            &path,
+            serde_json::to_string(&query.status(LyricsStatus::NotFound)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(cached(&path).unwrap().status, LyricsStatus::NotFound);
+        let old = std::time::SystemTime::now() - NOT_FOUND_RETRY;
+        let file = fs::File::options().write(true).open(&path).unwrap();
+        file.set_modified(old).unwrap();
+        assert!(cached(&path).is_none());
+        // Lyrics found stay, however old.
+        fs::write(
+            &path,
+            serde_json::to_string(&query.status(LyricsStatus::Plain)).unwrap(),
+        )
+        .unwrap();
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        assert_eq!(cached(&path).unwrap().status, LyricsStatus::Plain);
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
