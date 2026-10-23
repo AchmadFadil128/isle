@@ -47,6 +47,16 @@ export function onHover(actor, callback) {
     });
 }
 
+/** A reminder's row, never shorter than it wants: the list's scroll view lays rows out at their minimum
+ * height, and a box takes a wrapped title's minimum as one line. */
+const ReminderRow = GObject.registerClass(
+class ReminderRow extends St.BoxLayout {
+    vfunc_get_preferred_height(forWidth) {
+        const [, natural] = super.vfunc_get_preferred_height(forWidth);
+        return [natural, natural];
+    }
+});
+
 export const TasksPage = GObject.registerClass(
 class TasksPage extends Page {
     _init(daemon, {height}) {
@@ -221,7 +231,8 @@ class TasksPage extends Page {
 
     /** Opens `row` from nothing to its height, fading in, while the rows below make room. */
     _arrive(row) {
-        const [, height] = row.get_preferred_height(-1);
+        // At the list's width: a title that wraps is taller.
+        const [, height] = row.get_preferred_height(this._list.width || -1);
         row.clip_to_allocation = true;
         row.height = 0;
         row.opacity = 0;
@@ -245,7 +256,7 @@ class TasksPage extends Page {
     _row(task) {
         // Never y_expand: its column fills it, and once a child changes (a rename) the row would ask to
         // expand too and take all the list's room.
-        const row = new St.BoxLayout({style_class: 'isle-reminder', reactive: true, y_expand: false});
+        const row = new ReminderRow({style_class: 'isle-reminder', reactive: true, y_expand: false});
 
         // The tick box: a ring, and a dot that pops into it when ticked.
         const dot = new St.Widget({style_class: 'isle-reminder-dot', scale_x: 0, scale_y: 0, x_expand: true, y_expand: true});

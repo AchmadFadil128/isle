@@ -177,6 +177,10 @@
 .isle-call-icon { color: #30d158; }
 .isle-call-muted { color: #ff453a; }
 .isle-compact-call-time { color: #30d158; }
+.isle-compact-second { spacing: 5px; }
+.isle-compact-second-call { color: #30d158; }
+.isle-compact-second-time { font-size: 13px; font-weight: 600; font-feature-settings: "tnum"; }
+.isle-compact-in-bar .isle-compact-second-time { font-size: 12px; }
 
 /* ── Alerts (peek) ────────────────────────────────────── */
 
@@ -472,10 +476,6 @@
 .isle-tab-call StIcon { color: #30d158; }
 
 /* The bubble beside the closed island (bubble.js): a second activity, round and black like it. */
-.isle-bubble { border-radius: 999px; background-color: #000000; }
-.isle-bubble-capsule { spacing: 6px; padding: 0 10px 0 8px; }
-.isle-bubble-call { color: #30d158; }
-.isle-bubble-time { font-size: 12px; font-weight: 600; font-feature-settings: "tnum"; }
 
 /* ── Focus ────────────────────────────────────────────── */
 
