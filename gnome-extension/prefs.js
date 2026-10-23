@@ -132,7 +132,7 @@ export default class IslePreferences extends ExtensionPreferences {
     }
 
     _voicePage(settings) {
-        const page = new Adw.PreferencesPage({title: 'Voice', icon_name: 'audio-input-microphone-symbolic'});
+        const page = new Adw.PreferencesPage({title: 'Assistant', icon_name: 'audio-input-microphone-symbolic'});
         const installed = AI_PROVIDERS.filter(provider => findProgram(provider.command));
         const group = new Adw.PreferencesGroup({
             title: 'Voice Assistant',
@@ -441,13 +441,14 @@ function botTile(size, look) {
 }
 
 // A row of picks (`choices`: [[value, child]…]) as toggles in a flowing grid, `key`'s value pressed.
-function pickerRow(settings, key, title, choices, {custom = null, perLine = 8} = {}) {
+function pickerRow(settings, key, title, choices, {custom = null, perLine = 8, least = 4} = {}) {
     const row = new Adw.PreferencesRow({activatable: false});
     const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 8, margin_top: 12, margin_bottom: 12,
         margin_start: 12, margin_end: 12});
     box.append(new Gtk.Label({label: title, xalign: 0, css_classes: ['heading']}));
+    // Up to `perLine` on a line, fewer in a narrow window: never wider than the window.
     const flow = new Gtk.FlowBox({selection_mode: Gtk.SelectionMode.NONE, homogeneous: true, max_children_per_line: perLine,
-        min_children_per_line: perLine, column_spacing: 4, row_spacing: 4});
+        min_children_per_line: least, column_spacing: 2, row_spacing: 2});
     const buttons = [];
     let syncing = false;
     for (const [value, child, tooltip] of choices) {
@@ -540,14 +541,14 @@ function lookGroup(settings) {
 
     const tiles = [];
     const shapes = pickerRow(settings, 'bot-shape', 'Shape', Object.entries(SHAPES).map(([shape, {label}]) => {
-        const tile = botTile(40, {...lookOf(settings), shape});
+        const tile = botTile(34, {...lookOf(settings), shape});
         tiles.push([shape, tile]);
         return [shape, tile.area, label];
-    }));
+    }), {perLine: 4, least: 4});
     group.add(shapes);
 
     // A colour of your own: the picker's own button, showing the colour once there is one.
-    const customTile = botTile(30, {shape: 'circle', palette: paletteFor(settings.get_string('bot-color'))});
+    const customTile = botTile(26, {shape: 'circle', palette: paletteFor(settings.get_string('bot-color'))});
     const customIcon = new Gtk.Image({icon_name: 'color-select-symbolic', pixel_size: 18});
     const customColor = new Gtk.ToggleButton({css_classes: ['flat'], tooltip_text: 'A colour of your own', halign: Gtk.Align.CENTER});
     const syncCustom = () => {
@@ -572,12 +573,12 @@ function lookGroup(settings) {
             });
     });
     const colors = pickerRow(settings, 'bot-color', 'Colour', Object.entries(COLORS).map(([color, {label}]) =>
-        [color, botTile(30, {shape: 'circle', palette: paletteFor(color)}).area, label]), {custom: customColor, perLine: 6});
+        [color, botTile(26, {shape: 'circle', palette: paletteFor(color)}).area, label]), {custom: customColor, perLine: 6, least: 6});
     syncCustom();
     group.add(colors);
 
-    const glow = new Adw.ComboRow({title: 'Glow', subtitle: 'The light along the island\'s edge while the assistant is open',
-        model: Gtk.StringList.new(['Match the assistant', 'Classic (violet, blue, cyan)', 'A colour of your own'])});
+    const glow = new Adw.ComboRow({title: 'Glow', subtitle: 'The light along the island\'s edge',
+        model: Gtk.StringList.new(['Match', 'Classic', 'Custom'])});
     const glowColor = new Gtk.ColorDialogButton({dialog: new Gtk.ColorDialog({title: 'Glow colour', with_alpha: false}),
         valign: Gtk.Align.CENTER});
     glow.add_suffix(glowColor);
