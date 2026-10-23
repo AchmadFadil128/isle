@@ -6,7 +6,6 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
-import Gio from 'gi://Gio';
 import Pango from 'gi://Pango';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -27,7 +26,6 @@ const SYSTEM_COLOR = [10, 132, 255];
 const OWN_COLOR = [255, 159, 10];
 /** How strongly an event's pill is tinted in its colour. */
 const PILL_ALPHA = 0.18;
-const CALENDAR_APP = 'org.gnome.Calendar.desktop';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -491,7 +489,8 @@ export const CalendarPage = GObject.registerClass({
     }
 
     _eventRow(event, now) {
-        const row = new St.BoxLayout({style_class: 'isle-cal-event', reactive: true});
+        // Only Isle's own events take the pointer (for ×); the desktop's calendars' are to read, not open.
+        const row = new St.BoxLayout({style_class: 'isle-cal-event', reactive: event.ownId !== null});
         const [r, g, b] = event.color;
         row.style = `background-color: rgba(${r}, ${g}, ${b}, ${PILL_ALPHA});`;
         // Finished ones recede.
@@ -526,11 +525,6 @@ export const CalendarPage = GObject.registerClass({
             remove.opacity = 0;
             onHover(row, hovered => remove.ease({opacity: hovered ? 255 : 0, duration: 120}));
             row.add_child(remove);
-        } else {
-            row.connect('button-release-event', () => {
-                this._openCalendarApp();
-                return Clutter.EVENT_STOP;
-            });
         }
         return row;
     }
@@ -574,20 +568,6 @@ export const CalendarPage = GObject.registerClass({
         this._entry.text = '';
         if (this._entry.clutter_text.has_key_focus())
             this.emit('request-keyboard', false);
-    }
-
-    /** GNOME Calendar, else whatever app opens calendar files. */
-    _openCalendarApp() {
-        const app = Shell.AppSystem.get_default().lookup_app(CALENDAR_APP);
-        if (app) {
-            app.activate();
-        } else {
-            const other = Gio.AppInfo.get_default_for_type('text/calendar', false);
-            if (!other)
-                return;
-            other.launch([], global.create_app_launch_context(0, -1));
-        }
-        this.emit('request-close');
     }
 
     /** Redraws at midnight, so "today" moves on. */

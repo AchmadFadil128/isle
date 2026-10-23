@@ -325,7 +325,7 @@ is all day), then the day's events as pills tinted in their
 calendar's colour with a bar of it down the side: title, and "All day" or
 the time on the right. Finished events recede. Events come from the
 desktop's calendars (Evolution, and accounts added in Settings → Online
-Accounts such as Google; blue; click to open GNOME Calendar) and Isle's own
+Accounts such as Google; blue; to read, not to click) and Isle's own
 (orange; × on hover to remove), kept by `isled` and forgotten after 400
 days.
 
