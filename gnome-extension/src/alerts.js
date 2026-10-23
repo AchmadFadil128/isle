@@ -373,7 +373,7 @@ export function notificationsSummary(items) {
         duration: NOTIFICATION_DURATION,
         page: 'notifications',
         // One sound for them all (the newest's), as they stay unread; never shown, none plays.
-        onShown: () => [...items].filter(unseen).at(-1)?.playSound(),
+        onShown: () => [...items].filter(unseen).at(-1)?.playSound?.(),
         // Those read or withdrawn meanwhile no longer count.
         fresh: () => {
             const left = new Set([...items].filter(unseen));
