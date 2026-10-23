@@ -6,11 +6,40 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-23
+
+Lighter and smoother all round, with nothing changed in how Isle looks.
+
+### Changed
+
+- Logging in and unlocking no longer hold the screen still for a tenth of a
+  second: Isle builds itself a part at a time, frames drawn in between.
+- `isled` is 42% smaller (6.1 MB) and uses about a quarter less memory;
+  the files tray's helper is 0.7 MB, loads no OpenGL or Vulkan driver, and
+  quits 20 seconds after the tray closes instead of a minute.
+- Claude's usage is not asked for while the screen is locked, and isled
+  wakes for it only when it is due.
+- A computer without Bluetooth, NetworkManager or a battery costs isled no
+  wakeups: it waits for the service to appear.
+- Speech recognition remembers a computer has no usable GPU and starts on
+  the processor straight away.
+
 ### Fixed
 
 - The one-line install works when GitHub's API has had enough questions
   from the address for the hour (an office or campus network): it finds
   the latest release from its page instead.
+- Lyrics ease only the lines that change; opening the island on
+  notifications, the clipboard, usage, the calendar or reminders keeps what
+  is already drawn instead of building it again in the frames that animate.
+- Searching the clipboard filters the cards it has instead of rebuilding
+  them at each key; the music bars, the Siri glow and the face leave no
+  garbage behind each frame, so the shell pauses less to collect it.
+- The island's shape is only redrawn when its size changes; the closed
+  island's timers tick only while it is on screen.
+- Lyrics a song has none of are looked up again after a week, not each time
+  it plays; isled shares one connection for its web requests.
+- isled saves its state off its event loop and flushes it when stopped.
 
 ## [0.8.0] - 2026-10-23
 
@@ -580,7 +609,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/zickrian/isle/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/zickrian/isle/compare/v0.7.3...v0.8.0
 [0.7.3]: https://github.com/zickrian/isle/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/zickrian/isle/compare/v0.7.1...v0.7.2

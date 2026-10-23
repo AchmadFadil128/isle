@@ -135,8 +135,8 @@ system-wide packages, installed for every user of the computer with the
 system's package manager (so they update and uninstall with it):
 
 ```sh
-sudo apt install ./isle_0.8.0_amd64.deb         # Ubuntu 24.04 and newer, Debian 13
-sudo dnf install ./isle-0.8.0-1.x86_64.rpm      # Fedora 40 and newer
+sudo apt install ./isle_0.8.1_amd64.deb         # Ubuntu 24.04 and newer, Debian 13
+sudo dnf install ./isle-0.8.1-1.x86_64.rpm      # Fedora 40 and newer
 ```
 
 They put the programs in `/usr/bin`, the extension in
@@ -175,7 +175,7 @@ Release files are built by GitHub Actions from the tagged source, with a
 build provenance attestation. With the [GitHub CLI](https://cli.github.com):
 
 ```sh
-gh attestation verify isle-0.8.0-x86_64-linux.tar.gz --repo zickrian/isle
+gh attestation verify isle-0.8.1-x86_64-linux.tar.gz --repo zickrian/isle
 ```
 
 `get.sh` checks each download against its `.sha256` already.

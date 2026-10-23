@@ -12,7 +12,7 @@ members = [
 default-members = ["crates/isle-core", "crates/isle-daemon"]
 
 [workspace.package]
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
 # isle-core and isled use let chains (1.88); isle-shelf sets its own, for gtk-rs.
 rust-version = "1.88"
