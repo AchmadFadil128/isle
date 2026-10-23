@@ -21,12 +21,23 @@ use super::child::{self, Events, Group};
 
 /// Fast answers for a voice assistant; the user's own Codex settings are not used.
 const EFFORT: &str = "low";
+
+/// How hard it thinks: `EFFORT`, unless the eval tries another (ISLE_CODEX_EFFORT).
+fn effort() -> String {
+    std::env::var("ISLE_CODEX_EFFORT").unwrap_or_else(|_| EFFORT.to_owned())
+}
 const STDERR_LINES: usize = 20;
 /// Isle's Codex only answers, with web search: no shell, no files, no browser or desktop control, no
 /// plugins or apps. Unknown keys are ignored, so names a Codex version lacks do no harm.
 const CONFIG: &str =
     "# Written by Isle on every start: Codex here only answers; Isle runs the actions.
 web_search = \"live\"
+# Isle's own job and context say all: none of Codex's coding-agent notes about its sandbox (which would
+# make it think it cannot act; Isle acts for it), its environment, apps or collaboration modes.
+include_permissions_instructions = false
+include_environment_context = false
+include_apps_instructions = false
+include_collaboration_mode_instructions = false
 [features]
 shell_tool = false
 unified_exec = false
@@ -54,6 +65,7 @@ goals = false
 worktrees = false
 workspace_dependencies = false
 sleep_tool = false
+memories = false
 ";
 
 pub struct Codex {
@@ -223,7 +235,7 @@ impl Codex {
         self.open().await?;
         let thread = self.conversation.clone().unwrap_or_default();
         let params = json!({"threadId": thread, "input": [{"type": "text", "text": prompt}],
-            "outputSchema": self.schema, "effort": EFFORT});
+            "outputSchema": self.schema, "effort": effort()});
         self.send("turn/start", params).await?;
         let mut answer = None;
         let mut written = String::new();
@@ -429,8 +441,71 @@ fn link_sign_in(user: &Path, isle: &Path) {
     super::sign_in::share(&user.join("auth.json"), &isle.join("auth.json"));
 }
 
-/// Deletes Isle's Codex conversation `id` now.
+/// Deletes Isle's Codex conversation `id` now: through Codex itself, which keeps it in its databases too,
+/// then any file of it left.
 pub fn forget(id: &str) {
+    // The Codex that had it may still be letting go of it (its lock), a moment after it was stopped.
+    for attempt in 0..4 {
+        match delete_thread(id) {
+            Ok(()) => break,
+            Err(err) if attempt == 3 => {
+                log::warn!("codex could not delete conversation {id}: {err:#}")
+            }
+            Err(_) => std::thread::sleep(std::time::Duration::from_millis(500)),
+        }
+    }
+    forget_files(id);
+}
+
+/// Asks a short-lived Codex app server to delete thread `id` (blocking; at most a few seconds).
+fn delete_thread(id: &str) -> anyhow::Result<()> {
+    use std::io::{BufRead, Write};
+    let program = super::brain::Provider::Codex
+        .program()
+        .context("codex is not installed")?;
+    let mut child = std::process::Command::new(program)
+        .arg("app-server")
+        .env("CODEX_HOME", home())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let stdout = child.stdout.take().expect("piped stdout");
+    let (done, answered) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in std::io::BufReader::new(stdout)
+            .lines()
+            .map_while(Result::ok)
+        {
+            if let Ok(message) = serde_json::from_str::<Value>(&line)
+                && message["id"] == 2
+            {
+                let error = message["error"]["message"].as_str().map(str::to_owned);
+                done.send(error).ok();
+                return;
+            }
+        }
+    });
+    for message in [
+        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"clientInfo": {"name": "isle", "version": env!("CARGO_PKG_VERSION")}}}),
+        json!({"jsonrpc": "2.0", "method": "initialized"}),
+        json!({"jsonrpc": "2.0", "id": 2, "method": "thread/delete", "params": {"threadId": id}}),
+    ] {
+        writeln!(stdin, "{message}")?;
+    }
+    let result = answered.recv_timeout(std::time::Duration::from_secs(8));
+    child.kill().ok();
+    child.wait().ok();
+    match result {
+        Ok(None) => Ok(()),
+        Ok(Some(error)) => bail!("{error}"),
+        Err(_) => bail!("no answer"),
+    }
+}
+
+/// Deletes the files of conversation `id` left in Isle's Codex home.
+fn forget_files(id: &str) {
     fn walk(dir: &Path, id: &str) {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;
@@ -446,8 +521,36 @@ pub fn forget(id: &str) {
     walk(&home().join("sessions"), id);
 }
 
-/// Deletes Isle's Codex conversations last changed before `today`.
+/// Whether a Codex that Isle started runs now (its home in its environment).
+fn running() -> bool {
+    let wanted = format!("CODEX_HOME={}", home().display());
+    std::fs::read_dir("/proc")
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|entry| {
+            std::fs::read(entry.path().join("environ")).is_ok_and(|environ| {
+                environ
+                    .split(|&b| b == 0)
+                    .any(|var| var == wanted.as_bytes())
+            })
+        })
+}
+
+/// Deletes Isle's Codex conversations last changed before `today`; with no Isle Codex running, its
+/// databases go too (they hold only Isle's conversations, and Codex makes them again).
 pub fn prune(today: NaiveDate) {
+    if !running() {
+        for entry in std::fs::read_dir(home()).into_iter().flatten().flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.contains(".sqlite") {
+                std::fs::remove_file(entry.path()).ok();
+            }
+        }
+        for dir in ["thread-writer-locks", "tmp"] {
+            std::fs::remove_dir_all(home().join(dir)).ok();
+        }
+    }
     fn walk(dir: &Path, today: NaiveDate) {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;

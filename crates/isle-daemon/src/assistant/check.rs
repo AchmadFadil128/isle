@@ -72,15 +72,58 @@ const ALLOWED: &[(&str, Option<&[&str]>)] = &[
     ("nvidia-smi", None),
     ("which", None),
 ];
+/// Options and words that make a package tool change the system, refused anywhere in a check.
+const CHANGES: &[&str] = &[
+    "-i",
+    "--install",
+    "install",
+    "-r",
+    "--remove",
+    "remove",
+    "-P",
+    "--purge",
+    "purge",
+    "--configure",
+    "-S",
+    "-R",
+    "-U",
+    "-e",
+    "--erase",
+    "--setopt",
+    "-y",
+    "--yes",
+    "--assumeyes",
+    "upgrade",
+    "update",
+    "reinstall",
+    "uninstall",
+    "--root",
+    "--admindir",
+    "-o",
+    "--option",
+    "--refresh",
+    "erase",
+    "start",
+    "stop",
+    "restart",
+    "enable",
+    "disable",
+    "mask",
+    "--set",
+    "set",
+    "delete",
+    "config-set",
+];
+
 /// Any program may say its version.
 const VERSION: &[&str] = &["--version", "-V", "version"];
 
 /// `command` as a program and its arguments if it may run as a check, else why not.
 pub fn parse(command: &str) -> Result<Vec<String>, String> {
-    if command.chars().any(|c| ";|&<>$`(){}\\\n*?!".contains(c)) {
-        return Err(
-            "only one plain command can be a check (no pipes, redirects or variables)".into(),
-        );
+    // It runs without a shell, so `$`, quotes and globs are only letters; what would chain or redirect
+    // commands in a shell is refused, so the AI learns a check is one command.
+    if command.chars().any(|c| ";|&<>`\n".contains(c)) {
+        return Err("a check is one command, without pipes, redirects or a second command".into());
     }
     let words = split(command)?;
     let Some((program, args)) = words.split_first() else {
@@ -103,14 +146,8 @@ pub fn parse(command: &str) -> Result<Vec<String>, String> {
             "{program} is not one of the commands a check may run"
         ));
     };
-    // `--` and the like, or a second option that changes what the program does, are not let through.
-    let plain = |arg: &String| {
-        !arg.starts_with('-')
-            || matches!(
-                arg.as_str(),
-                "-h" | "-a" | "--installed" | "--user" | "--system"
-            )
-    };
+    // After the first word that keeps it to looking, nothing that would make it change things.
+    let plain = |arg: &String| !CHANGES.contains(&arg.split('=').next().unwrap_or_default());
     match first {
         None => Ok(words),
         Some(first) => {
@@ -273,6 +310,10 @@ mod tests {
             "npm view @openai/codex version",
             "pacman -Qi firefox",
             "dnf info 'libreoffice-writer'",
+            "dpkg-query -W -f='${Status} ${Version}' libreoffice",
+            "apt list --installed vlc",
+            "flatpak list --app --columns=application",
+            "rpm -q --qf '%{VERSION}' firefox",
         ] {
             assert!(parse(ok).is_ok(), "{ok}: {:?}", parse(ok));
         }
@@ -284,6 +325,10 @@ mod tests {
             "dpkg -i evil.deb",
             "flatpak install flathub org.libreoffice.LibreOffice",
             "sh -c 'echo hi'",
+            "dpkg -s x -i y.deb",
+            "rpm -q x --erase y",
+            "npm config set prefix /tmp",
+            "apt-cache policy x | head",
             "/tmp/evil --version",
             "rm --version x",
             "snap find x && reboot",

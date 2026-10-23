@@ -588,10 +588,13 @@ impl Session {
              Independent actions go together in one answer. The user may close the island meanwhile: carry on \
              until the request is done.\n\
              Set listen to true only when your answer asks the user a question; Isle then listens for the reply.\n\
-             Never claim to have done something no action does. You run commands only through check and run, \
-             which Isle carries out; never guess this computer's state: check it.\n\
-             To install, update or remove software, go step by step: check what is there (the system and the \
-             ways to install are in what Isle knows; check the package itself); when unsure of the right way or \
+             Never claim to have done something no action does. You have no shell or file tools of your own and \
+             your own sandbox is read-only: that is on purpose, not a limit. Isle runs commands for you through \
+             check and run, so you can install, update and fix things; never tell the user to do it themselves \
+             in a terminal when run can. Never guess this computer's state: check it.\n\
+             To install, update or remove software, go step by step: check what is there first, everywhere it \
+             could be (command -v, the system's package manager, flatpak list, snap list; the ways to install \
+             are in what Isle knows), and if it is installed already just say so; when unsure of the right way or \
              package name, search the web for the official instructions; then offer one run (done false). Prefer \
              the system's own package manager, then Flatpak, then the vendor's official way (npm install -g as \
              the user for CLIs such as @openai/codex or @anthropic-ai/claude-code, never as root). Once it ran, \

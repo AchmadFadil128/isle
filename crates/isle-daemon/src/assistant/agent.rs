@@ -421,7 +421,12 @@ fn forget_task(task: &Task) {
     let mut store = tasks::store();
     let mut running = store.load();
     running.tasks.retain(|t| t.id != task.id);
-    store.save(&running);
+    // None left: no file at all.
+    if running.tasks.is_empty() {
+        store.remove();
+    } else {
+        store.save(&running);
+    }
 }
 
 /// What desktop actions did: as text for the AI, and whether every one worked.

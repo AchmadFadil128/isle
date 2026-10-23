@@ -255,6 +255,24 @@ fn charge_limit(answer: &Answer, percent: &str) -> Result<(), String> {
     indonesian(answer)
 }
 
+/// Whether the answer says the app is installed already (in English or Indonesian).
+fn installed_already(answer: &Answer) -> bool {
+    let say = answer.say.to_lowercase();
+    [
+        "already installed",
+        "is installed",
+        "already there",
+        "sudah terpasang",
+        "sudah ter-install",
+        "sudah terinstal",
+        "sudah ada",
+        "sudah diinstal",
+        "sudah tersedia",
+    ]
+    .iter()
+    .any(|words| say.contains(words))
+}
+
 /// The command a `run` asked for, if the answer (or a step on the way) has one.
 fn run_command(answer: &Answer) -> Result<String, String> {
     action(answer, "run").map(|run| text(run, "command").to_lowercase())
@@ -724,28 +742,42 @@ fn cases() -> Vec<Case> {
             charge_limit(last(a), "80")
         }),
         case(&["install vlc dong"], |a| {
-            let command = run_command(last(a))?;
-            ensure(
-                command.contains("install") && command.contains("vlc"),
-                "wrong command",
-            )
+            let a = last(a);
+            match run_command(a) {
+                Ok(command) => ensure(
+                    command.contains("install") && command.contains("vlc"),
+                    "wrong command",
+                ),
+                Err(_) => ensure(
+                    installed_already(a),
+                    "neither installed it nor said it is there",
+                ),
+            }
         }),
-        // Agentic installs: it looks first, offers one command to run, and checks it worked.
+        // Agentic installs: it looks first (it may be there already), then offers one command, then checks.
         case(&["install libreoffice"], |a| {
             let a = last(a);
-            let command = run_command(a)?;
-            ensure(
-                command.contains("install") && command.contains("libreoffice"),
-                "wrong command",
-            )?;
-            ensure(
-                a.tools.iter().any(|tool| tool == "check"),
-                "did not check before or after",
-            )
+            ensure(a.tools.iter().any(|tool| tool == "check"), "did not check")?;
+            match run_command(a) {
+                Ok(command) => ensure(
+                    command.contains("install") && command.contains("libreoffice"),
+                    "wrong command",
+                ),
+                Err(_) => ensure(
+                    installed_already(a),
+                    "neither installed it nor said it is there",
+                ),
+            }
         }),
         case(&["pasangin codex cli dong"], |a| {
             let a = last(a);
-            let run = action(a, "run")?;
+            ensure(a.tools.iter().any(|tool| tool == "check"), "did not check")?;
+            let Ok(run) = action(a, "run") else {
+                return ensure(
+                    installed_already(a),
+                    "neither installed it nor said it is there",
+                );
+            };
             let command = text(run, "command").to_lowercase();
             ensure(command.contains("@openai/codex"), "not Codex's own package")?;
             ensure(
@@ -1055,7 +1087,9 @@ async fn eval() {
             tokio::spawn(async move {
                 let _permit = limit.acquire().await.unwrap();
                 let result = run(&case).await.and_then(|answers| {
-                    let terminal = answers.iter().any(|a| !actions(a, "terminal").is_empty());
+                    // After a command that ran yet did not take, the terminal is a fair way out.
+                    let terminal = answers.iter().any(|a| !actions(a, "terminal").is_empty())
+                        && !answers.iter().any(|a| !actions(a, "run").is_empty());
                     ensure(
                         !terminal || NEEDS_TERMINAL.contains(&case.turns[0]),
                         "used the terminal needlessly",
@@ -1159,5 +1193,6 @@ async fn latency() {
     if let Some(id) = brain.conversation() {
         drop(brain);
         Brain::forget(provider, &id);
+        println!("  forgot conversation {id}");
     }
 }
