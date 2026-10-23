@@ -94,6 +94,9 @@ class LyricsPane extends St.Widget {
         this._key = null;
         this._lines = [];
         this._rows = [];
+        /** Each row's last opacity and scale eased to: Clutter would ease again to the same. */
+        this._opacities = [];
+        this._scales = [];
         this._current = -2;
         this._manualUntil = 0;
         // Hidden (island closed, or the player shown), it has no layout to scroll; it catches up when shown.
@@ -182,6 +185,8 @@ class LyricsPane extends St.Widget {
         this._current = -2;
         this._scroll.vadjustment.value = 0;
         this._rows = this._lines.map(line => this._row(line));
+        this._opacities = this._rows.map(() => COMING_OPACITY.at(-1));
+        this._scales = this._rows.map(() => RESTING_SCALE);
         for (const row of this._rows)
             this._column.add_child(row);
         // Room after the last line, so it too can reach the reading line.
@@ -226,15 +231,22 @@ class LyricsPane extends St.Widget {
             this._current = index;
             this._rows.forEach((row, i) => {
                 const current = i === index;
-                row.ease({
-                    opacity: current ? CURRENT_OPACITY
-                        : i < index ? SUNG_OPACITY
-                            : COMING_OPACITY[Math.min(i - index - 1, COMING_OPACITY.length - 1)],
-                    scale_x: current ? 1 : RESTING_SCALE,
-                    scale_y: current ? 1 : RESTING_SCALE,
-                    duration: LINE_EASE_MS,
-                    mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
-                });
+                const opacity = current ? CURRENT_OPACITY
+                    : i < index ? SUNG_OPACITY
+                        : COMING_OPACITY[Math.min(i - index - 1, COMING_OPACITY.length - 1)];
+                const scale = current ? 1 : RESTING_SCALE;
+                // Only the lines around the sung one change; the rest keep where they are.
+                if (opacity !== this._opacities[i] || scale !== this._scales[i]) {
+                    this._opacities[i] = opacity;
+                    this._scales[i] = scale;
+                    row.ease({
+                        opacity,
+                        scale_x: scale,
+                        scale_y: scale,
+                        duration: LINE_EASE_MS,
+                        mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+                    });
+                }
                 if (row instanceof PauseDots)
                     row.breathing = current && Playback.isPlaying(nowPlaying);
             });
