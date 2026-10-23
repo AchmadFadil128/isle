@@ -169,7 +169,7 @@ Whether a newer Isle is out: GitHub's latest release, looked up at most once a d
 
 | Member | Signature | |
 |---|---|---|
-| `State` | `s` | `{battery: {percent, plugged, charging, time_to_empty_s, time_to_full_s} or null, network: {connected, connection, name}, bluetooth: [{path, name, icon, battery}], camera_in_use}` |
+| `State` | `s` | `{battery: {percent (a whole number), plugged, charging} or null, network: {connected, connection, name}, bluetooth: [{path, name, icon, battery}], camera_in_use}` |
 | `Event(s json)` | signal | One of `{kind: "power", plugged, percent}`, `{kind: "battery_low", percent}`, `{kind: "battery_full"}`, `{kind: "network", connected, connection, name}`, `{kind: "bluetooth", connected, device}`. |
 
 ## io.github.zickrian.isle.ShelfWindow1

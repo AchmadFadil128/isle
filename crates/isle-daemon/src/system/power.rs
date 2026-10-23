@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use futures_util::StreamExt;
 use tokio::time::Instant;
 
 use zbus::Connection;
@@ -25,6 +26,8 @@ const FLAP_WINDOW: Duration = Duration::from_secs(30);
 
 /// Percentages at which a low-battery warning is shown, once each.
 const LOW_LEVELS: [f64; 3] = [20.0, 10.0, 5.0];
+/// The properties read; a change to any other (the energy, the rate, the time it was measured) is not.
+const READ: [&str; 4] = ["IsPresent", "Type", "State", "Percentage"];
 
 // UPower device types and states.
 const TYPE_BATTERY: u32 = 2;
@@ -39,8 +42,21 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
         .cache_properties(CacheProperties::No)
         .build()
         .await?;
-    let mut changes = properties.receive_properties_changed().await?;
-    let mut previous: Option<(Battery, bool)> = None;
+    // UPower says what changed every few seconds while on battery, mostly figures never shown.
+    let mut changes = properties
+        .receive_properties_changed_with_args(&[(0, INTERFACE)])
+        .await?
+        .filter(|signal| {
+            let read = signal.args().is_ok_and(|args| {
+                !args.invalidated_properties().is_empty()
+                    || args
+                        .changed_properties()
+                        .keys()
+                        .any(|key| READ.contains(key))
+            });
+            std::future::ready(read)
+        });
+    let mut previous: Option<(Reading, bool)> = None;
     let mut last_power_alert: Option<Instant> = None;
 
     loop {
@@ -70,7 +86,7 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
             _ => None,
         };
 
-        let battery = current.as_ref().map(|(battery, _)| battery.clone());
+        let battery = current.as_ref().map(|(reading, _)| reading.shown());
         publish(&iface, |state| state.battery = battery, event).await;
         previous = current;
 
@@ -80,14 +96,28 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
     }
 }
 
+/// The battery as read, its exact level for the alerts.
+#[derive(Debug, Clone, PartialEq)]
+struct Reading {
+    percent: f64,
+    plugged: bool,
+    charging: bool,
+}
+
+impl Reading {
+    /// The battery as the state shows it.
+    fn shown(&self) -> Battery {
+        Battery {
+            percent: self.percent.round(),
+            plugged: self.plugged,
+            charging: self.charging,
+        }
+    }
+}
+
 /// The battery and whether it is fully charged, or `None` without a battery.
-fn read(all: &HashMap<String, OwnedValue>) -> Option<(Battery, bool)> {
+fn read(all: &HashMap<String, OwnedValue>) -> Option<(Reading, bool)> {
     let u32_of = |key: &str| all.get(key).and_then(|v| u32::try_from(v).ok());
-    let i64_of = |key: &str| {
-        all.get(key)
-            .and_then(|v| i64::try_from(v).ok())
-            .unwrap_or(0)
-    };
 
     let present = all
         .get("IsPresent")
@@ -97,7 +127,7 @@ fn read(all: &HashMap<String, OwnedValue>) -> Option<(Battery, bool)> {
         return None;
     }
     let state = u32_of("State").unwrap_or(0);
-    let battery = Battery {
+    let battery = Reading {
         percent: all
             .get("Percentage")
             .and_then(|v| f64::try_from(v).ok())
@@ -107,8 +137,24 @@ fn read(all: &HashMap<String, OwnedValue>) -> Option<(Battery, bool)> {
             STATE_CHARGING | STATE_FULLY_CHARGED | STATE_PENDING_CHARGE
         ),
         charging: state == STATE_CHARGING,
-        time_to_empty_s: i64_of("TimeToEmpty"),
-        time_to_full_s: i64_of("TimeToFull"),
     };
     Some((battery, state == STATE_FULLY_CHARGED))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_state_shows_whole_percents() {
+        let reading = |percent| Reading {
+            percent,
+            plugged: false,
+            charging: false,
+        };
+        assert_eq!(reading(57.4).shown().percent, 57.0);
+        assert_eq!(reading(57.5).shown().percent, 58.0);
+        // Small changes leave the state as it was.
+        assert_eq!(reading(57.31).shown(), reading(56.9).shown());
+    }
 }

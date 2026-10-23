@@ -43,12 +43,11 @@ pub struct SystemState {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Battery {
+    /// A whole number, so the state only changes when the shown level does.
     pub percent: f64,
     /// Connected to power, whether or not it is currently charging.
     pub plugged: bool,
     pub charging: bool,
-    pub time_to_empty_s: i64,
-    pub time_to_full_s: i64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
