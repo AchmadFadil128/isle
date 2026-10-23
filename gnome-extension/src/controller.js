@@ -446,8 +446,8 @@ export class Controller {
         daemon.connect('changed', (_daemon, key) => {
             if (key === 'updates')
                 this._onLatest();
-            else if (key === 'agents' && this._agentsUnsynced)
-                this._syncAgents();
+            else if (key === 'agents')
+                this._agentsUnsynced ? this._syncAgents() : this._hookNewAgents();
         });
         this._settingsChanged.push(this._settings.connect('changed::check-updates', () => this._syncUpdates()));
         this._settingsChanged.push(this._settings.connect('changed::lyrics-online', () =>
@@ -593,10 +593,25 @@ export class Controller {
         if (this._agentsUnsynced)
             return;
         const agents = this._daemon.state.agents;
+        this._agentsFound = Object.fromEntries(AGENT_PROVIDERS.map(provider => [provider, Boolean(agents[provider]?.found)]));
         for (const provider of AGENT_PROVIDERS) {
             const {found, hooked} = agents[provider] ?? {};
             // Not found any more, a hook left behind still goes when its switch is off.
             if ((found || hooked) && Boolean(hooked) !== this._settings.get_boolean(`agent-alerts-${provider}`))
+                this._hookAgent(provider);
+        }
+    }
+
+    /** An AI installed (or found again) while Isle runs gets its hook, if its switch is on. A hook the user took
+     * out of the AI's own config by hand stays out: only an agent that just appeared is hooked. */
+    _hookNewAgents() {
+        const agents = this._daemon.state.agents ?? {};
+        for (const provider of AGENT_PROVIDERS) {
+            const {found, hooked} = agents[provider] ?? {};
+            const appeared = found && !this._agentsFound?.[provider];
+            if (this._agentsFound)
+                this._agentsFound[provider] = Boolean(found);
+            if (appeared && !hooked && this._settings.get_boolean(`agent-alerts-${provider}`))
                 this._hookAgent(provider);
         }
     }
