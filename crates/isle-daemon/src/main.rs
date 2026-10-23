@@ -75,8 +75,12 @@ async fn main() -> anyhow::Result<()> {
         Some(other) => bail!("unknown option {other}; see isled --help"),
     }
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    let session = connection::Builder::session()?
+        .build()
+        .await
+        .context("could not connect to the session bus")?;
     // A second isled (started by hand) leaves the running one alone, before it opens or prunes anything.
-    if running().await {
+    if running(&session).await {
         bail!("isled is already running");
     }
     // The clipboard history lives here; keep it from other users, including
@@ -97,23 +101,19 @@ async fn main() -> anyhow::Result<()> {
     let (assistant, assistant_commands) = AssistantService::new();
     let (usage, usage_refresh) = UsageService::new();
     let (updates, updates_wake) = UpdatesService::new();
-    let session = connection::Builder::session()?
-        .serve_at(OBJECT_PATH, MediaService::default())?
-        .serve_at(OBJECT_PATH, PomodoroService::load())?
-        .serve_at(OBJECT_PATH, TodoService::load())?
-        .serve_at(OBJECT_PATH, ShelfService::load())?
-        .serve_at(OBJECT_PATH, ClipboardService::load())?
-        .serve_at(OBJECT_PATH, CalendarService::load())?
-        .serve_at(OBJECT_PATH, RemindersService::load())?
-        .serve_at(OBJECT_PATH, SystemService::default())?
-        .serve_at(OBJECT_PATH, assistant)?
-        .serve_at(OBJECT_PATH, usage)?
-        .serve_at(OBJECT_PATH, updates)?
-        .build()
-        .await
-        .context("could not connect to the session bus")?;
-
     let server = session.object_server();
+    server.at(OBJECT_PATH, MediaService::default()).await?;
+    server.at(OBJECT_PATH, PomodoroService::load()).await?;
+    server.at(OBJECT_PATH, TodoService::load()).await?;
+    server.at(OBJECT_PATH, ShelfService::load()).await?;
+    server.at(OBJECT_PATH, ClipboardService::load()).await?;
+    server.at(OBJECT_PATH, CalendarService::load()).await?;
+    server.at(OBJECT_PATH, RemindersService::load()).await?;
+    server.at(OBJECT_PATH, SystemService::default()).await?;
+    server.at(OBJECT_PATH, assistant).await?;
+    server.at(OBJECT_PATH, usage).await?;
+    server.at(OBJECT_PATH, updates).await?;
+
     let media = server.interface::<_, MediaService>(OBJECT_PATH).await?;
     let pomodoro = server.interface::<_, PomodoroService>(OBJECT_PATH).await?;
     let todo = server.interface::<_, TodoService>(OBJECT_PATH).await?;
@@ -194,15 +194,20 @@ fn trim_memory() {
 }
 
 /// Whether an isled already owns the name on this session's bus.
-async fn running() -> bool {
-    let Ok(bus) = zbus::Connection::session().await else {
-        return false;
-    };
-    let Ok(dbus) = DBusProxy::new(&bus).await else {
+async fn running(bus: &zbus::Connection) -> bool {
+    let Ok(dbus) = DBusProxy::new(bus).await else {
         return false;
     };
     match BUS_NAME.try_into() {
         Ok(name) => dbus.name_has_owner(name).await.unwrap_or(false),
+        Err(_) => false,
+    }
+}
+
+/// Whether an isled runs, from a connection of its own.
+async fn is_running() -> bool {
+    match zbus::Connection::session().await {
+        Ok(bus) => running(&bus).await,
         Err(_) => false,
     }
 }
@@ -212,7 +217,7 @@ async fn doctor() {
     println!("isled {}", env!("CARGO_PKG_VERSION"));
     println!(
         "Service: {}",
-        if running().await {
+        if is_running().await {
             "running"
         } else {
             "not running (systemctl --user restart isled)"

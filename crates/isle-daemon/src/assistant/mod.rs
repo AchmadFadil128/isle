@@ -601,17 +601,22 @@ fn until_midnight() -> Duration {
         .unwrap_or(Duration::from_secs(3600))
 }
 
-/// At a new day (between turns): the conversation starts over and older ones are deleted.
-fn new_day(session: &mut Session) {
-    session.resume(today());
-    Brain::prune(today());
+/// At a new day (between turns): the conversation starts over and older ones are deleted, once a day
+/// (`pruned` is the day they last were) and off the runtime's thread.
+fn new_day(session: &mut Session, pruned: &mut Option<NaiveDate>) {
+    let today = today();
+    session.resume(today);
+    if pruned.replace(today) != Some(today) {
+        tokio::task::spawn_blocking(move || Brain::prune(today));
+    }
 }
 
 /// Runs requests one at a time, as the D-Bus methods queue them.
 pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut commands: Commands) {
     let mut session = Session::default();
     let mut next = None;
-    new_day(&mut session);
+    let mut pruned = None;
+    new_day(&mut session, &mut pruned);
     loop {
         let command = match next.take() {
             Some(command) => command,
@@ -621,7 +626,7 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                     None => return,
                 },
                 () = tokio::time::sleep(until_midnight()) => {
-                    new_day(&mut session);
+                    new_day(&mut session, &mut pruned);
                     continue;
                 }
             },
@@ -642,7 +647,7 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
             Command::End => {
                 session.end();
                 // A day that ended while it was open.
-                new_day(&mut session);
+                new_day(&mut session, &mut pruned);
                 publish(&iface, |state| {
                     *state = State {
                         turn: state.turn,
