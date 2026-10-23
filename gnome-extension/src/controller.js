@@ -39,7 +39,7 @@ import {TasksPage} from './pages/tasks.js';
 import {TimerPage} from './pages/timer.js';
 import {UsagePage} from './pages/usage.js';
 import {ReminderWatcher} from './reminders.js';
-import {GREETING, InstalledApps, VoiceView, actionTypes, aiSettings, openSetUp, openSignIn, runActions, stopPending, voiceContext} from './voice.js';
+import {GREETING, InstalledApps, UNDO_MS, VoiceView, actionTypes, aiSettings, openSetUp, openSignIn, runActions, stopPending, voiceContext} from './voice.js';
 import {TextWriter} from './writer.js';
 
 /** While the pointer rests before the island opens (Settings: hover-delay), it moves at most this far. */
@@ -115,6 +115,10 @@ const VOICE_LEAVE_MS = 1200;
 /** Where in its flow, and how bright, the still glow of an alert that asks is drawn. */
 const ALERT_GLOW_TIME = 2.2;
 const ALERT_GLOW_LEVEL = 0.3;
+/** The conversation shows this many messages at most. */
+const CHAT_SHOWN = 50;
+/** In the conversation, the field comes back this soon (ms) after an answer. */
+const CHAT_TYPE_AGAIN_MS = 250;
 const VOICE_WORKING = ['transcribing', 'thinking', 'acting'];
 
 // Pages that open by default when they have something to show, best first, unless one was picked
@@ -212,6 +216,7 @@ export class Controller {
         this._peek = this._peeks[0];
         this._botLook = this._readBotLook();
         this._voice = new VoiceView(this._botLook);
+        this._voice.chatLook = this._botLook;
     }
 
     // The bar and the island appear together: the clock gives way to it in the same frame.
@@ -302,7 +307,7 @@ export class Controller {
                 this._render();
         });
         expanded.connect('tint-changed', () => this._syncTint());
-        expanded.connect('voice-requested', () => this._openVoice());
+        expanded.connect('voice-requested', () => this._openVoice({typing: true}));
         // Settings open in their own window; the island gets out of its way.
         expanded.connect('settings-requested', () => {
             this.collapse();
@@ -370,6 +375,13 @@ export class Controller {
         this._topBar.connect('style-changed', () => this._updateGeometry());
         this._topBar.connect('calendar-requested', () => this._toggleFromKeyboard());
         island.connect('key-press-event', (_actor, event) => {
+            // A command waiting on the user: Enter runs it, Esc denies it.
+            const key = event.get_key_symbol();
+            if (this._voiceOpen && this._voice.cardWaiting && !this._voice.typing &&
+                [Clutter.KEY_Return, Clutter.KEY_KP_Enter, Clutter.KEY_Escape].includes(key)) {
+                this._voice.decideCard(key !== Clutter.KEY_Escape);
+                return Clutter.EVENT_STOP;
+            }
             if (event.get_key_symbol() === Clutter.KEY_Escape) {
                 this.collapse();
                 return Clutter.EVENT_STOP;
@@ -426,6 +438,8 @@ export class Controller {
         this._voice.connect('orb-clicked', () => this._onVoiceKey());
         this._voice.connect('type-requested', () => this._startTyping(''));
         this._voice.connect('typed', (_view, text) => this._ask(text));
+        this._voice.connect('new-chat', () => this._newChat());
+        this._voice.connect('undo-new-chat', () => this._undoNewChat());
         this._voice.connect('stop', () => {
             this._daemon.call('assistant', 'Cancel');
             this.collapse();
@@ -740,6 +754,7 @@ export class Controller {
     _syncBotLook() {
         this._botLook = this._readBotLook();
         this._voice.look = this._botLook;
+        this._voice.chatLook = this._botLook;
         this._syncTint();
     }
 
@@ -799,7 +814,10 @@ export class Controller {
         const [x, y] = global.get_pointer();
         this._later('expand', this._settings.get_int('hover-delay'), () => {
             const [nowX, nowY] = global.get_pointer();
-            if (Math.hypot(nowX - x, nowY - y) <= REST_DISTANCE_PX)
+            // The assistant still at work: its progress, rather than the pages (as a click does).
+            if (Math.hypot(nowX - x, nowY - y) <= REST_DISTANCE_PX && this._voiceWorking)
+                this._reopenVoice();
+            else if (Math.hypot(nowX - x, nowY - y) <= REST_DISTANCE_PX)
                 this.expand();
             else if (this._island.hovered)
                 this._expandOnRest();
@@ -893,7 +911,7 @@ export class Controller {
     _onClick(event) {
         // A click puts an answer away; the face and the Sign in button take their own clicks.
         if (this._voiceOpen) {
-            if (!this._voiceAnswered)
+            if (!this._voiceAnswered || this._voice.chatOpen)
                 return Clutter.EVENT_PROPAGATE;
             this.collapse();
             return Clutter.EVENT_STOP;
@@ -1289,7 +1307,9 @@ export class Controller {
         }
     }
 
-    _openVoice() {
+    // Opened by Super+I it listens; with `typing` (opened with the mouse) the field is ready instead, and an
+    // ongoing conversation shows above it.
+    _openVoice({typing = false} = {}) {
         if (!this._voiceBound)
             return;
         // Opened again before the last answer's actions ran: they belonged to that one.
@@ -1307,7 +1327,15 @@ export class Controller {
         this._voiceTurn = this._daemon.state.assistant?.turn ?? 0;
         this._voiceStep = this._daemon.state.assistant?.step ?? 0;
         this._autoListens = 0;
-        this._listen({greet: true});
+        if (!typing) {
+            this._listen({greet: true});
+            return;
+        }
+        this._startTyping('');
+        if (this._chatItems?.length && !this._chatStale(Date.now())) {
+            this._voice.setHistory([...this._chatItems]);
+            this._voice.openChat();
+        }
     }
 
     /** Types the request instead of saying it: listening stops (speech recognition never starts). */
@@ -1326,6 +1354,7 @@ export class Controller {
 
     /** Asks a typed request, with what the island knows, as `_listen` does for a spoken one. */
     async _ask(text) {
+        this._askedTyped = true;
         const request = ++this._listenRequest;
         this._voice.setState({phase: 'thinking', heard: text});
         this._render();
@@ -1381,6 +1410,7 @@ export class Controller {
     }
 
     async _listen({greet = false} = {}) {
+        this._askedTyped = false;
         // Read before the keyboard is taken, while the selection is surely the app's.
         // The app list only matters to a conversation's first request.
         const apps = greet ? this._installedApps.names : [];
@@ -1452,8 +1482,12 @@ export class Controller {
             this._setKeyboard(false);
         if (state.phase === 'reply' && state.turn !== this._voiceTurn) {
             this._voiceTurn = state.turn;
+            this._noteExchange(state);
             runActions(state.actions, this._voiceActions());
-            if (state.listen && this._autoListens < VOICE_MAX_AUTO_LISTENS) {
+            // In the conversation the answer is already in the list: the field is ready for the next word.
+            if (this._voice.chatOpen && !state.listen) {
+                this._later('chat-type', CHAT_TYPE_AGAIN_MS, () => this._voice.chatOpen && this._startTyping(''));
+            } else if (state.listen && this._autoListens < VOICE_MAX_AUTO_LISTENS) {
                 this._autoListens++;
                 // Asked something back: listen for the reply without a key press.
                 this._later('voice-listen', VOICE_LISTEN_AGAIN_MS, () => {
@@ -1478,6 +1512,7 @@ export class Controller {
             return;
         if (state.phase === 'reply' && state.turn !== this._voiceTurn) {
             this._voiceTurn = state.turn;
+            this._noteExchange(state);
             runActions(state.actions, this._voiceActions());
         } else if (state.phase !== 'error') {
             return;
@@ -1485,6 +1520,55 @@ export class Controller {
         this._voiceInBackground = false;
         this._syncAssistantBusy();
         this._post(Alerts.assistant(state, () => this._reopenVoice()));
+    }
+
+    // The conversation so far, kept here until isled keeps it (see docs/product-spec.md): what was said
+    // and answered, started over after the time set in Settings without a word.
+    _noteExchange(state) {
+        const now = Date.now();
+        if (this._chatStale(now))
+            this._chatItems = [];
+        this._chatAt = now;
+        if (state.heard)
+            this._chatItems.push({role: 'user', text: state.heard, spoken: !this._askedTyped, at: now});
+        if (state.reply)
+            this._chatItems.push({role: 'assistant', text: state.reply, at: now});
+        this._chatItems = this._chatItems.slice(-CHAT_SHOWN);
+        this._voice.setHistory([...this._chatItems]);
+    }
+
+    /** Shows the command card (see CommandCard); one waiting takes the keys, for Enter and Esc. */
+    _showCard(card) {
+        this._voice.showCard(card);
+        if (card?.status === 'waiting' && this._voiceOpen)
+            this._setKeyboard(true);
+    }
+
+    /** Whether the conversation has gone quiet longer than Settings keep it. */
+    _chatStale(now) {
+        const keep = {'idle-30m': 30, 'idle-2h': 120}[this._settings.get_string('voice-keep-chat')];
+        return keep ? now - (this._chatAt ?? 0) > keep * 60000
+            : new Date(this._chatAt ?? 0).toDateString() !== new Date(now).toDateString();
+    }
+
+    // +: the conversation goes, though Undo brings it back for a moment.
+    _newChat() {
+        this._chatUndo = this._chatItems ?? [];
+        this._chatItems = [];
+        this._voice.setHistory([]);
+        this._voice.showUndo(true);
+        this._later('chat-undo', UNDO_MS, () => {
+            this._chatUndo = null;
+            this._voice.showUndo(false);
+        });
+    }
+
+    _undoNewChat() {
+        this._cancel('chat-undo');
+        this._chatItems = this._chatUndo ?? [];
+        this._chatUndo = null;
+        this._voice.setHistory([...this._chatItems]);
+        this._voice.openChat();
     }
 
     /** An answer or an error is on show, no longer listening or thinking. */
@@ -1512,8 +1596,8 @@ export class Controller {
 
     _scheduleVoiceClose(ms) {
         this._voiceCloseMs = ms;
-        // An action may have closed it already.
-        if (!this._voiceOpen)
+        // An action may have closed it already; an open conversation stays until put away.
+        if (!this._voiceOpen || this._voice.chatOpen)
             return;
         if (this._voiceAnswered && !this._island.hovered)
             this._later('voice-close', ms, () => this.collapse());

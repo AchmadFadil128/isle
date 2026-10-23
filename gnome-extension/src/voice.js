@@ -173,7 +173,8 @@ export const VoiceView = GObject.registerClass({
     },
 }, class VoiceView extends St.Widget {
     _init(look) {
-        super._init({style_class: 'isle-voice', layout_manager: new Clutter.BinLayout()});
+        // Reactive, so a scroll over it can open the conversation (see `vfunc_scroll_event`).
+        super._init({style_class: 'isle-voice', layout_manager: new Clutter.BinLayout(), reactive: true});
         this._phase = 'listening';
         /** Shown instead of "Listening…" while it listens for the first request. */
         this.greeting = null;
@@ -288,6 +289,7 @@ export const VoiceView = GObject.registerClass({
         this._chat = new ChatView();
         this._chat.visible = false;
         this._chat.connect('new-chat', () => this.emit('new-chat'));
+        this._chat.connect('close', () => this.closeChat());
         this._history = [];
         this._column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true});
         this._column.add_child(this._chat);
@@ -374,7 +376,17 @@ export const VoiceView = GObject.registerClass({
         this._text.visible = !busy && !this.typing;
     }
 
-    /** The command card: {command, why, risks, status, output, seconds, exit}, or null for none. */
+    /** Whether the command card waits for Run or Deny (Enter and Esc answer it). */
+    get cardWaiting() {
+        return this._card.visible && this._card.status === 'waiting';
+    }
+
+    /** Run (true) or Deny (false), as the card's buttons do. */
+    decideCard(run) {
+        this._card.decide(run);
+    }
+
+    /** The command card: {command, why, detail, risks, status, output, seconds, exit}, or null for none. */
     showCard(card) {
         this._card.visible = Boolean(card);
         if (card) {
@@ -431,6 +443,7 @@ export const VoiceView = GObject.registerClass({
         if (!this.chatOpen)
             return;
         this._chat.visible = false;
+        this._heardButton.visible = Boolean(this._heard.text);
         this._syncEarlier();
         this.emit('size-changed');
     }
@@ -562,6 +575,11 @@ export const VoiceView = GObject.registerClass({
     /** The character's shape and colours: {shape, palette} (see bot.js). */
     set look(look) {
         this._face.setLook(look);
+    }
+
+    /** The look for the little faces beside its answers in the conversation. */
+    set chatLook(look) {
+        this._chat.look = look;
     }
 
     /** The exchange on show once answered: {heard, reply}, else null. */

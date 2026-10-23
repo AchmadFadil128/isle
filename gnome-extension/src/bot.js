@@ -175,15 +175,15 @@ const pair = (w, h, tilt = 0, open = 1, curve = 0) => [{w, h, tilt, open, curve}
 // The head's turn and how far apart the eyes sit (degrees); each eye's width and height (eye units),
 // tilt, how open, and `curve`: 0 a capsule, 1 a smiling arc.
 const EXPRESSIONS = {
-    attentive: {yaw: 4, pitch: 5, roll: -4, split: 16, eyes: pair(0.21, 0.44)},
-    surprised: {yaw: 3, pitch: -3, roll: 0, split: 19, eyes: pair(0.45, 0.47)},
-    curious: {yaw: 16, pitch: -9, roll: -15, split: 16.5, eyes: [{w: 0.24, h: 0.46, tilt: -8, open: 1, curve: 0}, {w: 0.2, h: 0.38, tilt: -8, open: 1, curve: 0}]},
-    happy: {yaw: 5, pitch: 9, roll: 0, split: 17, eyes: pair(0.27, 0.17, 14)},
+    attentive: {yaw: 3, pitch: 4, roll: 0, split: 16, eyes: pair(0.22, 0.44)},
+    surprised: {yaw: 0, pitch: -2, roll: 0, split: 17.5, eyes: pair(0.32, 0.5)},
+    curious: {yaw: 8, pitch: -5, roll: -5, split: 16, eyes: pair(0.22, 0.42)},
+    happy: {yaw: 2, pitch: 7, roll: 0, split: 17, eyes: pair(0.3, 0.27, 0, 1, 1)},
     joy: {yaw: 0, pitch: 8, roll: 0, split: 17.5, eyes: pair(0.34, 0.3, 0, 1, 1)},
-    focused: {yaw: 0, pitch: -6, roll: 0, split: 15.5, eyes: pair(0.23, 0.42, 0, 0.64)},
-    confused: {yaw: -14, pitch: 3, roll: 8, split: 16.5, eyes: [{w: 0.2, h: 0.44, tilt: -18, open: 1, curve: 0}, {w: 0.28, h: 0.17, tilt: 14, open: 1, curve: 0}]},
-    sad: {yaw: 3, pitch: -13, roll: 0, split: 16, eyes: pair(0.22, 0.4, -28)},
-    sleepy: {yaw: 6, pitch: -9, roll: -3, split: 16, eyes: pair(0.2, 0.42, 0, 0.42)},
+    focused: {yaw: 0, pitch: -4, roll: 0, split: 15.5, eyes: pair(0.23, 0.42, 0, 0.64)},
+    confused: {yaw: -6, pitch: 2, roll: 7, split: 16, eyes: [{w: 0.22, h: 0.44, tilt: 0, open: 1, curve: 0}, {w: 0.22, h: 0.44, tilt: 0, open: 0.66, curve: 0}]},
+    sad: {yaw: 2, pitch: -9, roll: 0, split: 15.5, eyes: pair(0.22, 0.42, 0, 0.6)},
+    sleepy: {yaw: 3, pitch: -7, roll: -2, split: 16, eyes: pair(0.22, 0.42, 0, 0.4)},
 };
 const copyExpression = ({eyes, ...turn}) => ({...turn, eyes: eyes.map(eye => ({...eye}))});
 const TURN_KEYS = ['yaw', 'pitch', 'roll', 'split'];
@@ -205,8 +205,11 @@ const GESTURES = {
 const HEAD = 15 / 36;
 const EYE_BALL = 17.3 / 15;
 const EYE_UNIT = 20.3 / 15;
-const LOOK_TURN = {yaw: 14, pitch: 12};
-const MAX_TURN = {yaw: 26, pitch: 22};
+const LOOK_TURN = {yaw: 12, pitch: 10};
+const MAX_TURN = {yaw: 20, pitch: 16};
+/** How much the eyes narrow and tilt as the head turns (0 flat, 1 a ball's): a hint, so they never look bent. */
+const FORESHORTEN = 0.3;
+const EYE_ROLL = 0.4;
 /** How fast (per second) a new expression and a new shape take over: about a third of a second. */
 const MORPH_RATE = 10;
 /** A blink: the eye squashes shut in the first part of it and opens in the rest (s). */
@@ -608,10 +611,11 @@ export class Bot {
         const angle = Math.atan2(across[1], across[0]);
         cr.save();
         cr.translate(x, y);
-        cr.rotate(angle);
-        // Foreshortened as the head turns: narrower across, shorter up and down.
-        cr.scale(Math.max(0.2, Math.hypot(across[0], across[1])),
-            Math.max(0.2, Math.abs(-Math.sin(angle) * up[0] + Math.cos(angle) * up[1])));
+        // Upright, but for a little of the head's roll; a touch narrower as it turns, never bent.
+        cr.rotate(angle * EYE_ROLL);
+        const across1 = Math.hypot(across[0], across[1]);
+        const up1 = Math.abs(-Math.sin(angle) * up[0] + Math.cos(angle) * up[1]);
+        cr.scale(1 - FORESHORTEN * (1 - across1), 1 - FORESHORTEN * (1 - up1));
         cr.rotate(eye.tilt * RAD);
         // Sleepy or set on something: an upper lid down over the eye, its bottom still round.
         const open = Math.max(0.12, Math.min(1, eye.open));

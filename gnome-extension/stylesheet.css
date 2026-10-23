@@ -262,46 +262,66 @@
 .isle-voice-undo-text { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
 .isle-voice-undo-button { font-size: 12px; padding: 3px 10px; }
 
-/* The command card: what it is for, the command, its risks, and Deny or Run; then how it runs. */
+/* The command card, made like a small terminal: a title and what to know, the command coloured as a shell
+   would, its last lines while it runs, and Deny or Run with their keys. */
 .isle-card {
     margin-top: 8px;
-    padding: 10px 12px 10px 12px;
-    spacing: 7px;
-    border-radius: 14px;
-    background-color: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    padding: 11px 12px 12px 12px;
+    spacing: 9px;
+    border-radius: 16px;
+    background-color: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
-.isle-card-top { spacing: 7px; }
-.isle-card-glyph { color: rgba(255, 255, 255, 0.55); }
+.isle-card-ended { padding: 8px 12px; spacing: 6px; background-color: rgba(255, 255, 255, 0.035); }
+.isle-card-top { spacing: 8px; }
 .isle-card-title { font-size: 13px; font-weight: 600; }
-.isle-card-time { font-size: 12px; color: rgba(255, 255, 255, 0.45); font-feature-settings: "tnum"; }
-.isle-card-command {
-    font-family: monospace;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.9);
-    padding: 6px 9px;
-    border-radius: 8px;
-    background-color: rgba(0, 0, 0, 0.45);
+.isle-card-chips { spacing: 5px; }
+.isle-card-chip { spacing: 4px; padding: 2px 8px 2px 7px; border-radius: 999px; color: #ffb340; background-color: rgba(255, 179, 64, 0.13); }
+.isle-card-chip-removes { color: #ff6961; background-color: rgba(255, 105, 97, 0.13); }
+.isle-card-chip-text { font-size: 11px; font-weight: 600; }
+.isle-card-terminal {
+    padding: 9px 11px 9px 11px;
+    spacing: 5px;
+    border-radius: 10px;
+    background-color: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.06);
 }
-.isle-card-output { font-family: monospace; font-size: 11px; color: rgba(255, 255, 255, 0.45); }
-.isle-card-risks { spacing: 3px; }
-.isle-card-risk { spacing: 6px; color: #ff9f0a; }
-.isle-card-risk-text { font-size: 11px; color: rgba(255, 159, 10, 0.9); }
-.isle-card-end { spacing: 8px; padding-top: 2px; }
-.isle-card-sweep { margin-right: 4px; }
-.isle-card-button { font-size: 12px; padding: 5px 14px; }
+.isle-card-ended .isle-card-terminal { padding: 6px 10px; background-color: rgba(0, 0, 0, 0.35); }
+.isle-card-command { font-family: monospace; font-size: 12px; }
+.isle-card-output { font-family: monospace; font-size: 11px; color: rgba(255, 255, 255, 0.42); }
+.isle-card-output-failed { color: #ff6961; }
+.isle-card-sweep { margin-top: 2px; }
+.isle-card-detail { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
+.isle-card-end { spacing: 8px; }
+.isle-card-button { padding: 5px 7px 5px 13px; }
+.isle-card-button-plain { padding: 5px 13px; }
+.isle-card-button-box { spacing: 7px; }
+.isle-card-button-label { font-size: 12px; font-weight: 600; }
+.isle-card-key {
+    font-size: 10px;
+    font-weight: 600;
+    min-width: 12px;
+    padding: 1px 5px;
+    border-radius: 5px;
+    text-align: center;
+}
+.isle-card-ghost { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
+.isle-card-ghost:hover { background-color: rgba(255, 255, 255, 0.17); }
+.isle-card-ghost .isle-card-key { color: rgba(255, 255, 255, 0.6); background-color: rgba(255, 255, 255, 0.1); }
 .isle-card-run, .isle-pill-white { color: #000000; background-color: #ffffff; }
 .isle-card-run:hover, .isle-pill-white:hover { background-color: rgba(255, 255, 255, 0.86); }
 .isle-card-run:active, .isle-pill-white:active { background-color: rgba(255, 255, 255, 0.72); }
+.isle-card-run .isle-card-key { color: rgba(0, 0, 0, 0.55); background-color: rgba(0, 0, 0, 0.09); }
 .isle-card-status { spacing: 5px; }
-.isle-card-status-text { font-size: 12px; font-weight: 600; }
+.isle-card-status-text { font-size: 12px; font-weight: 600; font-feature-settings: "tnum"; }
+.isle-card-running { color: rgba(255, 255, 255, 0.55); }
 .isle-card-done { color: #30d158; }
 .isle-card-failed { color: #ff453a; }
 .isle-card-denied { color: rgba(255, 255, 255, 0.5); }
 
 /* The conversation, above the pill. */
 .isle-chat { padding: 10px 16px 0 16px; spacing: 8px; }
-.isle-chat-header { spacing: 8px; }
+.isle-chat-header { spacing: 6px; }
 .isle-chat-title { font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.45); }
 .isle-chat-new { padding: 5px; color: rgba(255, 255, 255, 0.75); background-color: rgba(255, 255, 255, 0.08); }
 .isle-chat-new:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.16); }
@@ -310,9 +330,11 @@
 .isle-chat-user-text { font-size: 13px; }
 .isle-chat-spoken { color: rgba(255, 255, 255, 0.5); margin-top: 3px; }
 .isle-chat-reply { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
-.isle-chat-command { spacing: 7px; padding: 6px 10px; border-radius: 10px; background-color: rgba(255, 255, 255, 0.05); }
+.isle-chat-reply-row { spacing: 8px; }
+.isle-chat-time { font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, 0.35); font-feature-settings: "tnum"; }
+.isle-chat-command { spacing: 8px; }
 .isle-chat-command-glyph { color: rgba(255, 255, 255, 0.45); }
-.isle-chat-command-text { font-family: monospace; font-size: 11px; color: rgba(255, 255, 255, 0.7); }
+.isle-chat-command-text { font-family: monospace; font-size: 11px; padding: 5px 9px; border-radius: 8px; background-color: rgba(255, 255, 255, 0.06); }
 .isle-chat-command-status .isle-card-status-text { font-size: 11px; }
 
 /* The round button at the row's end: 32 px with any of its icons (see ACTION_SIZE in voice.js). */
