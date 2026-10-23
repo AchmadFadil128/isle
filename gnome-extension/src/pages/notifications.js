@@ -11,37 +11,21 @@ import St from 'gi://St';
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import {notificationIcon, plainBody} from '../notifications.js';
-import {icon, iconButton, isSymbolic, label, ownIcon, pillButton, setButtonIcon, setEnabled} from '../widgets.js';
+import {icon, iconButton, isSymbolic, label, ownIcon, pillButton, setButtonIcon} from '../widgets.js';
 import {Page} from './page.js';
 
 /** A card offers at most this many of its notification's buttons ("Mark as read", "Accept"). */
 const MAX_ACTIONS = 3;
 
 /** Notifications grouped by app, apps ordered by their newest; newest first within an app. */
-function groupByApp(notifications) {
-    const groups = new Map();
-    for (const notification of notifications) {
-        const source = notification.source ?? notification;
-        if (!groups.has(source))
-            groups.set(source, []);
-        groups.get(source).push(notification);
-    }
-    return groups;
-}
-
-/** The app's name for a stack, e.g. "Chrome". */
-function appName(source, notification) {
-    return source?.title || notification.title || 'this app';
-}
-
-/** The app's icon: a colour one as is, a symbolic one on a grey rounded square, as macOS does. */
+/** The app's icon, small beside its row: a colour one as is, a symbolic one on a grey rounded square. */
 function notificationBadge(gicon) {
     gicon = gicon ? ownIcon(gicon) : icon('dialog-information-symbolic');
     if (!isSymbolic(gicon))
-        return new St.Icon({gicon, icon_size: 32, y_align: Clutter.ActorAlign.CENTER});
+        return new St.Icon({gicon, icon_size: 20, y_align: Clutter.ActorAlign.CENTER});
     return new St.Bin({
         style_class: 'isle-notification-glyph',
-        child: new St.Icon({gicon, icon_size: 18}),
+        child: new St.Icon({gicon, icon_size: 12}),
         y_align: Clutter.ActorAlign.CENTER,
     });
 }
@@ -57,7 +41,6 @@ class NotificationsPage extends Page {
         this.name = 'notifications';
         this._center = center;
         /** Apps whose stack of notifications is unfolded. */
-        this._openGroups = new Set();
 
         this.add_child(this._buildBar());
         this.add_child(this._buildList());
@@ -89,13 +72,13 @@ class NotificationsPage extends Page {
     /** How many there are, then Do Not Disturb and Clear All as small round buttons. */
     _buildBar() {
         const bar = new St.BoxLayout({style_class: 'isle-notifications-bar'});
-        this._count = label('', 'isle-notifications-count', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        bar.add_child(this._count);
-        this._dndButton = iconButton('isle-bell', 'isle-button-round isle-button-small isle-dnd-toggle', () => {
+        bar.add_child(label('Notifications', 'isle-notifications-heading', {x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
+        this._dndButton = iconButton('isle-bell', 'isle-button-flat isle-dnd-toggle', () => {
             this._center.dnd = !this._center.dnd;
-        }, {size: 14, accessibleName: 'Do Not Disturb'});
-        this._clearButton = iconButton('isle-trash', 'isle-button-round isle-button-small',
-            () => this._center.clearAll(), {size: 14, accessibleName: 'Clear all'});
+        }, {size: 13, accessibleName: 'Do Not Disturb'});
+        this._dndButton.y_align = Clutter.ActorAlign.CENTER;
+        this._clearButton = pillButton('Clear', 'isle-pill-small isle-notifications-clear', () => this._center.clearAll());
+        this._clearButton.y_align = Clutter.ActorAlign.CENTER;
         bar.add_child(this._dndButton);
         bar.add_child(this._clearButton);
         return bar;
@@ -135,68 +118,21 @@ class NotificationsPage extends Page {
 
     _update({seen = true} = {}) {
         this._stale = false;
-        /** Each card's "5m ago", with when it came, to bring up to date without a rebuild. */
+        /** Each row's "5m ago", with when it came, to bring up to date without a rebuild. */
         this._times = [];
         const notifications = this._center.notifications;
-        const count = notifications.length;
-        this._count.text = count ? `${count} ${count === 1 ? 'notification' : 'notifications'}` : '';
-        setEnabled(this._clearButton, notifications.some(n => !n.resident));
+        this._clearButton.visible = notifications.some(n => !n.resident);
 
+        // Newest first, one row each, as a list to scroll.
         this._list.destroy_all_children();
-        const groups = groupByApp(notifications);
-        // Forget unfolded stacks of apps that have nothing left.
-        for (const source of this._openGroups) {
-            if (!groups.has(source))
-                this._openGroups.delete(source);
-        }
-        for (const [source, items] of groups) {
-            if (items.length === 1)
-                this._list.add_child(this._row(items[0]));
-            else if (this._openGroups.has(source))
-                this._addOpenGroup(source, items);
-            else
-                this._list.add_child(this._stack(source, items));
-        }
+        for (const notification of notifications)
+            this._list.add_child(this._row(notification));
         this._empty.visible = notifications.length === 0;
         this._scroll.visible = notifications.length > 0;
 
         // Seen while open: no unread dot for something already on screen.
         if (this.active && seen)
             this._center.acknowledgeAll();
-    }
-
-    /** An app's notifications as a macOS-like stack: newest on top, the next peeking out, "+2 more from …". */
-    _stack(source, items) {
-        const stack = new St.BoxLayout({...VERTICAL, style_class: 'isle-notification-stack'});
-        stack.add_child(this._row(items[0]));
-        stack.add_child(new St.Widget({style_class: 'isle-notification-peek', x_expand: true}));
-        const more = new St.Button({
-            style_class: 'isle-notification-more',
-            label: `+${items.length - 1} more from ${appName(source, items[0])}`,
-            x_align: Clutter.ActorAlign.START,
-            can_focus: true,
-        });
-        more.connect('clicked', () => {
-            this._openGroups.add(source);
-            this._update();
-        });
-        stack.add_child(more);
-        return stack;
-    }
-
-    /** An unfolded stack: the app's name with "Show less", then each one. */
-    _addOpenGroup(source, items) {
-        const header = new St.BoxLayout({style_class: 'isle-notification-group-header'});
-        header.add_child(label(appName(source, items[0]), 'isle-notification-group-name', {x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
-        const less = new St.Button({style_class: 'isle-notification-less', label: 'Show less', can_focus: true});
-        less.connect('clicked', () => {
-            this._openGroups.delete(source);
-            this._update();
-        });
-        header.add_child(less);
-        this._list.add_child(header);
-        for (const notification of items)
-            this._list.add_child(this._row(notification));
     }
 
     _updateDnd() {
@@ -208,62 +144,56 @@ class NotificationsPage extends Page {
         setButtonIcon(this._dndButton, on ? 'isle-moon' : 'isle-bell');
     }
 
-    /** A macOS-like card: app icon, title with its time (a close button under the pointer), text below. */
+    /** A row: the app's icon, who and what on one line, and when; under the pointer, its buttons and ×. */
     _row(notification) {
         const content = new St.BoxLayout({style_class: 'isle-notification', x_expand: true});
-        const badge = notificationBadge(notificationIcon(notification));
-        content.add_child(badge);
+        content.add_child(notificationBadge(notificationIcon(notification)));
 
-        const texts = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        const header = new St.BoxLayout({style_class: 'isle-notification-header'});
-        const title = label(notification.title || notification.source?.title || '', 'isle-notification-title', {x_expand: true});
+        const line = new St.BoxLayout({style_class: 'isle-notification-line', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const title = label(notification.title || notification.source?.title || '', 'isle-notification-title');
         // While the screen is shared, only who wrote, not what.
         const text = this._sharing ? '' : plainBody(notification).replace(/\s+/g, ' ').trim();
-        const body = label(text, 'isle-notification-body');
+        const body = label(text, 'isle-notification-body', {x_expand: true});
         for (const part of [title, body])
             part.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         body.visible = body.text.length > 0;
-        // The time and the close button share one spot.
+        line.add_child(title);
+        line.add_child(body);
+        content.add_child(line);
+
+        // The time, and in its place under the pointer the buttons and ×.
         const corner = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
         const time = label(Format.ago(notification.datetime), 'isle-notification-time', {x_align: Clutter.ActorAlign.END});
         this._times.push([time, notification.datetime]);
         corner.add_child(time);
-        header.add_child(title);
-        header.add_child(corner);
-        texts.add_child(header);
-        texts.add_child(body);
+        const tools = new St.BoxLayout({style_class: 'isle-notification-tools', x_align: Clutter.ActorAlign.END, opacity: 0, visible: false});
         // Its buttons, as GNOME's banner had them; not while the screen is shared.
         const actions = this._sharing ? [] : (notification.actions ?? []).slice(0, MAX_ACTIONS);
-        if (actions.length > 0) {
-            const buttons = new St.BoxLayout({style_class: 'isle-notification-actions'});
-            for (const action of actions) {
-                buttons.add_child(pillButton(action.label, 'isle-pill-small isle-notification-action', () => {
-                    action.activate();
-                    this.emit('request-close');
-                }));
-            }
-            texts.add_child(buttons);
-            // Beside the name and text, as on macOS, not halfway down the buttons.
-            badge.y_align = Clutter.ActorAlign.START;
+        for (const action of actions) {
+            tools.add_child(pillButton(action.label, 'isle-pill-small isle-notification-action', () => {
+                action.activate();
+                this.emit('request-close');
+            }));
         }
-        content.add_child(texts);
+        if (!notification.resident) {
+            const dismiss = iconButton('isle-close-symbolic', 'isle-button-flat isle-notification-dismiss',
+                () => notification.destroy(), {size: 10, accessibleName: 'Dismiss'});
+            dismiss.y_align = Clutter.ActorAlign.CENTER;
+            tools.add_child(dismiss);
+        }
+        corner.add_child(tools);
+        content.add_child(corner);
 
         const row = new St.Button({style_class: 'isle-notification-row', child: content, x_expand: true, can_focus: true});
         row.connect('clicked', () => {
             notification.activate();
             this.emit('request-close');
         });
-
-        if (!notification.resident) {
-            const dismiss = iconButton('isle-close-symbolic', 'isle-button-flat isle-notification-dismiss',
-                () => notification.destroy(), {size: 10, accessibleName: 'Dismiss'});
-            dismiss.x_align = Clutter.ActorAlign.END;
-            dismiss.opacity = 0;
-            dismiss.reactive = false;
-            corner.add_child(dismiss);
+        if (tools.get_n_children() > 0) {
             row.connect('notify::hover', () => {
-                dismiss.reactive = row.hover;
-                dismiss.ease({opacity: row.hover ? 255 : 0, duration: 120});
+                tools.show();
+                tools.ease({opacity: row.hover ? 255 : 0, duration: 120,
+                    onComplete: () => (tools.visible = row.hover)});
                 time.ease({opacity: row.hover ? 0 : 255, duration: 120});
             });
         }

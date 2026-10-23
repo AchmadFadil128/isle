@@ -5,11 +5,10 @@
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
-import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {VERTICAL} from '../compat.js';
-import {iconButton, label} from '../widgets.js';
+import {iconButton, label, wrapLines} from '../widgets.js';
 import {Page} from './page.js';
 
 /** How long the dot takes to pop into the ring. */
@@ -52,11 +51,11 @@ export const TasksPage = GObject.registerClass(
 class TasksPage extends Page {
     _init(daemon, {height}) {
         super._init(daemon, {
-            style_class: 'isle-reminders',
+            style_class: 'isle-page isle-reminders',
             layout_manager: new Clutter.BinLayout(),
             height,
         });
-        this.name = 'tasks';
+        this.name = 'reminders';
         /** The reminder being renamed, if any; the list holds still meanwhile. */
         this._renaming = null;
         /** Reminders ticked a moment ago, on their way out; the list holds still meanwhile. */
@@ -251,20 +250,23 @@ class TasksPage extends Page {
         // The tick box: a ring, and a dot that pops into it when ticked.
         const dot = new St.Widget({style_class: 'isle-reminder-dot', scale_x: 0, scale_y: 0, x_expand: true, y_expand: true});
         dot.set_pivot_point(0.5, 0.5);
+        // By the first line of a title that wraps.
         const check = new St.Button({
             style_class: 'isle-reminder-check',
             child: dot,
             accessible_name: 'Mark as done',
-            y_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.START,
         });
         row.add_child(check);
 
         // The title over a hairline that runs from the text to the edge, as on macOS.
         const column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true});
         const content = new St.BoxLayout({style_class: 'isle-reminder-content', y_expand: true});
-        const titleBox = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        const titleBox = new St.Widget({style_class: 'isle-reminder-title-box', layout_manager: new Clutter.BinLayout(),
+            x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         const title = label(task.title, 'isle-reminder-title', {reactive: true, x_expand: true});
-        title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        // A long one wraps, to be read whole.
+        wrapLines(title);
         // Click the title to rename it in place.
         title.connect('button-release-event', () => {
             // One rename at a time: starting another would rebuild the list mid focus change.

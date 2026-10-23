@@ -289,7 +289,14 @@
   border-radius: 3px;
   background-color: #ff453a;
 }
-.isle-header-date { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
+/* The battery in place of the date: "98%" and a battery that empties, as on macOS. */
+.isle-header-battery { spacing: 5px; }
+.isle-header-battery-percent { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
+.isle-battery-body { width: 17px; height: 7px; padding: 1.5px; border: 1.2px solid rgba(255, 255, 255, 0.5); border-radius: 3.5px; }
+.isle-battery-fill { border-radius: 1.5px; background-color: #ffffff; }
+.isle-battery-fill.low { background-color: #ff453a; }
+.isle-battery-fill.charging { background-color: #30d158; }
+.isle-battery-nub { width: 1.5px; height: 4px; margin-left: 1px; border-radius: 0 1px 1px 0; background-color: rgba(255, 255, 255, 0.5); }
 .isle-header-time { font-size: 13px; font-weight: 600; }
 .isle-header-settings { padding: 4px; color: rgba(255, 255, 255, 0.6); }
 .isle-header-settings:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
@@ -461,28 +468,24 @@
 
 /* ── Focus ────────────────────────────────────────────── */
 
-.isle-timer-time { font-size: 23px; font-weight: 600; letter-spacing: -0.5px; }
-.isle-timer-side { spacing: 2px; }
-.isle-timer-caption { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
-.isle-timer-stats { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
-.isle-timer-buttons { spacing: 6px; padding-top: 14px; }
+/* The Focus page (timer.js): a ring with the time and the phase, steppers for the lengths, and Start. */
+.isle-timer { padding-left: 34px; padding-right: 34px; }
+.isle-timer-time { font-size: 24px; font-weight: 600; letter-spacing: -0.5px; }
+.isle-timer-phase { font-size: 12px; font-weight: 500; color: rgba(255, 255, 255, 0.55); }
 
-.isle-play-pill {
-  padding: 8px 18px;
-  color: #000000;
-  background-color: #ffffff;
-}
+/* "Work  25  −  +", as a pill. */
+.isle-steppers { spacing: 8px; }
+.isle-stepper { padding: 3px 4px 3px 12px; spacing: 4px; border-radius: 999px; background-color: #1c1c1e; }
+.isle-stepper-name { font-size: 12px; font-weight: 500; color: rgba(255, 255, 255, 0.55); width: 40px; }
+.isle-stepper-value { font-size: 15px; font-weight: 600; width: 26px; text-align: right; padding-right: 6px; }
+.isle-stepper-button { padding: 6px; border-radius: 999px; color: rgba(255, 255, 255, 0.8); }
+.isle-stepper-button:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
 
-.isle-play-pill:hover { background-color: #e6e6e6; }
-
-/* The Focus page: the timer, a hairline, then today's reminders (focus.js). */
-.isle-focus-divider { width: 1px; height: 112px; margin: 0 16px; background-color: rgba(255, 255, 255, 0.1); }
-/* The phases, as round buttons lit in their colour (timer.js). */
-.isle-phase { padding: 7px; }
-.isle-phase-focus:checked { background-color: #5e5ce6; }
-.isle-phase-focus:checked:hover { background-color: #6e6cf0; }
-.isle-phase-break:checked { background-color: #2fb35a; }
-.isle-phase-break:checked:hover { background-color: #36c264; }
+.isle-timer-controls { spacing: 8px; }
+.isle-start-pill { padding: 9px 18px; border-radius: 999px; color: #ffffff; background-color: #2c2c2e; }
+.isle-start-pill:hover { background-color: #3a3a3c; }
+.isle-start-pill-box { spacing: 7px; }
+.isle-start-pill-label { font-size: 14px; font-weight: 600; }
 
 /* ── Lists (notifications, calendar) ──────────────────── */
 
@@ -504,7 +507,11 @@
 
 /* Lists fade out at an edge that scrolls on, instead of being cut. */
 .isle-reminder-scroll { -st-vfade-offset: 14px; }
-.isle-reminder { height: 24px; spacing: 10px; padding-left: 2px; }
+.isle-reminder { min-height: 24px; spacing: 10px; padding-left: 2px; }
+/* The ring by the first line; a wrapped title gets a little air above and below. */
+.isle-reminder .isle-reminder-check { margin-top: 3px; }
+.isle-reminder-new .isle-reminder-check { margin-top: 0; }
+.isle-reminder-title-box { padding: 3px 0; }
 
 /* An 18 px ring; ticked, it turns orange with a 10 px dot inside, as on macOS. */
 .isle-reminder-check {
@@ -639,66 +646,39 @@
 
 /* ── Notifications ────────────────────────────────────── */
 
-.isle-notifications-bar { spacing: 6px; padding-bottom: 2px; }
-.isle-notifications-count { font-size: 12px; font-weight: 500; color: rgba(255, 255, 255, 0.5); }
-.isle-dnd-toggle:checked { background-color: #5e5ce6; }
+.isle-notifications-bar { spacing: 6px; padding: 0 2px 4px 6px; }
+.isle-notifications-heading { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.6); }
+.isle-notifications-clear { font-size: 12px; font-weight: 600; padding: 5px 12px; background-color: #1c1c1e; }
+.isle-notifications-clear:hover { background-color: #2c2c2e; }
+.isle-dnd-toggle { padding: 6px; border-radius: 999px; color: rgba(255, 255, 255, 0.6); }
+.isle-dnd-toggle:checked { color: #ffffff; background-color: #5e5ce6; }
 .isle-dnd-toggle:checked:hover { background-color: #6e6cf0; }
-.isle-notification-list { spacing: 6px; }
+.isle-notification-list { spacing: 2px; }
 
-/* An app's notifications folded into a stack, the next card's edge under it. */
-.isle-notification-peek {
-  height: 5px;
-  margin: 0 12px;
-  border-radius: 0 0 10px 10px;
-  background-color: #161618;
-}
-
-.isle-notification-more {
-  font-size: 12px;
-  font-weight: 500;
-  padding: 3px 12px 0 12px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.isle-notification-more:hover { color: #ffffff; }
-
-.isle-notification-group-header { padding: 2px 2px 0 4px; }
-.isle-notification-group-name { font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.6); }
-
-.isle-notification-less {
-  font-size: 12px;
-  font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 999px;
-  color: rgba(255, 255, 255, 0.8);
-  background-color: #2c2c2e;
-}
-
-.isle-notification-less:hover { background-color: #3a3a3c; color: #ffffff; }
-
+/* A row each, as a list: the app's icon, who in white and what in grey on one line, then when. */
 .isle-notification-row {
-  border-radius: 12px;
-  background-color: #1c1c1e;
+  border-radius: 10px;
   transition-duration: 120ms;
 }
 
-.isle-notification-row:hover { background-color: #2c2c2e; }
-.isle-notification { spacing: 11px; padding: 9px 12px; }
-.isle-notification-header { spacing: 8px; }
+.isle-notification-row:hover { background-color: rgba(255, 255, 255, 0.06); }
+.isle-notification { spacing: 10px; padding: 6px 8px; }
+.isle-notification-line { spacing: 8px; }
 .isle-notification-title { font-size: 13px; font-weight: 600; }
-.isle-notification-dismiss { padding: 3px; color: rgba(255, 255, 255, 0.7); background-color: #3a3a3c; }
+.isle-notification-body { font-size: 13px; color: rgba(255, 255, 255, 0.55); }
+.isle-notification-tools { spacing: 6px; }
+.isle-notification-action { font-size: 11px; padding: 3px 10px; }
+.isle-notification-dismiss { padding: 4px; border-radius: 999px; color: rgba(255, 255, 255, 0.7); background-color: #3a3a3c; }
 
 /* A system notification's symbolic icon, on a tile the size of an app icon. */
 .isle-notification-glyph {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
   background-color: #2c2c2e;
   color: #ffffff;
 }
-.isle-notification-body { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
-.isle-notification-actions { spacing: 6px; padding-top: 6px; }
-.isle-notification-time { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
+.isle-notification-time { font-size: 12px; color: rgba(255, 255, 255, 0.45); padding-left: 8px; }
 
 .isle-dnd-moon { color: rgba(255, 255, 255, 0.85); }
 
@@ -880,6 +860,6 @@
 /* Focused (from the keyboard), a button lights up: no ring around it. */
 .isle-pill:focus, .isle-pill-small:focus, .isle-notification-row:focus, .isle-output-button:focus,
 .isle-cal-today:focus, .isle-cal-month-title:focus, .isle-segment:focus, .isle-usage-dot:focus,
-.isle-recording-pill:focus, .isle-notification-more:focus, .isle-notification-less:focus {
+.isle-recording-pill:focus {
   color: #ffffff;
 }

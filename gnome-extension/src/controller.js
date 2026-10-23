@@ -31,10 +31,11 @@ import {KeyboardWatcher, OsdHook, SF_PRO_CLASS, TopBar, hasSfPro} from './shell.
 import {ShelfHelper} from './shelfHelper.js';
 import {CallPage} from './pages/call.js';
 import {CalendarPage} from './pages/calendar.js';
-import {FocusPage} from './pages/focus.js';
 import {MediaPage} from './pages/media.js';
 import {NotificationsPage} from './pages/notifications.js';
 import {ShelfPage} from './pages/shelf.js';
+import {TasksPage} from './pages/tasks.js';
+import {TimerPage} from './pages/timer.js';
 import {UsagePage} from './pages/usage.js';
 import {ReminderWatcher} from './reminders.js';
 import {GREETING, InstalledApps, SIRI_COLORS, VoiceView, actionTypes, aiSettings, openSetUp, openSignIn, runActions, stopPending, voiceContext} from './voice.js';
@@ -261,7 +262,8 @@ export class Controller {
             () => new CallPage(this._daemon, this._call, this._privacy, this._settings, size),
             () => new MediaPage(this._daemon, this._audio, size),
             () => new NotificationsPage(this._daemon, this._notifications, size),
-            () => new FocusPage(this._daemon, size),
+            () => new TimerPage(this._daemon, size),
+            () => new TasksPage(this._daemon, size),
             () => new ShelfPage(this._daemon, this._clipboard, this._settings, size),
             () => new CalendarPage(this._daemon, size),
             () => new UsagePage(this._daemon, size),
