@@ -4,9 +4,10 @@
 
 **A dynamic island for the GNOME desktop.**
 
-Music with synced lyrics, calls, notifications, a focus timer beside your
-reminders, a calendar, a clipboard shelf, and a voice assistant that works
-with the AI you already use, living in a notch at the top of your screen.
+Music with synced lyrics, calls, notifications, a focus timer, reminders, a
+calendar that tells you when to join a meeting, a clipboard shelf, alerts
+from Claude Code and Codex, and a voice assistant that works with the AI you
+already use, living in a notch at the top of your screen.
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 ![GNOME Shell 46–51](https://img.shields.io/badge/GNOME%20Shell-46%E2%80%9351-4a86cf.svg)
@@ -18,7 +19,7 @@ with the AI you already use, living in a notch at the top of your screen.
 
 Isle turns the centre of the top bar into a black notch, like a MacBook's.
 At rest it shows the time and what is going on (a song, a timer, a
-recording). Rest the pointer on it and it opens with spring physics into a
+recording, or two of them at once). Rest the pointer on it and it opens with spring physics into a
 small panel with tabs for each page; passing over it on the way elsewhere
 leaves it closed. Alerts for volume, charging, Caps Lock and notifications
 appear in the same place instead of in the middle of the screen.
@@ -47,15 +48,17 @@ appear in the same place instead of in the middle of the screen.
 | <img src="docs/images/music.png" alt="Music page" width="420"> | **Music.** Spotify, YouTube in your browser, or any MPRIS player: cover art with the playing app's icon, a scrubber and controls. Volume and output switching are one click away. |
 | <img src="docs/images/lyrics.png" alt="Synced lyrics" width="420"> | **Synced lyrics** from [LRCLIB](https://lrclib.net), like Apple Music's: the line being sung large and bright, pauses as breathing dots. The island widens and takes the cover's colour; click a line to jump to it. |
 | <img src="docs/images/call.png" alt="A Google Meet call in the island: a live preview of the call, its length, mute and open" width="420"> | **Calls** in WhatsApp, Telegram, Meet or any app or browser: the closed island shows a green phone and how long the call has lasted. Open it to see the call live (you and whoever you call) while you work in other windows, mute your microphone, or jump back to the call. |
-| <img src="docs/images/focus.png" alt="Focus page: the timer beside today's reminders" width="420"> | **Focus.** A Pomodoro timer with breaks, daily totals and Do Not Disturb while you focus, beside today's **Reminders**, so what to work on sits next to the time to work on it. Reminders are a plain list as macOS shows them: add, rename in place, tick one off and it is struck through, then goes. The timer's ring stays visible in the closed island. |
+| <img src="docs/images/focus.png" alt="Focus page: the timer's ring, the work and break lengths, and Start" width="420"> | **Focus.** A Pomodoro timer with breaks and Do Not Disturb while you focus: a ring with the time left, the work and break lengths to change with − and +, and Start. Its ring and time stay in the closed island, beside the song if one plays. |
+| <img src="docs/images/reminders.png" alt="Reminders page: a list with a long reminder wrapped over two lines" width="420"> | **Reminders**, a plain list as macOS shows them: add, rename in place, tick one off and it is struck through, then goes. A long one wraps over as many lines as it needs. |
 | <img src="docs/images/clipboard.png" alt="Clipboard history" width="420"> | **Shelf.** A clipboard history of text, links, images and files (search, filter, pin; Super+V to paste), and a files tray: drop files on the island, then drag them into any app or click one to copy it, ready to paste into a chat. |
 | <img src="docs/images/files.png" alt="The files tray with a photo, a PDF and a text file" width="420"> | **Files tray.** Files dropped on the island wait here, with their thumbnails, until you drag them into an app or click one to copy it. |
-| <img src="docs/images/calendar.png" alt="Calendar" width="420"> | **Calendar.** The month beside the chosen day's events, like macOS's Calendar widget. Shows your desktop calendars (Google and others through Online Accounts) and events you add in a line: "Dinner 8:00 pm". |
-| <img src="docs/images/notifications.png" alt="The notifications page" width="420"> | **Notifications.** GNOME's notifications collect here, grouped by app, with their buttons ("Reply", "Mark as read") and Do Not Disturb a click away. |
+| <img src="docs/images/calendar.png" alt="Calendar" width="420"> | **Calendar.** The month beside the chosen day's events, like macOS's Calendar widget. Shows your desktop calendars (Google and others through Online Accounts) and events you add in a line: "Dinner 8:00 pm". Five minutes before an event, the island reminds you, with **Join** when it has a Google Meet, Zoom, Teams or Webex link. |
+| <img src="docs/images/notifications.png" alt="The notifications page" width="420"> | **Notifications.** GNOME's notifications collect here as a plain list, newest first, with their buttons ("Reply", "Mark as read") under the pointer, Clear, and Do Not Disturb a click away. |
 | <img src="docs/images/voice.png" alt="The voice assistant working through a request in steps: finding Spotify, opening it, playing jazz, setting the volume" width="420"> | **Voice assistant.** Press Super+I and ask, in English or Indonesian: play a song, find a file, put windows side by side, add a reminder, explain why the laptop is slow. It works as an agent: a request with several steps is done one after another, each step checked, with the AI you already use (Claude Code, Codex or Antigravity). |
 | <img src="docs/images/voice-modes.png" alt="The assistant listening, a request being typed, and its answer" width="420"> | **Speak or type.** It listens as soon as it opens; start typing (or click the keyboard) to type instead. Its face turns to the pointer and changes expression as it listens, thinks and answers, light rises from the panel's edge with your voice, and the answer stays to read. Close the island and it carries on in the background. |
 | <img src="docs/images/usage.png" alt="Claude plan usage: a bar for the 5-hour limit and one for the week" width="420"> | **AI usage.** How much of your Claude and ChatGPT plans' limits is used: one plan at a time with its logo, a bar per limit it has (5 hours, the week) and when each resets; scroll up or down, or click the dots, to switch. A warning comes as one nears its end. Only the ones you are signed in to show. |
-| <img src="docs/images/alerts.png" alt="The closed island, then alerts for charging, a notification with a Reply button, an AI plan limit and a reminder" width="420"> | **Alerts** for volume, brightness, Caps Lock, charging, low battery, Bluetooth devices with their battery, going offline, reminders, AI plan limits and GNOME notifications with their buttons, in the same place instead of the middle of the screen. Icons drawn in SF Symbols' manner move once as they appear: the bolt pulses, the bell sways, rings sweep and count up. |
+| <img src="docs/images/alerts.png" alt="The closed island with a song and the focus timer, then alerts for a meeting with Join, Claude Code asking to run a command, a notification with Reply, and charging" width="420"> | **Alerts** for volume, brightness, Caps Lock, charging, low battery, Bluetooth devices with their battery, going offline, reminders, meetings about to start, AI plan limits and GNOME notifications with their buttons, in the same place instead of the middle of the screen. Hold the pointer on one to keep it; swipe up to put it away. Icons drawn in SF Symbols' manner move once as they appear: the bolt pulses, the bell sways, rings sweep and count up. |
+| | **AI agents** (off until you turn them on): an alert when Claude Code needs your OK ("Allow Bash?"), waits for you or is done, and when Codex is done, with the project's name and **Show** to bring its window back. Nothing shows while you are already in that window. |
 
 Also: privacy dots while the camera, microphone or screen sharing is in use,
 a recording timer with a stop button, and a slim glass top bar that leaves
@@ -159,6 +162,8 @@ cd isle
 | Move the pointer away, or press Esc | Close it |
 | Click the notch | Open it now; on an alert, open what it is about |
 | Middle-click the notch | Play or pause |
+| Rest the pointer on an alert | Keep it until the pointer leaves |
+| Swipe up or down on an alert (touchpad) | Put it away, or open it |
 | Right-click the notch | Put an alert away; else bring the call, or the music player, to the front |
 | Super+V | Open the clipboard history with search ready; Enter pastes |
 | Drag a file towards the notch | Open the files tray to drop it |
@@ -189,7 +194,8 @@ Click the gear right of the clock in the open island (or Isle's gear in the
 - **Alerts:** volume and brightness; charging, network, Bluetooth and Caps
   Lock, each on its own; privacy dots, new songs, sounds; GNOME's own
   notification banners instead of the island's; what Super+V opens (the
-  clipboard history, or GNOME's calendar); lyrics online; new versions.
+  clipboard history, or GNOME's calendar); lyrics online; new versions;
+  a reminder before calendar events, and how many minutes before.
   Alerts other than a low battery wait while Do Not Disturb is on.
 - **Calls:** show calls in the island, and the live preview of the call.
 - **Clipboard:** turn the history on or off, clear it, and choose apps whose
@@ -198,7 +204,9 @@ Click the gear right of the clock in the open island (or Isle's gear in the
 - **Voice:** the assistant on or off, its shortcut, which AI answers and
   with which model, speech recognition, language, and whether it may use the
   text you selected (off by default) or read your notifications.
-- **AI Usage:** on or off, which plans to show, and when to warn.
+- **AI Usage:** on or off, which plans to show, and when to warn; and
+  under **AI Agents**, a switch for each of Claude Code and Codex that is
+  installed, for its alerts (none listed when neither is).
 - **About:** the version, help, a bug report to copy (`isled --report`),
   and resetting every setting.
 
@@ -302,6 +310,14 @@ with usage turned off it asks nothing at all. ChatGPT's numbers
 are read from Codex's own logs, with no network at all, so they are as of
 your last use of Codex.
 
+**AI agents.** Turning on Claude Code's alerts adds Isle's hook to
+`~/.claude/settings.json` (Notification and Stop); Codex's sets `notify` in
+`~/.codex/config.toml`, unless Codex already notifies another program, which
+Isle leaves alone and says so. Each runs `isled --agent-hook`, which tells
+the island and exits at once. Your own hooks and settings are kept as they
+are; turning a switch off, or uninstalling Isle, takes out Isle's entry
+only. Nothing leaves the computer.
+
 ## Resource usage
 
 Isle is built to run all day unnoticed. Measured on Ubuntu 24.04 with
@@ -339,7 +355,9 @@ turned off in Settings); your Claude plan's usage (`api.anthropic.com`, with
 Claude Code's own sign-in); a look for a newer Isle on GitHub at most once a
 day (also in Settings); the speech model, downloaded once from Hugging Face
 when you set up voice; and the voice assistant, whose requests go to the AI
-you picked and may include a web search by it. Copies from password managers
+you picked and may include a web search by it. A meeting's link is read
+from the event on this computer, and only opened when you click Join.
+Copies from password managers
 are never kept, and only GNOME Shell may read the clipboard history from
 Isle's service or steer its assistant. The call preview is drawn by GNOME
 Shell from what is on screen and never recorded.
@@ -381,7 +399,8 @@ isle-uninstall
 (or `./uninstall.sh` from the release package or the source folder). This
 removes the extension, the programs, the service, the font, the voice
 assistant's speech recognition and Isle's caches, and lifts a battery charge
-limit Isle set. Your tasks, calendar events, clipboard history, shelf and
+limit Isle set; it also takes Isle's hooks out of Claude Code's and Codex's
+settings. Your tasks, calendar events, clipboard history, shelf and
 timer settings stay in `~/.local/share/isle` until you delete them.
 
 ## How it works
@@ -390,7 +409,7 @@ timer settings stay in `~/.local/share/isle` until you delete them.
 ┌────────────────── isled (Rust) ──────────────────┐
 │ MPRIS · lyrics · timer · tasks · calendar · shelf│
 │ UPower · NetworkManager · BlueZ                  │
-│ voice assistant · AI usage                       │
+│ voice assistant · AI usage · AI agents · meetings│
 │            exposed on D-Bus (zbus)               │
 └────────────────────────┬─────────────────────────┘
            ┌─────────────┴──────────────┐
@@ -406,7 +425,7 @@ else lives in Rust behind a D-Bus API.
 | Path | Contents |
 |---|---|
 | `crates/isle-core` | Platform-independent logic: LRC parsing, track-title clean-up, Pomodoro, tasks, calendar, shelf, clipboard history. Unit tested. |
-| `crates/isle-daemon` | `isled`, the D-Bus service; `src/assistant` is the voice assistant (speech, the three AIs, the agent loop, its tools), `src/usage.rs` the AI usage, `src/updates.rs` the look for new versions, and `src/caller.rs` who may call what. |
+| `crates/isle-daemon` | `isled`, the D-Bus service; `src/assistant` is the voice assistant (speech, the three AIs, the agent loop, its tools), `src/usage.rs` the AI usage, `src/agents` the AI agents' hooks, `src/meeting.rs` meeting links, `src/updates.rs` the look for new versions, and `src/caller.rs` who may call what. |
 | `crates/isle-shelf` | `isle-shelf`, the files tray's drag-and-drop window. |
 | `crates/isle-whisper` | `isle-whisper`, the voice assistant's speech recognition: whisper.cpp, on the GPU through Vulkan or on the processor. |
 | `gnome-extension` | The GNOME Shell extension; `src/actionRules.js` holds the assistant's rules that need no GNOME, so they are tested anywhere. |

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Notifications: the count, Do Not Disturb and Clear All on the left, the
-// notifications on the right. Click one to open it. See docs/product-spec.md.
+// Notifications: a heading with Do Not Disturb and Clear, over a list of one-line rows,
+// newest first. Click one to open it. See docs/product-spec.md.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -17,7 +17,6 @@ import {Page} from './page.js';
 /** A card offers at most this many of its notification's buttons ("Mark as read", "Accept"). */
 const MAX_ACTIONS = 3;
 
-/** Notifications grouped by app, apps ordered by their newest; newest first within an app. */
 /** The app's icon, small beside its row: a colour one as is, a symbolic one on a grey rounded square. */
 function notificationBadge(gicon) {
     gicon = gicon ? ownIcon(gicon) : icon('dialog-information-symbolic');

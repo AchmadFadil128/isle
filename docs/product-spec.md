@@ -69,9 +69,7 @@ glance (and for colour-blind users):
 | Control | Off | On |
 |---|---|---|
 | Do Not Disturb | bell outline, grey chip | filled moon, indigo chip; moon in the closed island |
-| Focus Time | target outline, grey chip | filled target, indigo chip |
-| Short Break | cup outline, grey chip | filled cup, green chip ("Long Break" during a long break) |
-| Focus stopwatch | outline | filled while running; reset dims until the timer starts |
+| Focus timer | ▶ Start pill | ⏸ Pause while it runs, ▶ Resume when paused; a round reset beside it once started |
 | Lyrics | speech bubble outline | filled bubble, lit button |
 | Completed tasks | arrow pointing right, folded | arrow pointing down, listed |
 | Play / pause | play | pause |
@@ -104,6 +102,8 @@ place, dimmed, so the layout never jumps.
 | Click | Open now (an alert opens on its page) | Normal button clicks |
 | Middle-click | Play / pause | Play / pause |
 | Right-click | On an alert: put it away; else bring the call, or the music player, to the front | Bring the music player to the front |
+| Pointer on an alert | Holds it; it goes 1.5 s after the pointer leaves | – |
+| Two-finger swipe up / down on an alert | Put it away / open it | – |
 | Super+V (GNOME's calendar shortcut) | Open the clipboard history, search ready, held open (Settings may leave it to GNOME's calendar) | Close |
 | Super+I (Settings: any shortcut) | Ask the assistant; typing while it listens types the request instead | Speak again |
 | Click a tab | – | Go to that page |
@@ -120,7 +120,7 @@ call starts → Call during a call → Notifications if some arrived unseen
 runs → Music.
 
 Pages, in order: **Call** (only during a call) **· Music · Notifications ·
-Focus · Shelf · Calendar · Usage** (Usage only with an AI plan found), one tab each in the header. Lists scroll with the wheel or touchpad and never show
+Focus · Reminders · Shelf · Calendar · Usage** (Usage only with an AI plan found), one tab each in the header. Lists scroll with the wheel or touchpad and never show
 a scrollbar.
 
 ## 4. Closed island
@@ -130,7 +130,12 @@ a scrollbar.
   a header of its own when open, and GNOME's clock comes back to the main top bar meanwhile.
 - Right slot, first that applies: a warning (Isle's service stopped; a click offers to restart it) →
   a still mic (the assistant works on a request with the island closed; a click shows its steps) →
-  muted microphone on a call → music bars → up to two privacy dots.
+  muted microphone on a call → a second activity → music bars → up to two privacy dots.
+- Two activities at once: the first of recording, call, music and timer keeps the left slot and the
+  centre; the next takes the right slot, as on iPhone: the timer's ring and time left (white while
+  focusing, green on a break), a call's green phone and length, or the music bars. The island widens
+  by as much as that is wider than a slot, on both sides, so the clock stays centred. Each side's sign
+  keeps to its end of the island, all as far in.
 - Left slot, first that applies: breathing red dot (screen recording) →
   green phone (a call) → focus timer ring → cover art (a song playing or paused) → white dot (unseen
   notifications) → moon (Do Not Disturb on).
@@ -153,7 +158,8 @@ the left, a tab per page: icons, the open page's in a lit pill with its
 name, and a red dot on Notifications while some are unseen. On the right a
 red "● 0:42" pill while the screen records (click to stop), a green "📞 1:15"
 pill during a call on any page but Call (click: the Call page), the privacy
-dots, the music bars and `[timer ring] Tue 20 Oct 12:26`. The Call tab, its
+dots, the music bars, the assistant's sparkle, `[timer ring] Tue 20 Oct 12:26` and the gear. The
+tabs' icons, the gear and the pages' contents share the same 28 px edges. The Call tab, its
 phone in green, only shows during a call.
 
 **Call**, laid out like FaceTime's controls. A call is an app holding the
@@ -216,29 +222,23 @@ way to nothing (browsers report no title and "Paused" for a moment between
 videos), the song is shown playing for up to 1.5 s, so the cover, bars and
 width do not drop out and back; a song paused by itself shows at once.
 
-**Notifications**. A slim row on top: how many there are ("4
-notifications"), then **Do Not Disturb** (bell, or a moon on purple while
-on) and **Clear All** (trash) as small round buttons. Below, the full
-width: newest first, each card with its app icon (a symbolic one on a grey
-tile), the title with how long ago on the right, and one line of text;
-click to open it (the island closes), × (in the time's place under the
-pointer) to dismiss. An app with several is folded into a stack, as on
-macOS: its newest card, the next card's edge under it, and "+2 more from
-Chrome"; clicking that unfolds them under the app's name with **Show
-less**. Opening the page marks them seen. Empty: a bell, "No
-notifications · You're all caught up".
+**Notifications**, as macOS lists them: a heading "Notifications" with
+**Do Not Disturb** (a bell, or a moon on purple while on) and a **Clear**
+pill on its right. Below, newest first, one line each: the app's icon (a
+symbolic one on a grey tile), the title in bold and its text in grey, and
+how long ago on the right; under the pointer the row lights and its buttons
+("Reply", "Mark as read") and × take the time's place. Click a row to open
+it (the island closes). Opening the page marks them seen. Empty: a bell,
+"No notifications · You're all caught up".
 
-**Focus**: the timer on the left and today's reminders on the right, split
-by a hairline, so what to work on sits beside the time to work on it.
-The timer is a white ring that fills clockwise as the phase runs (green
-during breaks) with the remaining time inside. Beside it the phase ("Focus
-time", "Short break", "Long break", "· paused"), then today's total ("Today
-· 3 sessions · 1h 15m") or, before the first session, what comes ("25m of
-focus, then a break"), and one row of controls: white play/pause, reset,
-and the phases as round buttons (a cup for a break, a target for focus) that
-start that phase at once, the current one lit in its colour. The timer's
-column has a fixed width, so a longer phase name never moves the reminders.
-No glows.
+**Focus**: a 104 px ring on the left that fills clockwise as the phase
+runs (white while focusing, green on a break), the time left inside and the
+phase under it ("Focus", "Short break", "Long break"). In the middle two
+stepper pills, **Work** and **Break**, each with its minutes and − / +
+(Work 1–180, Break 1–60; each click counts, however fast). On the right a
+**Start** pill (Pause while it runs, Resume when paused) with a round reset
+beside it once the timer has started; the controls keep a fixed width, so
+nothing moves as they change. No glows.
 
 While a focus phase runs (paused included), Do Not Disturb is on, like a
 Focus mode; it goes off when the phase ends. Isle only undoes what it did:
@@ -297,10 +297,12 @@ drawn while the page is open, so copying costs nothing on screen. Copies are nev
 when a password manager marks them secret, from ignored apps (password
 managers by default; Settings → Clipboard), or while history is off.
 
-**Reminders** (the Focus page's right half), as macOS's in dark mode: an
-orange "Reminders" with the number still open on the right and a +; under
-it the reminders as rows of a thin ring and the title over a hairline that
-runs from the text to the edge, four whole rows before it scrolls, and a
+**Reminders** (a page of its own, the island's full width), as macOS's in
+dark mode: an orange "Reminders" with the number still open on the right
+and a +; under it the reminders as rows of a thin ring and the title over a
+hairline that runs from the text to the edge (a long title wraps over as
+many lines as it needs, the ring by its first line), scrolling past what
+fits, and a
 last faint row "New Reminder" (Enter adds and stays ready, Esc stops; + puts
 the cursor there). Clicking the title renames it in place (Enter or clicking
 away saves, Esc cancels); × appears on hover. Ticking one fills its ring
@@ -356,9 +358,14 @@ computer. Right-clicking an alert puts it away without opening it.
 | Isle's service stopped | warning | Isle's service isn't running | Restart | 8 s |
 | Newer Isle (once per version) | update | Isle 0.x is out | How | 8 s |
 | AI plan nearly used up | the plan's logo in a ring of its colour (Claude coral, ChatGPT green; red when nearly gone) | Claude / Weekly limit · resets Sat 09:30 | 86% | 8 s |
+| Event about to start (Settings: 1–60 min before, 5 by default) | video camera when it has a meeting link, else calendar | Weekly sync in 5 min / 17:30 – 18:00 · Google Meet | Join (blue), with a Meet, Zoom, Teams or Webex link | sticky |
+| Claude Code needs the user (off by default) | Claude's logo | Claude needs your OK / project · Allow Bash? (or "is waiting for you") | Show (its window) | sticky |
+| Claude Code or Codex is done (off by default) | its logo | Codex is done / project · the gist of its last message | Show | 8 s |
+| An AI's alerts could not be turned on | its logo | Couldn't turn on Codex alerts / why | – | 8 s |
 
 Badges are grey unless the colour says something (green charging, red low
-battery or failure, the plan's own colour); nothing amber. Buttons on alerts,
+battery or failure, the plan's own colour, blue for an event); nothing amber.
+Join is the one blue button, as macOS marks the action to take. Buttons on alerts,
 notifications and the assistant are translucent grey pills with white text,
 lighter under the pointer, as macOS's notification buttons.
 
@@ -367,6 +374,26 @@ GNOME's own volume pop-up is used. Charging, network, Bluetooth and Caps
 Lock alerts each have their own switch, and wait out Do Not Disturb, except
 a low battery. On a display other than the island's, GNOME's own volume
 pop-up shows there.
+
+**Events.** The reminder before an event comes from the same calendars as
+the Calendar page (GNOME Shell's, which reads Evolution Data Server), opened
+or not: Isle asks for this month and tomorrow, and plans one alarm for the
+next event with a time (all-day ones never alert). Its meeting link is read
+from the event itself, through Evolution Data Server, on this computer:
+Google's conference data first, then the URL, location and description. An
+alarm the computer slept through is dropped once the event has started.
+
+**AI agents.** Settings → AI Usage lists Claude Code and Codex only when
+installed. Turning one on adds one entry to its own settings: for Claude
+Code, `Notification` and `Stop` hooks in `~/.claude/settings.json` (or
+`$CLAUDE_CONFIG_DIR`, as isled's service sees it); for Codex, `notify` in
+`~/.codex/config.toml`, refused (the switch goes back off, saying why) when
+Codex already notifies another program. Each runs `isled --agent-hook`,
+which tells the island and exits at once, whatever happens. The user's own
+hooks, keys, comments and order are kept; turning the switch off, or
+uninstalling, takes out Isle's entry only. The alert names the project (the
+folder it works in); nothing shows while a window titled after that project
+is in front, or during Do Not Disturb.
 
 ### Voice assistant
 

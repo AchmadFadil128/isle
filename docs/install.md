@@ -110,7 +110,9 @@ isle-uninstall
 
 This removes the extension, its programs, its service and its font, the
 voice assistant's speech recognition and its models, Isle's caches, and a
-battery charge limit Isle set (asking for your password). Your tasks,
+battery charge limit Isle set (asking for your password), and takes Isle's
+hooks out of Claude Code's and Codex's settings if you turned on their
+alerts. Your tasks,
 calendar events, clipboard history and timer settings stay in
 `~/.local/share/isle`; delete it too to remove everything.
 
@@ -135,8 +137,8 @@ system-wide packages, installed for every user of the computer with the
 system's package manager (so they update and uninstall with it):
 
 ```sh
-sudo apt install ./isle_0.8.1_amd64.deb         # Ubuntu 24.04 and newer, Debian 13
-sudo dnf install ./isle-0.8.1-1.x86_64.rpm      # Fedora 40 and newer
+sudo apt install ./isle_0.9.0_amd64.deb         # Ubuntu 24.04 and newer, Debian 13
+sudo dnf install ./isle-0.9.0-1.x86_64.rpm      # Fedora 40 and newer
 ```
 
 They put the programs in `/usr/bin`, the extension in
@@ -175,7 +177,7 @@ Release files are built by GitHub Actions from the tagged source, with a
 build provenance attestation. With the [GitHub CLI](https://cli.github.com):
 
 ```sh
-gh attestation verify isle-0.8.1-x86_64-linux.tar.gz --repo zickrian/isle
+gh attestation verify isle-0.9.0-x86_64-linux.tar.gz --repo zickrian/isle
 ```
 
 `get.sh` checks each download against its `.sha256` already.
@@ -192,6 +194,10 @@ Everything goes in your home folder:
 | `~/.local/share/fonts/isle` | Inter, the island's typeface |
 | `~/.local/share/isle` | Your data, and the speech models `isle-setup-voice` downloads (`models`) |
 | `~/.local/share/doc/isle` | This README |
+
+Turning on the AI agent alerts in Settings (off by default) adds Isle's
+hook to Claude Code's `~/.claude/settings.json` or Codex's
+`~/.codex/config.toml`; turning them off or uninstalling takes it out.
 
 On a first install only, it sets Isle's look (a slim glass top bar with the
 island in it); updates leave it as you have it. It never changes other

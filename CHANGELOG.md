@@ -6,6 +6,54 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-23
+
+### Added
+
+- Two things at once in the closed island: with music playing and the
+  focus timer running, the cover stays on the left and the timer's ring and
+  time left take the right; on a call, the song's bars or the timer do. The
+  island widens only as much as they need, and the clock stays centred.
+- A reminder before each event with a time in your desktop calendars
+  (Google and others through Online Accounts), 5 minutes ahead by default.
+  When the event has a Google Meet, Zoom, Teams or Webex link, **Join**
+  opens it. Turned on or off, and how long before, under Alerts in Settings.
+- Alerts from AI agents: when Claude Code needs your OK, waits for you or
+  is done, and when Codex is done, with the project and what it asks for or
+  did. **Show** brings its terminal or editor to the front, and nothing
+  shows while that window is already in front. Off by default; Settings →
+  AI Usage has a switch for each one installed on the computer, and none
+  when there is none. Turning one on adds Isle's hook to that AI's own
+  settings, and turning it off (or uninstalling Isle) takes it out again,
+  leaving yours as they were.
+- Reminders have their own tab, as wide as the island, and a long reminder
+  wraps over as many lines as it needs.
+- An alert waits while the pointer rests on it; on a touchpad, swipe up to
+  put it away or down to open it.
+
+### Changed
+
+- The Focus page is a ring with the time left, the work and break lengths
+  to change with − and +, and a Start button.
+- Notifications are a plain list, newest first, one line each, with Clear;
+  their buttons and × show as the pointer passes over.
+- What the island shows grows and shrinks with its shape as it opens and
+  closes, as on an iPhone.
+- The assistant's button in the open island is a sparkle, not a microphone.
+- Only numbers that change or line up (clocks, timers, percentages) keep
+  their figures the same width; others read as ordinary text, and larger
+  labels are set a little tighter, as SF Pro does.
+- The closed island's signs sit as far in from each end, and the open
+  island's tabs and gear line up with its pages.
+
+### Fixed
+
+- Lyrics of songs over an hour long (mixes, podcasts) are no longer asked
+  of LRCLIB again and again: it refuses them.
+- Clicking a reminder's or an event's × twice no longer asks isled to
+  delete it twice.
+- A clipboard card shows its text over all the lines it has room for.
+
 ## [0.8.1] - 2026-10-23
 
 Lighter and smoother all round, with nothing changed in how Isle looks.
@@ -609,7 +657,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/zickrian/isle/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/zickrian/isle/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/zickrian/isle/compare/v0.7.3...v0.8.0
 [0.7.3]: https://github.com/zickrian/isle/compare/v0.7.2...v0.7.3

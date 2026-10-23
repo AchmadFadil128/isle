@@ -7,8 +7,8 @@ reporting.
 
 | Version | Supported |
 |---|---|
-| 0.7.x | Yes |
-| 0.5.x and older | No |
+| 0.9.x | Yes |
+| 0.8.x and older | No |
 
 ## Reporting a vulnerability
 
@@ -30,7 +30,7 @@ the tagged source and carry a build provenance attestation. With the
 [GitHub CLI](https://cli.github.com):
 
 ```sh
-gh attestation verify isle-0.8.1-x86_64-linux.tar.gz --repo zickrian/isle
+gh attestation verify isle-0.9.0-x86_64-linux.tar.gz --repo zickrian/isle
 ```
 
 `get.sh` also checks each download against the release's `.sha256`.
@@ -64,6 +64,17 @@ network at all.
   the recording is never stored or sent.
 - The call preview: GNOME Shell draws it from the call's window as it is on
   screen; nothing is recorded, and it hides while you share your screen.
+- Meeting links: read from the event in your desktop calendars (Evolution
+  Data Server) on this computer, and opened in your browser only when you
+  click Join.
+- AI agent alerts, only once you turn them on: Isle adds its hook to Claude
+  Code's `~/.claude/settings.json` or Codex's `~/.codex/config.toml`,
+  keeping a copy of the file as it was (`settings.json.isle-backup`) the
+  first time. The hook runs `isled --agent-hook`, which passes the event
+  (the project's folder name and the AI's short message) to the island over
+  the session bus and exits; nothing is sent anywhere. Turning the switch
+  off, or uninstalling Isle, removes Isle's entry and leaves the rest of
+  the file as it is.
 
 ## Clipboard history
 
