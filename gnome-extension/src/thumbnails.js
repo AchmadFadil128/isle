@@ -89,12 +89,11 @@ export class Thumbnails {
 
         const preview = GLib.build_filenamev([this._dir, this._previewName(uri)]);
         const modified = info.get_modification_date_time()?.to_unix() ?? 0;
-        let square = this._cached(preview, modified);
+        let square = await this._cached(preview, modified);
         if (!square) {
             try {
                 square = await this._cut(source);
-                GLib.mkdir_with_parents(this._dir, 0o700);
-                square.savev(preview, 'png', [], []);
+                await this._save(square, preview);
             } catch (e) {
                 // A picture GdkPixbuf cannot read (HEIC, RAW...) keeps its icon and colour.
                 if (e.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
@@ -108,15 +107,42 @@ export class Thumbnails {
     }
 
     /** The preview made earlier, unless the file has changed since. */
-    _cached(path, modified) {
+    async _cached(path, modified) {
+        const file = Gio.File.new_for_path(path);
         try {
-            const info = Gio.File.new_for_path(path).query_info('time::modified', Gio.FileQueryInfoFlags.NONE, null);
+            const info = await call(
+                callback => file.query_info_async('time::modified', Gio.FileQueryInfoFlags.NONE, GLib.PRIORITY_LOW, this._cancellable, callback),
+                (source, result) => source.query_info_finish(result));
             if ((info.get_modification_date_time()?.to_unix() ?? 0) < modified)
                 return null;
-            return GdkPixbuf.Pixbuf.new_from_file(path);
+            const stream = await call(
+                callback => file.read_async(GLib.PRIORITY_LOW, this._cancellable, callback),
+                (source, result) => source.read_finish(result));
+            // Decoded on a worker thread.
+            const pixbuf = await call(
+                callback => GdkPixbuf.Pixbuf.new_from_stream_async(stream, this._cancellable, callback),
+                (_source, result) => GdkPixbuf.Pixbuf.new_from_stream_finish(result));
+            stream.close_async(GLib.PRIORITY_LOW, null, null);
+            return pixbuf;
         } catch {
             return null;
         }
+    }
+
+    /** Writes `pixbuf` to `path` as a PNG, encoded on a worker thread. */
+    async _save(pixbuf, path) {
+        GLib.mkdir_with_parents(this._dir, 0o700);
+        const stream = await call(
+            callback => Gio.File.new_for_path(path).replace_async(null, false, Gio.FileCreateFlags.NONE,
+                GLib.PRIORITY_LOW, this._cancellable, callback),
+            (source, result) => source.replace_finish(result));
+        await call(
+            callback => pixbuf.save_to_streamv_async(stream, 'png', [], [], this._cancellable, callback),
+            (_source, result) => GdkPixbuf.Pixbuf.save_to_stream_finish(result));
+        // In place once closed.
+        await call(
+            callback => stream.close_async(GLib.PRIORITY_LOW, null, callback),
+            (source, result) => source.close_finish(result));
     }
 
     /** The middle square of the picture at `path`, `PIXELS` a side. */
