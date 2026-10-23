@@ -317,6 +317,12 @@ class MediaPage extends Page {
         const {nowPlaying} = this.daemon.state;
         if (!this._syncMode())
             return;
+        // A new song changes the layouts not shown too: they are laid out ahead (see `Page.markCold`).
+        const track = [nowPlaying.title, nowPlaying.artist, nowPlaying.album, nowPlaying.identity, nowPlaying.art_path].join('\u001f');
+        if (track !== this._track) {
+            this._track = track;
+            this.markCold({force: true});
+        }
 
         const [playerTitle, sideTitle] = this._titles;
         const [playerArtist, sideArtist] = this._artists;
@@ -400,6 +406,8 @@ class MediaPage extends Page {
             button.connect('clicked', () => audio.activate(output.id));
             this._outputList.add_child(button);
         }
+        if (!this._outputList.mapped)
+            this.markCold({force: true});
     }
 
     _updateTint(path) {

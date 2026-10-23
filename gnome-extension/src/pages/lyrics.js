@@ -193,6 +193,9 @@ class LyricsPane extends St.Widget {
         // (Padding would not do: St takes it off the scrolled view.)
         if (this._rows.length)
             this._column.add_child(new St.Widget({style_class: 'isle-lyrics-end'}));
+        // Built out of sight (the player shown), they are laid out ahead of their showing (see `Page.markCold`).
+        if (!this.mapped)
+            this._page.markCold({force: true});
     }
 
     _row(line) {
