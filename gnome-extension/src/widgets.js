@@ -96,10 +96,7 @@ export function label(text, styleClass, props = {}) {
 
 /** Wraps a label over lines, breaking a long word where it must, with no hyphen added ("example.co-m"). */
 export function wrapLines(label, ellipsize = Pango.EllipsizeMode.NONE) {
-    const text = label.clutter_text;
-    text.line_wrap = true;
-    text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
-    text.ellipsize = ellipsize;
+    const text = wrapText(label, ellipsize);
     // St sets the text's attributes again from the style each time it changes; ours goes on top.
     let ours = null;
     const noHyphens = () => {
@@ -112,6 +109,20 @@ export function wrapLines(label, ellipsize = Pango.EllipsizeMode.NONE) {
     };
     label.connect_after('style-changed', noHyphens);
     noHyphens();
+}
+
+/** As `wrapLines`, for a label whose text never changes: in markup, the rule outlives restyles with no hook
+ * run on each. Setting `text` again would drop it. */
+export function wrapFixedLines(label, ellipsize = Pango.EllipsizeMode.NONE) {
+    wrapText(label, ellipsize).set_markup(`<span insert_hyphens="false">${GLib.markup_escape_text(label.text, -1)}</span>`);
+}
+
+function wrapText(label, ellipsize) {
+    const text = label.clutter_text;
+    text.line_wrap = true;
+    text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+    text.ellipsize = ellipsize;
+    return text;
 }
 
 /**

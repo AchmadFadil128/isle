@@ -9,7 +9,7 @@ import St from 'gi://St';
 
 import {VERTICAL} from '../compat.js';
 import * as Playback from '../playback.js';
-import {icon, label, wrapLines} from '../widgets.js';
+import {icon, label, wrapFixedLines} from '../widgets.js';
 
 /** Where the current line sits in the view, from the top. */
 const ANCHOR = 0.36;
@@ -205,7 +205,7 @@ class LyricsPane extends St.Widget {
                 text: words || '♪',
                 style_class: this._synced ? 'isle-lyric-line' : 'isle-lyric-line plain',
             });
-            wrapLines(row);
+            wrapFixedLines(row);
         }
         if (this._synced) {
             row.reactive = true;
