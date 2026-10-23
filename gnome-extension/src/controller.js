@@ -115,6 +115,8 @@ export class Controller {
         this._extension = extension;
         this._settings = extension.getSettings();
         this._daemon = new Daemon();
+        // Heard once everything listening is built (see `_connectAll`).
+        this._daemon.hold();
         this._timeouts = new Map();
         this._presentation = 'compact';
         /** Whether `_warmUp` shows the open island's view out of sight. */
@@ -150,10 +152,12 @@ export class Controller {
 
         // Built a part at a time, frames drawn in between: all at once, it held the screen still for a tenth
         // of a second at every login and unlock. Nothing outside calls in before the last part.
+        this._pages = [];
         this._buildSteps = [
             () => this._buildServices(),
             () => this._buildViews(),
-            () => (this._pages = this._buildPages()),
+            // A page a step: the music and shelf pages alone take a frame's time.
+            ...this._pageMakers().map(make => () => this._pages.push(make())),
             () => (this._expanded = this._buildExpanded(this._pages)),
             () => this._buildIsland(),
             () => this._connectAll(),
@@ -239,18 +243,20 @@ export class Controller {
         this._syncUsage();
         this._render();
         this._later('warm', WARM_START_MS, () => this._warmUp(true));
+        this._daemon.release();
     }
 
-    _buildPages() {
+    /** Makes each page, in tab order. */
+    _pageMakers() {
         const size = {height: PAGE_HEIGHT};
         return [
-            new CallPage(this._daemon, this._call, this._privacy, this._settings, size),
-            new MediaPage(this._daemon, this._audio, size),
-            new NotificationsPage(this._daemon, this._notifications, size),
-            new FocusPage(this._daemon, size),
-            new ShelfPage(this._daemon, this._clipboard, this._settings, size),
-            new CalendarPage(this._daemon, size),
-            new UsagePage(this._daemon, size),
+            () => new CallPage(this._daemon, this._call, this._privacy, this._settings, size),
+            () => new MediaPage(this._daemon, this._audio, size),
+            () => new NotificationsPage(this._daemon, this._notifications, size),
+            () => new FocusPage(this._daemon, size),
+            () => new ShelfPage(this._daemon, this._clipboard, this._settings, size),
+            () => new CalendarPage(this._daemon, size),
+            () => new UsagePage(this._daemon, size),
         ];
     }
 
@@ -1486,7 +1492,7 @@ export class Controller {
             for (const view of [this._compact, ...this._peeks ?? [], this._voice, this._expanded])
                 view?.destroy();
             if (!this._expanded)
-                this._pages?.forEach(page => page.destroy());
+                this._pages.forEach(page => page.destroy());
         }
         this._island?.destroy();
         for (const service of [this._topBar, this._writer, this._clipboard, this._focusMode, this._call,

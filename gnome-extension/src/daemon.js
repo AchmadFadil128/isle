@@ -222,6 +222,28 @@ export class Daemon extends Signals.EventEmitter {
         }, this._cancellable, Gio.DBusProxyFlags.DO_NOT_AUTO_START_AT_CONSTRUCTION);
     }
 
+    /** Keeps what it would tell (changes, signals) until `release`: Isle, being built a part at a time, has
+     * listeners still to connect, and each must hear the first state as it would have. */
+    hold() {
+        this._held ??= [];
+    }
+
+    release() {
+        const held = this._held ?? [];
+        this._held = null;
+        for (const args of held)
+            this.emit(...args);
+    }
+
+    emit(...args) {
+        if (!this._held)
+            return super.emit(...args);
+        // A key changed twice meanwhile is told once: its state is the latest anyway.
+        if (args[0] !== 'changed' || !this._held.some(([name, key]) => name === 'changed' && key === args[1]))
+            this._held.push(args);
+        return undefined;
+    }
+
     _update(key, json) {
         // isled may send a value again unchanged; nobody needs to hear it twice.
         if (key in this._raw && this._raw[key] === json)
