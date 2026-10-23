@@ -39,8 +39,6 @@ const TAB_OPACITY = {open: 255, hover: 230, idle: 140};
 /** The music bars' opacity while the song is paused, as on the closed island. */
 const PAUSED_BARS_OPACITY = 110;
 const SLIDE_DISTANCE = 48;
-/** The battery's inside, full, in px (see `.isle-battery-body`). */
-const BATTERY_FILL_WIDTH = 17;
 const SLIDE_DURATION = 260;
 /** Touchpad travel (in wheel clicks) that flips a page; one flip a swipe. */
 const SWIPE_STEP = 1.5;
@@ -113,8 +111,6 @@ export const ExpandedView = GObject.registerClass({
         this._daemonChanged = daemon.connect('changed', (_daemon, key) => {
             if (key === 'nowPlaying' || key === 'pomodoro')
                 this._updateHeader();
-            else if (key === 'system')
-                this._syncBattery();
         });
         this._privacyChanged = privacy.connect('changed', () => this._updateHeader());
         this._callChanged = call.connect('changed', () => this._updateHeader());
@@ -155,43 +151,16 @@ export const ExpandedView = GObject.registerClass({
 
         const clock = new St.BoxLayout({y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-header-clock'});
         this._headerRing = new Ring({size: 15, lineWidth: 2.5});
+        this._date = label('', 'isle-header-date');
         this._time = label('', 'isle-header-time');
         clock.add_child(this._headerRing);
-        clock.add_child(this._buildBattery());
+        clock.add_child(this._date);
         clock.add_child(this._time);
         status.add_child(clock);
         status.add_child(iconButton('isle-settings', 'isle-button-flat isle-header-settings',
             () => this.emit('settings-requested'), {size: 14, accessibleName: 'Settings'}));
         header.add_child(status);
         return header;
-    }
-
-    /** "98%" and a battery that empties as macOS draws it; none on a computer without one. */
-    _buildBattery() {
-        const box = new St.BoxLayout({style_class: 'isle-header-battery', visible: false, y_align: Clutter.ActorAlign.CENTER});
-        this._batteryPercent = label('', 'isle-header-battery-percent', {y_align: Clutter.ActorAlign.CENTER});
-        const glyph = new St.BoxLayout({y_align: Clutter.ActorAlign.CENTER});
-        const body = new St.Widget({style_class: 'isle-battery-body', layout_manager: new Clutter.BinLayout()});
-        this._batteryFill = new St.Widget({style_class: 'isle-battery-fill', x_align: Clutter.ActorAlign.START, y_expand: true});
-        body.add_child(this._batteryFill);
-        glyph.add_child(body);
-        glyph.add_child(new St.Widget({style_class: 'isle-battery-nub', y_align: Clutter.ActorAlign.CENTER}));
-        box.add_child(this._batteryPercent);
-        box.add_child(glyph);
-        this._battery = box;
-        return box;
-    }
-
-    _syncBattery() {
-        const battery = this._daemon.state.system?.battery;
-        this._battery.visible = Boolean(battery);
-        if (!battery)
-            return;
-        const percent = Math.round(battery.percent);
-        this._batteryPercent.text = `${percent}%`;
-        this._batteryFill.width = Math.max(1, Math.round(BATTERY_FILL_WIDTH * percent / 100));
-        const state = battery.plugged ? 'charging' : percent <= 20 ? 'low' : '';
-        this._batteryFill.style_class = `isle-battery-fill ${state}`.trim();
     }
 
     /** Whether the voice assistant is on, to show its mic button. */
@@ -567,8 +536,8 @@ export const ExpandedView = GObject.registerClass({
     /** The header's date and time, kept current by GNOME's clock while the island is open. */
     _tickClock() {
         const now = GLib.DateTime.new_now_local();
+        this._date.text = Format.longDate(now);
         this._time.text = Format.clockTime(now);
-        this._syncBattery();
         this._updateHeader();
         this._unwatchClock ??= watchClock(() => this._tickClock());
     }

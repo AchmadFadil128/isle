@@ -298,14 +298,7 @@
   border-radius: 3px;
   background-color: #ff453a;
 }
-/* The battery in place of the date: "98%" and a battery that empties, as on macOS. */
-.isle-header-battery { spacing: 5px; }
-.isle-header-battery-percent { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
-.isle-battery-body { width: 17px; height: 7px; padding: 1.5px; border: 1.2px solid rgba(255, 255, 255, 0.5); border-radius: 3.5px; }
-.isle-battery-fill { border-radius: 1.5px; background-color: #ffffff; }
-.isle-battery-fill.low { background-color: #ff453a; }
-.isle-battery-fill.charging { background-color: #30d158; }
-.isle-battery-nub { width: 1.5px; height: 4px; margin-left: 1px; border-radius: 0 1px 1px 0; background-color: rgba(255, 255, 255, 0.5); }
+.isle-header-date { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
 .isle-header-time { font-size: 13px; font-weight: 600; }
 .isle-header-settings { padding: 4px; color: rgba(255, 255, 255, 0.6); }
 .isle-header-settings:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }

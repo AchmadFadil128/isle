@@ -33,6 +33,11 @@ export function shortcutLabel(accelerator) {
     return [...modifiers, key.length === 1 ? key.toUpperCase() : key[0].toUpperCase() + key.slice(1)].join('+');
 }
 
+/** "Tue 20 Oct", like a Mac's menu bar. */
+export function longDate(dateTime = GLib.DateTime.new_now_local()) {
+    return dateTime.format('%a %-d %b');
+}
+
 /** Formats a duration as "3:07" or "1:02:07". */
 export function duration(ms) {
     const total = Math.max(0, Math.round(ms / 1000));
