@@ -8,6 +8,7 @@ mod calendar;
 mod caller;
 mod clipboard;
 mod clock;
+mod http;
 mod media;
 mod pomodoro;
 mod reminders;

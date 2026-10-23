@@ -37,12 +37,7 @@ fn exists(uri: &str) -> bool {
         "https://open.spotify.com/{}",
         uri["spotify:".len()..].replacen(':', "/", 1)
     );
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(CHECK_TIMEOUT))
-        .build()
-        .into();
-    match agent
-        .get("https://open.spotify.com/oembed")
+    match crate::http::get("https://open.spotify.com/oembed", CHECK_TIMEOUT)
         .query("url", &link)
         .call()
     {

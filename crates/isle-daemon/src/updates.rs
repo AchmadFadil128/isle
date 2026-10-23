@@ -119,12 +119,7 @@ async fn publish(iface: &InterfaceRef<UpdatesService>, latest: String) {
 
 /// The latest release's version, without the "v"; `None` if GitHub could not say.
 fn latest_release() -> Option<String> {
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(TIMEOUT))
-        .build()
-        .into();
-    let release: serde_json::Value = agent
-        .get(LATEST)
+    let release: serde_json::Value = crate::http::get(LATEST, TIMEOUT)
         .header("User-Agent", concat!("Isle/", env!("CARGO_PKG_VERSION")))
         .header("Accept", "application/vnd.github+json")
         .call()

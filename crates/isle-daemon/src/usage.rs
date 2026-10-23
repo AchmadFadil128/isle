@@ -404,26 +404,22 @@ fn read_claude(home: &Path) -> Result<Provider, ClaudeError> {
     {
         return Err(ClaudeError::NeedsRefresh);
     }
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(CLAUDE_TIMEOUT))
-        .build()
-        .into();
-    let response: Value = agent
-        .get("https://api.anthropic.com/api/oauth/usage")
-        .header("Authorization", &format!("Bearer {token}"))
-        .header("anthropic-beta", "oauth-2025-04-20")
-        // Said plainly who asks, never another app.
-        .header("User-Agent", concat!("Isle/", env!("CARGO_PKG_VERSION")))
-        .call()
-        .and_then(|mut reply| reply.body_mut().read_json())
-        .map_err(|err| {
-            warn!("could not read Claude's usage: {err}");
-            match err {
-                ureq::Error::StatusCode(401 | 403) => ClaudeError::SignIn,
-                ureq::Error::StatusCode(_) | ureq::Error::Json(_) => ClaudeError::Busy,
-                _ => ClaudeError::Offline,
-            }
-        })?;
+    let response: Value =
+        crate::http::get("https://api.anthropic.com/api/oauth/usage", CLAUDE_TIMEOUT)
+            .header("Authorization", &format!("Bearer {token}"))
+            .header("anthropic-beta", "oauth-2025-04-20")
+            // Said plainly who asks, never another app.
+            .header("User-Agent", concat!("Isle/", env!("CARGO_PKG_VERSION")))
+            .call()
+            .and_then(|mut reply| reply.body_mut().read_json())
+            .map_err(|err| {
+                warn!("could not read Claude's usage: {err}");
+                match err {
+                    ureq::Error::StatusCode(401 | 403) => ClaudeError::SignIn,
+                    ureq::Error::StatusCode(_) | ureq::Error::Json(_) => ClaudeError::Busy,
+                    _ => ClaudeError::Offline,
+                }
+            })?;
     Ok(Provider {
         windows: claude_windows(&response),
         updated_ms: now_ms(),

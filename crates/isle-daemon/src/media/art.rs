@@ -30,12 +30,7 @@ pub fn is_remote(art_url: &str) -> bool {
 pub fn download(art_url: &str) -> anyhow::Result<String> {
     let path = cached_path(art_url);
     if !path.exists() {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(DOWNLOAD_TIMEOUT))
-            .build()
-            .into();
-        let bytes = agent
-            .get(art_url)
+        let bytes = crate::http::get(art_url, DOWNLOAD_TIMEOUT)
             .call()?
             .body_mut()
             .with_config()
