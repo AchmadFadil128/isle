@@ -721,6 +721,40 @@ const REST = {scale_x: 1, scale_y: 1, translation_x: 0, translation_y: 0, opacit
 /** Motions waiting for their actor to be on screen (GNOME skips eases on actors that are not). */
 const pendingMotions = new WeakMap();
 
+/**
+ * Slides `actor` along `axis` ('x' or 'y') from `from` to `to` px over `duration` ms (after `delay`), easing
+ * out, in whole pixels: a picture or text between two pixels is resampled and seems to shiver as it moves.
+ * `onDone` runs once it gets there; a later slide on the same axis takes over.
+ */
+export function slideBy(actor, axis, from, to, {delay = 0, duration = 0, onDone = null} = {}) {
+    const key = `_isleSlide${axis}`;
+    const property = `translation_${axis}`;
+    actor[key]?.stop();
+    actor[key] = null;
+    actor[property] = from;
+    if (!duration || from === to || !actor.mapped || !St.Settings.get().enable_animations) {
+        actor[property] = to;
+        onDone?.();
+        return;
+    }
+    if (!actor._isleSlideWatched) {
+        actor._isleSlideWatched = true;
+        actor.connect('destroy', () => ['x', 'y'].forEach(each => actor[`_isleSlide${each}`]?.stop()));
+    }
+    const timeline = new Clutter.Timeline({actor, duration, delay, progress_mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+    timeline.connect('new-frame', () => (actor[property] = Math.round(from + (to - from) * timeline.get_progress())));
+    timeline.connect('completed', () => {
+        actor[property] = to;
+        onDone?.();
+    });
+    timeline.connect('stopped', () => {
+        if (actor[key] === timeline)
+            actor[key] = null;
+    });
+    actor[key] = timeline;
+    timeline.start();
+}
+
 /** Plays `motion` (see `MOTIONS`) on `actor` once, `delay` ms after it is on screen; none with animations off. */
 export function playMotion(actor, motion, {delay = 0} = {}) {
     const steps = MOTIONS[motion];

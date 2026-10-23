@@ -14,7 +14,7 @@ import St from 'gi://St';
 import {BotIcon} from './botIcon.js';
 import {VERTICAL} from './compat.js';
 import * as Format from './format.js';
-import {icon, iconButton, playMotion, wrapLines} from './widgets.js';
+import {icon, iconButton, playMotion, slideBy, wrapLines} from './widgets.js';
 
 /** The little face beside its answers, in pixels. */
 const FACE_SIZE = 18;
@@ -523,9 +523,10 @@ export const ChatView = GObject.registerClass({
             const row = this._row(item, last?.role !== 'assistant');
             this._list.add_child(row);
             if (index >= known && St.Settings.get().enable_animations) {
-                row.set({opacity: 0, translation_y: 10});
-                row.ease({opacity: 255, translation_y: 0, duration: 260, delay: 60 * (index - known),
-                    mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+                const delay = 60 * (index - known);
+                row.opacity = 0;
+                slideBy(row, 'y', 10, 0, {delay, duration: 260});
+                row.ease({opacity: 255, duration: 260, delay, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
             }
             last = item;
         });

@@ -13,7 +13,7 @@ import St from 'gi://St';
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import * as Palette from '../palette.js';
-import {icon, label} from '../widgets.js';
+import {icon, label, slideBy} from '../widgets.js';
 import {Page} from './page.js';
 
 /** A limit warns (an alert) and then turns red at these shares; Settings may move them (see `setMarks`). */
@@ -194,9 +194,9 @@ class UsagePage extends Page {
         if (!content)
             return;
         const direction = index > from ? 1 : -1;
-        content.translation_y = direction * 24;
         content.opacity = 0;
-        content.ease({translation_y: 0, opacity: 255, duration: SLIDE_MS, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+        slideBy(content, 'y', direction * 24, 0, {duration: SLIDE_MS});
+        content.ease({opacity: 255, duration: SLIDE_MS, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
         this._fill();
     }
 

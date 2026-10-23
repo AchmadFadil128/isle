@@ -13,7 +13,7 @@ import {VERTICAL} from './compat.js';
 import * as Format from './format.js';
 import * as Playback from './playback.js';
 import {watchClock} from './wallClock.js';
-import {Bars, PrivacyDots, RecordingDot, Ring, fence, icon, iconButton, label} from './widgets.js';
+import {Bars, PrivacyDots, RecordingDot, Ring, fence, icon, iconButton, label, slideBy} from './widgets.js';
 
 const EXPANDED_WIDTH = 600;
 /** The least room between the tabs and the status on the right. */
@@ -401,22 +401,22 @@ export const ExpandedView = GObject.registerClass({
         next.show();
 
         if (animate && St.Settings.get().enable_animations) {
+            // Whole pixels (see `slideBy`), the fades eased as before.
+            slideBy(previous, 'x', previous.translation_x, -direction * SLIDE_DISTANCE, {duration: SLIDE_DURATION});
             previous.ease({
-                translation_x: -direction * SLIDE_DISTANCE,
                 opacity: 0,
                 duration: SLIDE_DURATION,
                 mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
                 onStopped: () => {
                     if (previous !== this.page)
                         previous.hide();
-                    previous.translation_x = 0;
+                    slideBy(previous, 'x', 0, 0);
                     previous.opacity = 255;
                 },
             });
-            next.translation_x = direction * SLIDE_DISTANCE;
             next.opacity = 0;
+            slideBy(next, 'x', direction * SLIDE_DISTANCE, 0, {duration: SLIDE_DURATION});
             next.ease({
-                translation_x: 0,
                 opacity: 255,
                 duration: SLIDE_DURATION,
                 mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
@@ -424,7 +424,8 @@ export const ExpandedView = GObject.registerClass({
             });
         } else {
             previous.hide();
-            next.translation_x = 0;
+            slideBy(previous, 'x', 0, 0);
+            slideBy(next, 'x', 0, 0);
             next.opacity = 255;
         }
 

@@ -6,11 +6,12 @@
 import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
+import Meta from 'gi://Meta';
 import St from 'gi://St';
 
 import {paintRim} from './glow.js';
 import {GENTLE, Spring, SpringDriver} from './spring.js';
-import {fence} from './widgets.js';
+import {fence, slideBy} from './widgets.js';
 
 
 /** Sideways speed (px/s) `nudge` gives: a ~15 px stretch that springs back, as iOS does at a volume limit. */
@@ -37,35 +38,6 @@ const FADE_IN_DELAY = 120;
 /** How far (px) the views slide as the shape grows or shrinks: they travel with it, as on the iPhone. Whole
  * pixels only, never a scale: a scaled picture or text is resampled every frame and seems to shiver. */
 const VIEW_SHIFT = 8;
-/**
- * Moves `view` from `from` to `to` px down over `duration` ms (after `delay`), easing out, in whole pixels:
- * a picture between two pixels is blurred and seems to shiver as it moves.
- */
-function slide(view, from, to, delay = 0, duration = 0) {
-    view._isleSlide?.stop();
-    view._isleSlide = null;
-    view.translation_y = from;
-    if (!duration || from === to || !view.mapped) {
-        view.translation_y = to;
-        return;
-    }
-    if (!view._isleSlideWatched) {
-        view._isleSlideWatched = true;
-        view.connect('destroy', () => view._isleSlide?.stop());
-    }
-    const timeline = new Clutter.Timeline({actor: view, duration, delay,
-        progress_mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
-    timeline.connect('new-frame', () =>
-        (view.translation_y = Math.round(from + (to - from) * timeline.get_progress())));
-    timeline.connect('stopped', () => {
-        if (view._isleSlide === timeline)
-            view._isleSlide = null;
-    });
-    timeline.connect('completed', () => (view.translation_y = to));
-    view._isleSlide = timeline;
-    timeline.start();
-}
-
 /** Below this shoulder size (px) the corners may climb into the top bar, so the island rounds smoothly. */
 const SHOULDER_FADE = 4;
 
@@ -183,8 +155,7 @@ export const Island = GObject.registerClass({
         this.notify('tint-strength');
         const siri = this._tintStyle === 'siri';
         this._glow.visible = siri && Boolean(this._tint) && value > 0;
-        if (this._glow.visible)
-            this._glow.queue_repaint();
+        this._queueGlow();
         if (!siri)
             this._shape.queue_repaint();
     }
@@ -211,8 +182,7 @@ export const Island = GObject.registerClass({
     setTintMotion(time, level) {
         this._motion.time = time;
         this._motion.level = level;
-        if (this._glow.visible)
-            this._glow.queue_repaint();
+        this._queueGlow();
     }
 
     /** Where `actor` in the shown view (the view itself by default) will be once the island settles: {x, y, width, height}. */
@@ -275,11 +245,11 @@ export const Island = GObject.registerClass({
             return false;
         if (shown) {
             view.opacity = 0;
-            slide(view, OUT_OF_REACH, OUT_OF_REACH);
+            slideBy(view, 'y', OUT_OF_REACH, OUT_OF_REACH);
             view.show();
         } else {
             view.hide();
-            slide(view, 0, 0);
+            slideBy(view, 'y', 0, 0);
         }
         return true;
     }
@@ -345,7 +315,7 @@ export const Island = GObject.registerClass({
         // Down as the island takes room, up as it gives it; never sideways, it hangs from the top.
         if (previous) {
             previous.remove_all_transitions();
-            slide(previous, previous.translation_y, growing ? VIEW_SHIFT : -VIEW_SHIFT, 0, FADE_OUT);
+            slideBy(previous, 'y', previous.translation_y, growing ? VIEW_SHIFT : -VIEW_SHIFT, {duration: FADE_OUT});
             previous.ease({
                 opacity: 0,
                 duration: FADE_OUT,
@@ -354,7 +324,7 @@ export const Island = GObject.registerClass({
                     if (!finished)
                         return;
                     previous.hide();
-                    slide(previous, 0, 0);
+                    slideBy(previous, 'y', 0, 0);
                 },
             });
         }
@@ -371,7 +341,7 @@ export const Island = GObject.registerClass({
         const delay = previous && !returning ? FADE_IN_DELAY : 0;
         view.ease({opacity: 255, delay, duration: FADE_IN, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
         // Settles as the shape does.
-        slide(view, from, 0, delay, FADE_IN + 80);
+        slideBy(view, 'y', from, 0, {delay, duration: FADE_IN + 80});
     }
 
     _sync() {
@@ -401,8 +371,7 @@ export const Island = GObject.registerClass({
             this._placeView(view);
         if (this._shapeChanged()) {
             this._shape.queue_repaint();
-            if (this._glow.visible)
-                this._glow.queue_repaint();
+            this._queueGlow();
         }
         this.emit('geometry-changed');
     }
@@ -444,6 +413,19 @@ export const Island = GObject.registerClass({
     }
 
     // The 'siri' light, inside the shape, on the scaled-down glow layer.
+    // A drawing area draws at once when asked, and the glow is asked by the shape and by its motion in the
+    // same frame: it is drawn once, just before the frame. Soft light a frame behind the shape is not seen.
+    _queueGlow() {
+        if (!this._glow.visible || this._glowLater)
+            return;
+        this._glowLater = global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
+            this._glowLater = 0;
+            if (this._glow.visible)
+                this._glow.queue_repaint();
+            return false;
+        });
+    }
+
     _repaintGlow(area) {
         const cr = area.get_context();
         const height = Math.max(0, this._height.value);
@@ -514,5 +496,8 @@ export const Island = GObject.registerClass({
     _onDestroy() {
         this._driver?.destroy();
         this._driver = null;
+        if (this._glowLater)
+            global.compositor.get_laters().remove(this._glowLater);
+        this._glowLater = 0;
     }
 });
