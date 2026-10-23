@@ -81,3 +81,14 @@ test('only the command shown runs', () => {
     assert.ok(!stoppable(['systemctl', 'stop', 'gdm']));
     assert.ok(!stoppable(['systemctl', 'stop', 'isle-run-1-0', 'gdm']));
 });
+
+test('a command runs only as shown whole', () => {
+    const user = command => ({command, spawn: spawn(command, {user: true})});
+    assert.ok(runnable(user('npm i -g @openai/codex'), USER));
+    // On more lines, with a hidden character, or claiming root it does not run as.
+    assert.ok(!runnable(user('echo ok\nrm -rf ~'), USER));
+    assert.ok(!runnable(user('ls ‮fdp.exe'), USER));
+    assert.ok(!runnable({command: 'sudo ls', spawn: spawn('sudo ls', {user: true})}, USER));
+    assert.ok(!runnable({command: 'apt install x', spawn: spawn('apt install x')}, USER));
+    assert.ok(!runnable(user('a'.repeat(401)), USER));
+});

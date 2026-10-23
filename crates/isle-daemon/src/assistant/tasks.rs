@@ -175,6 +175,20 @@ fn logs() -> PathBuf {
     crate::store::cache_dir().join("runs")
 }
 
+/// The longest command a card offers; it shows whole on a few lines.
+pub const MAX_COMMAND: usize = 400;
+
+/// Whether `text` shows as it is, whole, on one line of at most `max` characters: no line breaks,
+/// control characters, or characters that hide or reorder text (bidi controls, zero-width ones).
+pub fn shows_whole(text: &str, max: usize) -> bool {
+    let hidden = |c: char| {
+        c.is_control()
+            || matches!(c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}'
+                | '\u{061C}' | '\u{FEFF}' | '\u{00AD}')
+    };
+    text.chars().count() <= max && !text.chars().any(hidden)
+}
+
 /// A new task for `command`, its log made ready (private to the user, who alone writes to it).
 pub fn prepare(command: &str, why: &str, scope: Scope) -> std::io::Result<Task> {
     // The time, and a count: two in the same millisecond still differ.
@@ -317,6 +331,17 @@ pub async fn settled(task: &Task) -> Option<(Ended, String)> {
 }
 
 /// Deletes a task's log once it has been told.
+/// Whether `task` (as read back from tasks.json) is one Isle made: its log in Isle's folder, its id plain.
+pub fn is_own(task: &Task) -> bool {
+    task.log.parent() == Some(logs().as_path())
+        && task.log.file_name() == Some(std::ffi::OsStr::new(&format!("run-{}.log", task.id)))
+        && !task.id.is_empty()
+        && task
+            .id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
 pub fn clean(task: &Task) {
     std::fs::remove_file(&task.log).ok();
 }
@@ -486,6 +511,15 @@ pub fn card(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_commands_shown_whole_are_offered() {
+        assert!(shows_whole("sudo apt install -y vlc", MAX_COMMAND));
+        assert!(!shows_whole("echo ok\nrm -rf ~", MAX_COMMAND));
+        assert!(!shows_whole("ls \u{202E}fdp.exe", MAX_COMMAND));
+        assert!(!shows_whole("ls\u{200B}", MAX_COMMAND));
+        assert!(!shows_whole(&"a".repeat(MAX_COMMAND + 1), MAX_COMMAND));
+    }
 
     #[test]
     fn sees_what_a_command_may_do() {

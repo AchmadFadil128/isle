@@ -18,6 +18,8 @@ use super::{Event, Request};
 const TIMEOUT: Duration = Duration::from_secs(1);
 /// A permission waits this long for the island at most (the AIs give the hook ten minutes).
 const ANSWER: Duration = Duration::from_secs(9 * 60 + 40);
+/// The longest command or path the island asks about (it shows it whole, over a few lines).
+const MAX_SHOWN: usize = 160;
 /// Claude Code's payload is small; more than this is not read.
 const MAX_INPUT: u64 = 1024 * 1024;
 /// How often a waiting permission looks whether it was answered in the AI's own terminal instead.
@@ -86,6 +88,11 @@ fn request(ai: &str, payload: &Value) -> Option<Request> {
                 input.to_string()
             }
         });
+    // Only what the island can show whole: more lines, hidden characters or more than fits, and the AI
+    // asks in its terminal, where all of it shows.
+    if !crate::assistant::shows_whole(&line, MAX_SHOWN) {
+        return None;
+    }
     let cwd = if text("cwd").is_empty() {
         std::env::current_dir()
             .map(|dir| dir.to_string_lossy().into_owned())
@@ -99,9 +106,7 @@ fn request(ai: &str, payload: &Value) -> Option<Request> {
         session: text("session_id").into(),
         tool: text("tool_name").into(),
         input: line,
-        always: payload["permission_suggestions"]
-            .as_array()
-            .is_some_and(|s| !s.is_empty()),
+        always: !rule_suggestions(payload).is_empty(),
         ..Request::default()
     })
 }
@@ -209,13 +214,25 @@ fn has_result(lines: &str, id: &str) -> bool {
         .any(|line| line.contains(id) && line.contains("tool_result"))
 }
 
+/// The rules Claude suggests keeping for next time (this command, this folder); never a change of its
+/// permission mode.
+fn rule_suggestions(payload: &Value) -> Vec<Value> {
+    payload["permission_suggestions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|rule| matches!(rule["type"].as_str(), Some("addRules" | "addDirectories")))
+        .cloned()
+        .collect()
+}
+
 /// The user's answer as the AI's hook output, or none (no answer: the AI asks itself). "always" keeps
 /// the rule Claude itself suggested, where it suggested it.
 fn decision(ai: &str, answer: &str, payload: &Value) -> Option<String> {
     let decision = match answer {
         "allow" => serde_json::json!({"behavior": "allow"}),
         "always" if ai == "claude" => {
-            serde_json::json!({"behavior": "allow", "updatedPermissions": payload["permission_suggestions"]})
+            serde_json::json!({"behavior": "allow", "updatedPermissions": rule_suggestions(payload)})
         }
         "always" => serde_json::json!({"behavior": "allow"}),
         "deny" => {
@@ -438,6 +455,12 @@ mod tests {
             "permission_suggestions": [{"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "git push:*"}],
                 "behavior": "allow", "destination": "localSettings"}]
         });
+        // What the island could not show whole asks in the terminal.
+        let mut hidden = claude.clone();
+        hidden["tool_input"]["command"] = json!("echo ok\nrm -rf ~");
+        assert!(request("claude", &hidden).is_none());
+        hidden["tool_input"]["command"] = json!("x".repeat(MAX_SHOWN + 1));
+        assert!(request("claude", &hidden).is_none());
         let asked = request("claude", &claude).unwrap();
         assert_eq!(
             (asked.tool.as_str(), asked.input.as_str(), asked.always),
@@ -459,6 +482,22 @@ mod tests {
             always["hookSpecificOutput"]["decision"]["updatedPermissions"],
             claude["permission_suggestions"]
         );
+        // A suggested change of mode is never kept by Always, nor offers it alone.
+        let mut moded = claude.clone();
+        moded["permission_suggestions"]
+            .as_array_mut()
+            .unwrap()
+            .push(
+                json!({"type": "setMode", "mode": "bypassPermissions", "destination": "session"}),
+            );
+        let always: Value =
+            serde_json::from_str(&decision("claude", "always", &moded).unwrap()).unwrap();
+        assert_eq!(
+            always["hookSpecificOutput"]["decision"]["updatedPermissions"],
+            claude["permission_suggestions"]
+        );
+        moded["permission_suggestions"] = json!([{"type": "setMode", "mode": "acceptEdits"}]);
+        assert!(!request("claude", &moded).unwrap().always);
         let deny: Value =
             serde_json::from_str(&decision("codex", "deny", &claude).unwrap()).unwrap();
         assert_eq!(deny["hookSpecificOutput"]["decision"]["behavior"], "deny");

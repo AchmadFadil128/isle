@@ -281,8 +281,11 @@ fn store() -> Option<PathBuf> {
     Some(config_dir().join("projects").join(name))
 }
 
-/// Deletes Isle's Claude conversation `id` now.
+/// Deletes Isle's Claude conversation `id` now (an id as Claude makes them, never a path).
 pub fn forget(id: &str) {
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
+        return;
+    }
     if let Some(dir) = store() {
         std::fs::remove_file(dir.join(format!("{id}.jsonl"))).ok();
     }

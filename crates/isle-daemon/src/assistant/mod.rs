@@ -46,6 +46,7 @@ use self::chat::{Chat, Item, Keep};
 pub use self::claude::config_dir as claude_config_dir;
 pub use self::codex::user_home as codex_home;
 use self::mic::Mic;
+pub use self::tasks::shows_whole;
 use self::whisper::Whisper;
 use crate::store::{Store, data_dir};
 
@@ -1492,7 +1493,8 @@ async fn look_after_tasks(iface: &InterfaceRef<AssistantService>) {
     }
     let sender = iface.get().await.commands.clone();
     store.remove();
-    for task in running.tasks {
+    // Only Isle's own: a log in its folder, for a unit of its own.
+    for task in running.tasks.into_iter().filter(tasks::is_own) {
         let sender = sender.clone();
         tokio::spawn(async move {
             let (ended, output) = match tasks::settled(&task).await {

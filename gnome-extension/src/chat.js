@@ -39,6 +39,8 @@ const label = (text, styleClass, params = {}) => new St.Label({text, style_class
 
 /** How long (ms) "Copied" shows in place of the conversation's title. */
 const COPIED_MS = 1200;
+/** Run and Deny take no press this soon after the card shows. */
+const ARMED_AFTER_MS = 500;
 // A package manager stopped halfway can leave the system half changed, so its Stop asks for a second press
 // within this long.
 const STOP_ARMED_MS = 4000;
@@ -314,6 +316,8 @@ export const CommandCard = GObject.registerClass({
     setCard(card) {
         const previous = this._state;
         this._state = card.status;
+        if (card.status === 'waiting' && previous !== 'waiting')
+            this._waitingSince = GLib.get_monotonic_time();
         const waiting = card.status === 'waiting';
         const running = card.status === 'running';
         const ended = !waiting && !running;
@@ -439,7 +443,8 @@ export const CommandCard = GObject.registerClass({
 
     /** Run (true) or Deny (false): a small press, or a shake; then it goes on. Also from Enter and Esc. */
     decide(run) {
-        if (this._state !== 'waiting')
+        // An Enter or a click meant for something else never answers a card that just showed.
+        if (this._state !== 'waiting' || GLib.get_monotonic_time() - this._waitingSince < ARMED_AFTER_MS * 1000)
             return;
         const button = run ? this._run : this._deny;
         if (St.Settings.get().enable_animations) {

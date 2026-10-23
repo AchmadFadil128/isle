@@ -324,6 +324,14 @@ async fn run_command(
     if command.is_empty() {
         return "run: no command was given.".into();
     }
+    // The card shows the whole command, so the user sees all they run: one line, and not too long.
+    if !tasks::shows_whole(&command, tasks::MAX_COMMAND) {
+        return format!(
+            "run `{asked}` was not offered: a command must be one line of at most {} characters, without \
+             hidden characters. Join steps with && or offer them one at a time.",
+            tasks::MAX_COMMAND
+        );
+    }
     if let Some(why) = tasks::refused(&command) {
         ran.push((asked.to_owned(), "denied".into()));
         return format!(

@@ -66,6 +66,9 @@ export function runnable(action, {home, cache = `${home}/.cache`, uid, gid}) {
     if (end < 0 || argv.length !== end + (root ? 9 : 6))
         return false;
     const [bash, flag, wrapper, name, command, ...rest] = argv.slice(end + 1);
+    // As root it is shown with `sudo` and runs without it; one line, with nothing hidden (see tasks.rs).
+    if (root !== action.command.startsWith('sudo ') || !showsWhole(action.command, MAX_COMMAND + (root ? 5 : 0)))
+        return false;
     const shown = root ? action.command.replace(/^sudo /, '') : action.command;
     if (bash !== 'bash' || flag !== '-c' || wrapper !== (root ? ROOT_WRAPPER : RUN_WRAPPER) || name !== 'isle' ||
         command !== shown)
@@ -94,6 +97,17 @@ function pathAllowed(option, root) {
     const own = dirs.slice(0, dirs.length - SYSTEM_PATH.length);
     return dirs.slice(own.length).join(':') === SYSTEM_PATH.join(':') && (root ? !own.length
         : own.every(dir => dir.startsWith('/') && !dir.split('/').includes('..') && !dir.includes('\n')));
+}
+
+// The longest command a card offers (tasks.rs MAX_COMMAND), and what may not be in it: line breaks,
+// control characters, and characters that hide or reorder text.
+const MAX_COMMAND = 400;
+const HIDDEN = /[\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/u;
+
+/** Whether `text` shows as it is, whole, on one line of at most `max` characters. */
+export function showsWhole(text, max) {
+    return [...text].length <= max && !HIDDEN.test(text) &&
+        ![...text].some(c => c.charCodeAt(0) < 0x20 || (c.charCodeAt(0) >= 0x7f && c.charCodeAt(0) <= 0x9f));
 }
 
 /** Whether `argv` only stops one of Isle's commands. */

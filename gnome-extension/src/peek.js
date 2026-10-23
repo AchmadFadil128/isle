@@ -27,6 +27,8 @@ const DECISION_WIDTH = 440;
 const BOT_SIZE = 46;
 /** Its answer shows this long (ms), the assistant hopping or shaking, before the alert goes. */
 const ANSWERED_MS = 850;
+/** Buttons that answer (Allow, Run) take no press this soon after they show. */
+const ARMED_AFTER_MS = 500;
 
 /** The ring starts sweeping once the island has made room; a level bar grows a little sooner. */
 const RING_DELAY = 350;
@@ -118,7 +120,9 @@ class PeekView extends St.Widget {
         this._lineHeight = 0;
         // What an agent wants to run, and the answers to give it.
         this._code = new St.Label({style_class: 'isle-peek-code', x_align: Clutter.ActorAlign.START});
-        this._code.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
+        // Whole, over as many lines as it takes: what is allowed is all there to read.
+        this._code.clutter_text.set({line_wrap: true, line_wrap_mode: Pango.WrapMode.WORD_CHAR,
+            ellipsize: Pango.EllipsizeMode.NONE});
         texts.add_child(this._code);
         this._actions = new St.BoxLayout({style_class: 'isle-peek-actions'});
         texts.add_child(this._actions);
@@ -298,6 +302,7 @@ class PeekView extends St.Widget {
         this._actions.destroy_all_children();
         this._actions.visible = actions.length > 0;
         this._answered.visible = false;
+        this._actionsShownAt = GLib.get_monotonic_time();
         for (const action of actions) {
             const style = action.primary ? 'isle-pill-small isle-peek-action isle-pill-white' : 'isle-pill-small isle-peek-action';
             this._actions.add_child(pillButton(action.label, style, () => this._answer(action, onDone)));
@@ -305,7 +310,9 @@ class PeekView extends St.Widget {
     }
 
     _answer(action, onDone) {
-        if (this._answerTimer)
+        // A click meant for what was there a moment ago never answers what just appeared.
+        const fresh = GLib.get_monotonic_time() - (this._actionsShownAt ?? 0) < ARMED_AFTER_MS * 1000;
+        if (this._answerTimer || (action.answer && fresh))
             return;
         // Answered: putting it away after says nothing more (see `onDismissed`).
         if (this._shown)

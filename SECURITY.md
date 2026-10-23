@@ -47,6 +47,7 @@ connects to the network only for these:
 | Claude plan usage | `api.anthropic.com/api/oauth/usage` | Claude Code's own sign-in token, read from Claude Code's credentials; Isle never signs in or refreshes it. Off when AI usage is turned off |
 | Voice assistant | The AI command-line app you picked (Claude Code, Codex or Antigravity), which sends it to its own service under your plan | The text of your request (speech is turned into text on this computer), the context it needs (time, open apps and windows, reminders and events, which Linux and package managers this is), the output of the checks and commands it runs for you (with keys, tokens and passwords blanked), the conversation so far and, only if you allow it, the selected text or your notifications |
 | Web search by the assistant | Whatever the AI's own web search and page reading reach | Search words and page addresses the AI chooses for your request |
+| Package checks by the assistant | Your package managers' own servers (npm's registry, Snap and Flatpak stores, dnf's mirrors) | Package names it looks up, when a check like `npm view codex` or `snap find vlc` asks them |
 | Song check | `open.spotify.com/oembed` | A Spotify link the AI suggested, to check it exists before playing it |
 | New versions | `api.github.com` (Isle's latest release) | A plain request, at most once a day; off when New versions is turned off in Settings |
 | Speech model | `huggingface.co` (the official whisper.cpp and Silero files) | A plain download, only when you run `isle-setup-voice` (or press Set up); each file's SHA-256 is checked |
@@ -86,7 +87,11 @@ network at all.
   which passes what the agent asks (the project's folder name, the tool and
   its command or file) or its last message to the island over the session
   bus, and for a permission waits for your answer and prints it for the
-  agent; nothing is sent anywhere. Only GNOME Shell can answer it. Turning
+  agent; nothing is sent anywhere. Only GNOME Shell can answer it. A
+  command the island cannot show whole (over more lines, longer than 160
+  characters, or with hidden characters) is never asked there: the agent
+  asks in its terminal. **Always** keeps only the rule the agent suggests
+  for that command or folder, never a change of its permission mode. Turning
   the switch off, or uninstalling Isle, removes Isle's entries and leaves
   the rest of the file as it is.
 
@@ -115,15 +120,20 @@ deletes its files.
   `.gnupg`, keyrings), judges a link by where it really points (a link to
   `~/.ssh` is `~/.ssh`) and does not follow links while searching. It opens
   documents and media, never programs, scripts or anything executable.
-- Checks the AI asks for run at once only when they read: a fixed list of
-  programs and their read-only subcommands (`uname`, `cat /etc/os-release`,
-  `apt-cache policy`, `dpkg -s`, `rpm -q`, `dnf info`, `pacman -Qi`,
-  `flatpak list`, `snap info`, `npm view`, `which`, `<program> --version`…),
-  run directly with execve and no shell, so `;`, `|`, `&&`, redirects and
-  `$( )` cannot add a second command, and any option that installs,
-  removes or changes something is refused.
+- Checks the AI asks for run at once only when they read, in exact shapes:
+  each program on a fixed list with only the subcommands and options listed
+  for it, then package names (`uname -a`, `cat /etc/os-release`, `apt-cache
+  policy vlc`, `dpkg -s vlc`, `rpm -q vlc`, `dnf info vlc`, `pacman -Qi vlc`,
+  `flatpak list --app`, `snap info vlc`, `npm view @openai/codex version`,
+  `which node`, `<program> --version`…). Anything else (another file, an
+  option that writes, edits or runs something, a path) is refused. They run
+  directly with execve and no shell, so `;`, `|`, `&&`, redirects and `$( )`
+  cannot add a second command.
 - Every other command is shown in full on a card and runs only when you
-  press **Run**. isled builds a `systemd-run` call for it; GNOME Shell starts
+  press **Run**: one line of at most 400 characters, with no hidden or
+  reordering characters, so what you read is all that runs. Run and Deny
+  (and Allow on an agent's alert) take no press in the first half second,
+  so a click or Enter meant for something else never answers them. isled builds a `systemd-run` call for it; GNOME Shell starts
   it only if it is exactly that: Isle's own options, the log in Isle's
   folder, and the shown command last, unchanged. Root commands go through
   polkit (GNOME's password dialog), get only the system's folders on their

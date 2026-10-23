@@ -19,104 +19,198 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 /// What the AI gets of the output, at most (the end of it, where the answer usually is).
 const MAX_OUTPUT: usize = 4000;
 
-/// The programs `check` runs, each with the first arguments that keep it to looking. `None` takes any
-/// arguments that are plain words (package names), `Some` lists the subcommands or options allowed first.
-const ALLOWED: &[(&str, Option<&[&str]>)] = &[
-    ("uname", Some(&["-a", "-r", "-m", "-s", "-o"])),
-    ("lsb_release", Some(&["-a", "-d", "-r", "-c"])),
-    ("cat", Some(&["/etc/os-release", "/etc/lsb-release"])),
+/// What a word after the first may be, for each program `check` runs.
+#[derive(Clone, Copy)]
+enum Rest {
+    /// Nothing more.
+    None,
+    /// Package, app or unit names (see `is_name`), and these options.
+    Names(&'static [&'static str]),
+    /// Only these options.
+    Options(&'static [&'static str]),
+}
+
+/// The programs `check` runs: the first word that keeps each to looking (empty: none needed), then what
+/// may follow. Exact shapes only, so no option can make one write, run or read anything else.
+const ALLOWED: &[(&str, &[&str], Rest)] = &[
+    ("uname", &["", "-a", "-r", "-m", "-s", "-o"], Rest::None),
+    (
+        "lsb_release",
+        &["-a", "-d", "-r", "-c", "-ds", "-rs", "-cs", "-is"],
+        Rest::None,
+    ),
+    ("cat", &["/etc/os-release", "/etc/lsb-release"], Rest::None),
     (
         "apt-cache",
-        Some(&["policy", "show", "search", "madison", "showpkg"]),
+        &["policy", "show", "search", "madison", "showpkg"],
+        Rest::Names(&["--names-only", "--full"]),
     ),
-    ("apt", Some(&["list", "show", "search", "policy"])),
+    (
+        "apt",
+        &["list", "show", "search", "policy"],
+        Rest::Names(&["--installed", "--upgradable", "-a", "--all-versions"]),
+    ),
     (
         "dpkg",
-        Some(&["-s", "-l", "-L", "--status", "--list", "--listfiles"]),
+        &["-s", "-l", "-L", "--status", "--list", "--listfiles"],
+        Rest::Names(&[]),
     ),
     (
         "dpkg-query",
-        Some(&["-W", "-s", "-l", "--show", "--status", "--list"]),
+        &["-W", "-s", "-l", "--show", "--status", "--list"],
+        Rest::Names(&["-f", "--showformat"]),
     ),
-    ("rpm", Some(&["-q", "-qi", "-qa", "-ql", "--query"])),
+    (
+        "rpm",
+        &["-q", "-qi", "-qa", "-ql", "--query"],
+        Rest::Names(&["--qf", "--queryformat", "-i", "--info"]),
+    ),
     (
         "dnf",
-        Some(&["info", "list", "search", "provides", "repolist"]),
+        &["info", "list", "search", "provides", "repolist"],
+        Rest::Names(&[
+            "--installed",
+            "--available",
+            "-q",
+            "--quiet",
+            "-C",
+            "--cacheonly",
+        ]),
     ),
-    ("pacman", Some(&["-Si", "-Qi", "-Ss", "-Q", "-Qs", "-Ql"])),
+    (
+        "pacman",
+        &["-Si", "-Qi", "-Ss", "-Q", "-Qs", "-Ql"],
+        Rest::Names(&[]),
+    ),
     (
         "zypper",
-        Some(&["info", "se", "search", "if", "lr", "repos"]),
+        &["info", "se", "search", "if", "lr", "repos"],
+        Rest::Names(&["--installed-only"]),
     ),
     (
         "flatpak",
-        Some(&["search", "info", "list", "remote-ls", "remotes"]),
+        &["search", "info", "list", "remote-ls", "remotes"],
+        Rest::Names(&[
+            "--app",
+            "--runtime",
+            "--user",
+            "--system",
+            "--updates",
+            "--columns",
+        ]),
     ),
-    ("snap", Some(&["find", "info", "list", "version"])),
+    (
+        "snap",
+        &["find", "info", "list", "version"],
+        Rest::Names(&[]),
+    ),
     (
         "npm",
-        Some(&["view", "ls", "list", "-v", "--version", "config"]),
+        &["view", "ls", "list", "-v", "--version"],
+        Rest::Names(&["-g", "--global", "--depth", "--json"]),
     ),
-    ("pipx", Some(&["list"])),
-    ("node", Some(&["-v", "--version"])),
-    ("python3", Some(&["--version", "-V"])),
+    ("pipx", &["list"], Rest::Options(&["--short"])),
+    ("node", &["-v", "--version"], Rest::None),
+    ("python3", &["--version", "-V"], Rest::None),
     (
         "systemctl",
-        Some(&["status", "is-active", "is-enabled", "list-units"]),
+        &["status", "is-active", "is-enabled", "list-units"],
+        Rest::Names(&["--user", "--no-pager", "--type", "--state", "--all"]),
     ),
-    ("df", None),
-    ("free", None),
-    ("lscpu", None),
-    ("lspci", None),
-    ("lsusb", None),
-    ("nvidia-smi", None),
-    ("which", None),
-];
-/// Options and words that make a package tool change the system, refused anywhere in a check.
-const CHANGES: &[&str] = &[
-    "-i",
-    "--install",
-    "install",
-    "-r",
-    "--remove",
-    "remove",
-    "-P",
-    "--purge",
-    "purge",
-    "--configure",
-    "-S",
-    "-R",
-    "-U",
-    "-e",
-    "--erase",
-    "--setopt",
-    "-y",
-    "--yes",
-    "--assumeyes",
-    "upgrade",
-    "update",
-    "reinstall",
-    "uninstall",
-    "--root",
-    "--admindir",
-    "-o",
-    "--option",
-    "--refresh",
-    "erase",
-    "start",
-    "stop",
-    "restart",
-    "enable",
-    "disable",
-    "mask",
-    "--set",
-    "set",
-    "delete",
-    "config-set",
+    (
+        "df",
+        &["", "-h", "-H", "-T", "-hT", "-l"],
+        Rest::Options(&["-h", "-T", "-l", "--total"]),
+    ),
+    (
+        "free",
+        &["", "-h", "-m", "-g", "--si"],
+        Rest::Options(&["-h", "-t", "--si"]),
+    ),
+    ("lscpu", &[""], Rest::None),
+    (
+        "lspci",
+        &["", "-k", "-nn", "-v"],
+        Rest::Options(&["-k", "-nn"]),
+    ),
+    ("lsusb", &["", "-t"], Rest::None),
+    (
+        "nvidia-smi",
+        &["", "-q", "-L", "--query-gpu"],
+        Rest::Options(&["--format"]),
+    ),
+    ("which", &[], Rest::Names(&[])),
 ];
 
-/// Any program may say its version.
-const VERSION: &[&str] = &["--version", "-V", "version"];
+/// Options whose value may follow an `=` (and only a plain one: letters, digits, `,.:_-${}%`).
+const VALUED: &[&str] = &[
+    "-f",
+    "--showformat",
+    "--qf",
+    "--queryformat",
+    "--columns",
+    "--depth",
+    "--type",
+    "--state",
+    "--query-gpu",
+    "--format",
+];
+
+/// Programs that are never asked their version: what they do, they may do whatever the word.
+const NEVER_RUN: &[&str] = &[
+    "reboot",
+    "poweroff",
+    "shutdown",
+    "halt",
+    "rm",
+    "rmdir",
+    "dd",
+    "mkfs",
+    "kill",
+    "pkill",
+    "killall",
+    "sudo",
+    "pkexec",
+    "su",
+    "systemctl",
+    "loginctl",
+    "shred",
+    "truncate",
+    "mv",
+    "cp",
+    "chmod",
+    "chown",
+];
+
+/// A package, app, unit or command name: letters, digits and `@._+:*~/-`, never starting with `-` or `/`,
+/// nor going up a folder.
+fn is_name(word: &str) -> bool {
+    word.chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphanumeric() || c == '@')
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "@._+:*~/-".contains(c))
+        && !word.contains("..")
+}
+
+/// Whether `word` is one of `options`, alone or (for `VALUED` ones) with a plain value.
+fn is_option(word: &str, options: &[&str]) -> bool {
+    let (name, value) = word
+        .split_once('=')
+        .map_or((word, None), |(n, v)| (n, Some(v)));
+    options.contains(&name)
+        && match value {
+            None => true,
+            Some(value) => {
+                VALUED.contains(&name)
+                    && !value.contains("%(")
+                    && value
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || " ,.:_-${}%\\t\\n".contains(c))
+            }
+        }
+}
 
 /// `command` as a program and its arguments if it may run as a check, else why not.
 pub fn parse(command: &str) -> Result<Vec<String>, String> {
@@ -129,42 +223,85 @@ pub fn parse(command: &str) -> Result<Vec<String>, String> {
     let Some((program, args)) = words.split_first() else {
         return Err("the check is empty".into());
     };
-    if program.contains('/') {
+    if !is_name(program) || program.contains('/') {
         return Err("a check names a program, not a path".into());
     }
     // "command -v x" is how scripts ask whether x is installed; `which` answers the same.
     if program == "command" && args.first().map(String::as_str) == Some("-v") {
-        return Ok(std::iter::once("which".to_owned())
-            .chain(args[1..].iter().cloned())
-            .collect());
+        let names = &args[1..];
+        return if !names.is_empty()
+            && names
+                .iter()
+                .all(|name| is_name(name) && !name.contains('/'))
+        {
+            Ok(std::iter::once("which".to_owned())
+                .chain(names.iter().cloned())
+                .collect())
+        } else {
+            Err("command -v takes program names".into())
+        };
     }
-    if args.len() == 1 && VERSION.contains(&args[0].as_str()) {
-        return Ok(words);
-    }
-    let Some((_, first)) = ALLOWED.iter().find(|(name, _)| name == program) else {
-        return Err(format!(
-            "{program} is not one of the commands a check may run"
-        ));
+    let Some((_, first, rest)) = ALLOWED.iter().find(|(name, ..)| name == program) else {
+        // Any program may say its version, but only that.
+        return if args.len() == 1
+            && args[0] == "--version"
+            && !NEVER_RUN.contains(&program.as_str())
+        {
+            Ok(words)
+        } else {
+            Err(format!(
+                "{program} is not one of the commands a check may run; `{program} --version` is"
+            ))
+        };
     };
-    // After the first word that keeps it to looking, nothing that would make it change things.
-    let plain = |arg: &String| !CHANGES.contains(&arg.split('=').next().unwrap_or_default());
-    match first {
-        None => Ok(words),
-        Some(first) => {
-            let ok = args
-                .first()
-                .is_some_and(|arg| first.contains(&arg.as_str()))
-                && args.iter().skip(1).all(plain);
-            if ok {
-                Ok(words)
-            } else {
-                Err(format!(
-                    "{program} may only run as: {program} {}",
-                    first.join(" | ")
-                ))
+    let shape = || {
+        let firsts = first
+            .iter()
+            .filter(|word| !word.is_empty())
+            .copied()
+            .collect::<Vec<_>>();
+        format!(
+            "{program} may only run as: {program} {}",
+            firsts.join(" | ")
+        )
+    };
+    // The first word, unless the program needs none (`which`) or may run bare ("").
+    let mut rest_args = args;
+    if !first.is_empty() {
+        match args.first() {
+            Some(arg)
+                if first.contains(&arg.as_str())
+                    || (arg.starts_with("--query-gpu=") && first.contains(&"--query-gpu")) =>
+            {
+                rest_args = &args[1..];
+                if arg.contains('=') && !is_option(arg, first) {
+                    return Err(shape());
+                }
             }
+            None if first.contains(&"") => {}
+            _ => return Err(shape()),
         }
     }
+    let (options, names) = match rest {
+        Rest::None => (&[][..], false),
+        Rest::Options(options) => (*options, false),
+        Rest::Names(options) => (*options, true),
+    };
+    let mut args = rest_args.iter();
+    while let Some(arg) = args.next() {
+        if is_option(arg, options) {
+            // `--qf '%{VERSION}'`: the value as the next word.
+            if VALUED.contains(&arg.as_str()) {
+                let value = args.next().ok_or_else(shape)?;
+                if !is_option(&format!("{arg}={value}"), options) {
+                    return Err(shape());
+                }
+            }
+        } else if !(names && is_name(arg) && (*program != "which" || !arg.contains('/'))) {
+            return Err(shape());
+        }
+    }
+    Ok(words)
 }
 
 /// Words of `command`, with '…' and "…" quoting kept together.
@@ -319,6 +456,14 @@ mod tests {
             "apt list --installed vlc",
             "flatpak list --app --columns=application",
             "rpm -q --qf '%{VERSION}' firefox",
+            "uname",
+            "df -h",
+            "free -h",
+            "nvidia-smi --query-gpu=name,memory.total --format=csv",
+            "systemctl status --user isled",
+            "which node npm",
+            "lsb_release -ds",
+            "npm ls -g --depth=0",
         ] {
             assert!(parse(ok).is_ok(), "{ok}: {:?}", parse(ok));
         }
@@ -341,6 +486,24 @@ mod tests {
             "systemctl stop gdm",
             "echo $HOME",
             "dnf info x --setopt=y",
+            // Read another file, run a program, write a file, act on a word, reach another host.
+            "cat /etc/os-release /home/ana/.git-credentials",
+            "cat /etc/os-release ../../etc/shadow",
+            "npm config edit --editor=sh",
+            "npm config get prefix",
+            "rpm -q x --pipe sh",
+            "rpm -q --qf '%(id)' x",
+            "rpm -q -E '%(touch /tmp/x)'",
+            "nvidia-smi -f /home/ana/.bashrc",
+            "rm version",
+            "reboot --version",
+            "rm --version",
+            "systemctl status -H evil.example x",
+            "which /home/ana/.ssh/id_rsa",
+            "dpkg -L ../../etc",
+            "apt show -o Dir::Etc=/tmp x",
+            "flatpak list --columns=$(id)",
+            "uname -a extra",
         ] {
             assert!(parse(refused).is_err(), "{refused} was let through");
         }
