@@ -7,8 +7,8 @@ reporting.
 
 | Version | Supported |
 |---|---|
-| 0.9.x | Yes |
-| 0.8.x and older | No |
+| 1.0.x | Yes |
+| 0.9.x and older | No |
 
 ## Reporting a vulnerability
 
@@ -30,7 +30,7 @@ the tagged source and carry a build provenance attestation. With the
 [GitHub CLI](https://cli.github.com):
 
 ```sh
-gh attestation verify isle-0.9.0-x86_64-linux.tar.gz --repo zickrian/isle
+gh attestation verify isle-1.0.0-x86_64-linux.tar.gz --repo zickrian/isle
 ```
 
 `get.sh` also checks each download against the release's `.sha256`.
@@ -45,7 +45,7 @@ connects to the network only for these:
 | Synced lyrics | [LRCLIB](https://lrclib.net) (`lrclib.net/api`) | The playing song's title, artist, album and length, once per song (then cached) |
 | Cover art | The address the music player gives for the song's cover | A plain download of that picture, once per song (then cached) |
 | Claude plan usage | `api.anthropic.com/api/oauth/usage` | Claude Code's own sign-in token, read from Claude Code's credentials; Isle never signs in or refreshes it. Off when AI usage is turned off |
-| Voice assistant | The AI command-line app you picked (Claude Code, Codex or Antigravity), which sends it to its own service under your plan | The text of your request (speech is turned into text on this computer), the context it needs (time, open apps and windows, reminders and events) and, only if you allow it, the selected text or your notifications |
+| Voice assistant | The AI command-line app you picked (Claude Code, Codex or Antigravity), which sends it to its own service under your plan | The text of your request (speech is turned into text on this computer), the context it needs (time, open apps and windows, reminders and events, which Linux and package managers this is), the output of the checks and commands it runs for you (with keys, tokens and passwords blanked), the conversation so far and, only if you allow it, the selected text or your notifications |
 | Web search by the assistant | Whatever the AI's own web search and page reading reach | Search words and page addresses the AI chooses for your request |
 | Song check | `open.spotify.com/oembed` | A Spotify link the AI suggested, to check it exists before playing it |
 | New versions | `api.github.com` (Isle's latest release) | A plain request, at most once a day; off when New versions is turned off in Settings |
@@ -57,9 +57,21 @@ network at all.
 ## What stays on your computer
 
 - The clipboard history, shelf, reminders, calendar events you add in Isle,
-  timer settings and the assistant's chats, in `~/.local/share/isle`
-  (readable by you only). The assistant's chats are deleted at midnight.
+  timer settings and the assistant's conversation, in `~/.local/share/isle`
+  (readable by you only). The conversation is deleted, with the AI's own
+  copy of it, at midnight at the latest (or after 30 minutes or 2 hours
+  quiet, as set in Settings), on **+**, and on **Clear the conversation
+  now**.
+- Logs of the commands the assistant ran for you, in
+  `~/.cache/isle/runs` (readable by you only), deleted once Isle has
+  followed each to its end.
 - Caches of covers and lyrics, in `~/.cache/isle`.
+- What your login shell sets for your AI tools: once at start, isled runs
+  your shell as a login shell to read its environment, and keeps only
+  `PATH` and the variables those tools read (`CLAUDE_CONFIG_DIR`,
+  `CODEX_HOME`, `ANTHROPIC_*`, `CLAUDE_CODE_*`, `OPENAI_*`, `AWS_*`, proxy
+  and certificate settings, where Node managers live). They stay in
+  isled's memory and go only to the AI tools it starts.
 - Your voice: speech is recognised by whisper.cpp (isle-whisper) on this computer, and
   the recording is never stored or sent.
 - The call preview: GNOME Shell draws it from the call's window as it is on
@@ -67,14 +79,16 @@ network at all.
 - Meeting links: read from the event in your desktop calendars (Evolution
   Data Server) on this computer, and opened in your browser only when you
   click Join.
-- AI agent alerts, only once you turn them on: Isle adds its hook to Claude
-  Code's `~/.claude/settings.json` or Codex's `~/.codex/config.toml`,
-  keeping a copy of the file as it was (`settings.json.isle-backup`) the
-  first time. The hook runs `isled --agent-hook`, which passes the event
-  (the project's folder name and the AI's short message) to the island over
-  the session bus and exits; nothing is sent anywhere. Turning the switch
-  off, or uninstalling Isle, removes Isle's entry and leaves the rest of
-  the file as it is.
+- AI agents: for each of Claude Code and Codex it finds (unless turned off
+  in Settings), Isle adds its hooks to `~/.claude/settings.json` or
+  `~/.codex/hooks.json`, keeping a copy of the file as it was
+  (`*.isle-backup`) the first time. The hook runs `isled --agent-hook`,
+  which passes what the agent asks (the project's folder name, the tool and
+  its command or file) or its last message to the island over the session
+  bus, and for a permission waits for your answer and prints it for the
+  agent; nothing is sent anywhere. Only GNOME Shell can answer it. Turning
+  the switch off, or uninstalling Isle, removes Isle's entries and leaves
+  the rest of the file as it is.
 
 ## Clipboard history
 
@@ -101,10 +115,27 @@ deletes its files.
   `.gnupg`, keyrings), judges a link by where it really points (a link to
   `~/.ssh` is `~/.ssh`) and does not follow links while searching. It opens
   documents and media, never programs, scripts or anything executable.
-- Terminal commands (a battery charge limit, installing an app) are typed
-  into a terminal and run only when you press Enter.
-- Text from other apps (your selection, notifications, window titles) is
-  passed to the AI as data, never as instructions.
+- Checks the AI asks for run at once only when they read: a fixed list of
+  programs and their read-only subcommands (`uname`, `cat /etc/os-release`,
+  `apt-cache policy`, `dpkg -s`, `rpm -q`, `dnf info`, `pacman -Qi`,
+  `flatpak list`, `snap info`, `npm view`, `which`, `<program> --version`…),
+  run directly with execve and no shell, so `;`, `|`, `&&`, redirects and
+  `$( )` cannot add a second command, and any option that installs,
+  removes or changes something is refused.
+- Every other command is shown in full on a card and runs only when you
+  press **Run**. isled builds a `systemd-run` call for it; GNOME Shell starts
+  it only if it is exactly that: Isle's own options, the log in Isle's
+  folder, and the shown command last, unchanged. Root commands go through
+  polkit (GNOME's password dialog), get only the system's folders on their
+  `PATH` (so a program in your home cannot stand in for `apt`), and have
+  their output written to the log by your user, not by root. Commands that
+  would wipe the system or a disk are refused before you are asked, and a
+  denied command is not tried again.
+- Command output is passed to the AI with keys, tokens and passwords
+  blanked, and at most its last 4 KB.
+- Text from other apps (your selection, notifications, window titles,
+  command output, web pages) is passed to the AI as data, never as
+  instructions.
 
 ## Scope
 
@@ -113,8 +144,11 @@ Areas where a report is especially welcome:
 - `isled`'s D-Bus API on the session bus (`docs/dbus-api.md`): input that
   crashes it, or reads or changes data it should not.
 - The voice assistant: a way for a request, a web page, a file, a
-  notification or other text to make Isle run something you did not ask for,
-  read hidden or private files, or run a terminal command without Enter.
+  notification or other text to make Isle run something you did not ask for
+  or did not see on the card, run a check that changes anything, read
+  hidden or private files, or gain root without GNOME's password dialog.
+- The AI agents' hooks: a way for another program to answer an agent's
+  permission, or to read what the agents ask.
 - The clipboard history in `~/.local/share/isle`: copies kept from apps on
   the ignore list or marked as secrets, or files readable by other users.
 - Network requests: anything sent beyond what the table above lists.

@@ -5,9 +5,10 @@
 **A dynamic island for the GNOME desktop.**
 
 Music with synced lyrics, calls, notifications, a focus timer, reminders, a
-calendar that tells you when to join a meeting, a clipboard shelf, alerts
-from Claude Code and Codex, and a voice assistant that works with the AI you
-already use, living in a notch at the top of your screen.
+calendar that tells you when to join a meeting, a clipboard shelf, Claude
+Code and Codex asking you right there, and an assistant that installs and
+fixes things with the AI you already use, living in a notch at the top of
+your screen.
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 ![GNOME Shell 46–51](https://img.shields.io/badge/GNOME%20Shell-46%E2%80%9351-4a86cf.svg)
@@ -32,6 +33,7 @@ appear in the same place instead of in the middle of the screen.
 - [Usage](#usage)
 - [Settings](#settings)
 - [Voice assistant](#voice-assistant)
+  - [The conversation](#the-conversation)
 - [AI usage](#ai-usage)
 - [Resource usage](#resource-usage)
 - [Data & network](#data--network)
@@ -55,10 +57,12 @@ appear in the same place instead of in the middle of the screen.
 | <img src="docs/images/calendar.png" alt="Calendar" width="420"> | **Calendar.** The month beside the chosen day's events, like macOS's Calendar widget. Shows your desktop calendars (Google and others through Online Accounts) and events you add in a line: "Dinner 8:00 pm". Five minutes before an event, the island reminds you, with **Join** when it has a Google Meet, Zoom, Teams or Webex link. |
 | <img src="docs/images/notifications.png" alt="The notifications page" width="420"> | **Notifications.** GNOME's notifications collect here as a plain list, newest first, with their buttons ("Reply", "Mark as read") under the pointer, Clear, and Do Not Disturb a click away. |
 | <img src="docs/images/voice.png" alt="The voice assistant working through a request in steps: finding Spotify, opening it, playing jazz, setting the volume" width="420"> | **Voice assistant.** Press Super+I and ask, in English or Indonesian: play a song, find a file, put windows side by side, add a reminder, explain why the laptop is slow. It works as an agent: a request with several steps is done one after another, each step checked, with the AI you already use (Claude Code, Codex or Antigravity). |
-| <img src="docs/images/voice-modes.png" alt="The assistant listening, a request being typed, and its answer" width="420"> | **Speak or type.** It listens as soon as it opens; start typing (or click the keyboard) to type instead. Its face turns to the pointer and changes expression as it listens, thinks and answers, light rises from the panel's edge with your voice, and the answer stays to read. Close the island and it carries on in the background. |
+| <img src="docs/images/command.png" alt="The assistant's card for sudo apt install -y vlc: Needs your password, Deny and Run; then running, with its last lines and Stop" width="420"> | **Installs and fixes things.** "Install LibreOffice", "pasang codex": it checks what your Linux has, searches the web when unsure, and shows the one command it wants to run, with what to know (your password, a script from the web, removing files). Press **Run** or **Deny**. It runs in the background while you carry on, and the assistant checks it worked before saying so. |
+| <img src="docs/images/conversation.png" alt="The conversation: install vlc, the command that ran with Done, and the answer, with + and the field to type in" width="420"> | **Speak or type, and talk it through.** It listens as soon as it opens; start typing to type instead. Scroll up for the conversation so far; select text to copy it, + for a new one. The bot turns to the pointer, blinks, bounces with your voice and changes expression as it thinks and answers, and the light round the edge rises as you speak. Close the island and it carries on in the background. |
+| <img src="docs/images/bot-looks.png" alt="The bot in eight shapes and several colours, with matching glows" width="420"> | **A bot of your own.** Eight shapes, from a circle to a cloud or a ghost, eleven colours or your own, softly shaded, and a glow round the island that matches it. |
 | <img src="docs/images/usage.png" alt="Claude plan usage: a bar for the 5-hour limit and one for the week" width="420"> | **AI usage.** How much of your Claude and ChatGPT plans' limits is used: one plan at a time with its logo, a bar per limit it has (5 hours, the week) and when each resets; scroll up or down, or click the dots, to switch. A warning comes as one nears its end. Only the ones you are signed in to show. |
 | <img src="docs/images/alerts.png" alt="The closed island with a song and the focus timer, then alerts for a meeting with Join, Claude Code asking to run a command, a notification with Reply, and charging" width="420"> | **Alerts** for volume, brightness, Caps Lock, charging, low battery, Bluetooth devices with their battery, going offline, reminders, meetings about to start, AI plan limits and GNOME notifications with their buttons, in the same place instead of the middle of the screen. Hold the pointer on one to keep it; swipe up to put it away. Icons drawn in SF Symbols' manner move once as they appear: the bolt pulses, the bell sways, rings sweep and count up. |
-| | **AI agents** (off until you turn them on): an alert when Claude Code needs your OK ("Allow Bash?"), waits for you or is done, and when Codex is done, with the project's name and **Show** to bring its window back. Nothing shows while you are already in that window. |
+| <img src="docs/images/approvals.png" alt="Claude Code asking to run npm run build, with Deny, Allow and Always; then Allowed" width="420"> | **AI agents.** When Claude Code or Codex asks permission to run something, answer from the island: **Deny**, **Allow** or, for Claude Code, **Always**. When one is done, the island says what it did. Nothing shows while you are in its window, and answering in its terminal works as before. |
 
 Also: privacy dots while the camera, microphone or screen sharing is in use,
 a recording timer with a stop button, and a slim glass top bar that leaves
@@ -168,6 +172,7 @@ cd isle
 | Super+V | Open the clipboard history with search ready; Enter pastes |
 | Drag a file towards the notch | Open the files tray to drop it |
 | Super+I | Ask the voice assistant; press again to finish speaking, or after an answer to ask more. Start typing (or click the keyboard) to type the request instead |
+| Enter or Esc on the assistant's card | Run or Deny the command it shows |
 
 The island reopens on the page you picked last (for five minutes), or on
 what is live: a call, unseen notifications, music, a running timer. With two
@@ -201,12 +206,14 @@ Click the gear right of the clock in the open island (or Isle's gear in the
 - **Clipboard:** turn the history on or off, clear it, and choose apps whose
   copies are never kept (password managers are on the list from the start).
 - **Focus timer:** session and break lengths, Do Not Disturb while focusing.
-- **Voice:** the assistant on or off, its shortcut, which AI answers and
-  with which model, speech recognition, language, and whether it may use the
-  text you selected (off by default) or read your notifications.
+- **Assistant:** the bot's look (shape, colour, glow, with a live
+  preview); the assistant on or off, its shortcut, which AI answers and with
+  which model, speech recognition, language, and whether it may use the text
+  you selected (off by default) or read your notifications; how long a quiet
+  conversation is kept, and clearing it now.
 - **AI Usage:** on or off, which plans to show, and when to warn; and
   under **AI Agents**, a switch for each of Claude Code and Codex that is
-  installed, for its alerts (none listed when neither is).
+  installed (on by default; none listed when neither is).
 - **About:** the version, help, a bug report to copy (`isled --report`),
   and resetting every setting.
 
@@ -235,9 +242,28 @@ in a 2×2 grid: "split Chrome and VS Code 50/50"), files and folders
 change, remove), Wi-Fi, Bluetooth, Do Not Disturb, volume, brightness, dark
 mode, Night Light, settings panels, screenshots, writing text where your
 cursor is, answering questions (with a web search when it needs fresh
-facts), and telling you what makes the computer slow. Ask a follow-up while
-the answer shows, or within the day: it remembers the conversation until
-midnight.
+facts), telling you what makes the computer slow, and installing, removing
+or fixing software with a command you approve. Ask a follow-up while the
+answer shows, or later the same day: it remembers the conversation (see
+[the conversation](#the-conversation)).
+
+**Installing and fixing things.** Ask "install LibreOffice" and it looks
+first: which Linux this is, which ways to install it has (apt, dnf, pacman,
+zypper, Flatpak, Snap, npm), whether the app is already there, and when
+unsure, the vendor's own instructions on the web. Then the island shows a
+card with the one command it proposes, why, and what to know about it:
+**Needs your password** (it runs as root), **Runs a script from the web**,
+or **Removes files or apps**. Press **Run** (Enter) or **Deny** (Esc); with
+the island closed, the card comes as an alert. A command runs in the
+background as a systemd unit of its own, so you can close the island or
+lock the screen, and Isle follows it to its end, even after isled restarts
+(a command still running when you log out ends with your session); the card
+shows how long it has run and its last lines, and **Stop** ends it (for a
+package manager, press it twice: stopping one halfway can leave things half
+done). When it ends, the assistant checks that it worked (`libreoffice
+--version`) before saying so; denied, it does not try again. One command
+runs at a time, and nothing waits forever: an unanswered card is denied
+after 10 minutes, and a command is stopped after 30.
 
 **Set up:**
 
@@ -261,12 +287,16 @@ midnight.
    2015). An older Isle's Python environment (up to 3 GB) is no longer
    needed: updating Isle moves you over and deletes it by itself, or run
    `isle-setup-voice --remove-old`.
-3. Pick the AI in **Settings → Voice**, or leave it on Automatic.
+3. Pick the AI in **Settings → Assistant**, or leave it on Automatic, which
+   uses the first one you are signed in to: Claude Code, then Codex, then
+   Antigravity. An AI installed later is found by itself.
 4. Check with `isled --doctor`: it lists speech recognition (the models
    downloaded, and the GPU or processor it runs on) and each AI, where it is
    installed and whether you are signed in, as Isle itself sees them.
-   Isle finds AIs installed with npm, nvm, volta, fnm, pnpm, bun or their own
-   installers.
+   Isle finds AIs installed with npm (also a prefix of your own), nvm,
+   volta, fnm, pnpm, bun, Homebrew, mise, asdf, Nix or their own installers,
+   and takes what your login shell sets for them (`CLAUDE_CONFIG_DIR`,
+   `CODEX_HOME`, an API key, a proxy), as code editors do.
 
 Without any of them, Super+I says what to install, and the rest of Isle works
 as before.
@@ -275,22 +305,47 @@ as before.
 itself: Isle runs its actions, which are limited to the ones above. Each AI
 is started with only web search and reading pages: Claude Code with just its
 web tools, Codex with its shell, file, browser and computer-use tools off,
-and agy behind a hook that refuses anything else. Isle searches your files by
-name for it, reads small text files you ask about, opens documents and media
-but never programs, and never looks in hidden folders that hold keys or
-passwords (`.ssh`, `.gnupg`, keyrings), even through a link. Jobs that need the
-command line (a battery charge limit, installing an app) open a terminal
-with the command typed in, which runs only when you press Enter. Text from
-other apps (your selection, notifications, window titles) is passed as data,
-never as instructions.
+and agy behind a hook that refuses anything else.
 
-**Resources:** nothing of the assistant runs while you are not asking. The
-speech model runs only while you speak (on at most half the processor's
-cores) and quits once your words are text; the AI runs only while it works
-on a request and quits as soon as it is done, taking anything it started with
-it. Both run at a lower priority than your apps, so the desktop stays smooth
-while they work. A follow-up resumes the same conversation. Its chats are
-kept apart from your own (in `~/.local/share/isle`) and deleted at midnight.
+- **Looking** runs at once, without asking, but only programs on a fixed
+  list that only read (`uname`, `cat /etc/os-release`, `apt-cache policy`,
+  `dpkg -s`, `rpm -q`, `dnf info`, `pacman -Qi`, `flatpak list`, `snap
+  info`, `npm view`, `which`, `<program> --version`, `df`, `free`…), each run
+  directly with its arguments, never through a shell, and never with an
+  option that would install, remove or change anything.
+- **Changing** anything is a command you see in full and run yourself with
+  **Run**. Isle starts exactly the command on the card and nothing else
+  (GNOME Shell checks this before starting it); one that needs root asks
+  with GNOME's password dialog, gets only the system's own folders on its
+  `PATH`, and its output is written to its log as you, not as root. Commands
+  that would wipe the system (`rm -rf /` or your home folder, `mkfs`, `dd`
+  onto a disk, a fork bomb) are refused before you are even asked.
+- **Files:** Isle searches your files by name for it, reads small text
+  files you ask about, opens documents and media but never programs, and
+  never looks in hidden folders that hold keys or passwords (`.ssh`,
+  `.gnupg`, keyrings), even through a link. Secrets in a command's output
+  (keys, tokens, passwords) are blanked before the AI sees it.
+- Text from other apps (your selection, notifications, window titles, a
+  command's output, web pages) is passed as data, never as instructions.
+
+**Resources:** the speech model runs only while you speak (on at most half
+the processor's cores) and quits once your words are text. The AI starts as
+you open the assistant, so it answers sooner, and quits 3 minutes after
+your last request, taking anything it started with it. Both run at a lower
+priority than your apps, so the desktop stays smooth while they work.
+
+### The conversation
+
+What you said and what it answered show as a conversation: scroll up on
+the assistant, or click the line above the field. Select text to copy it,
+click a command to copy that. **+** starts a new conversation; **Undo**
+brings the last one back for 5 seconds. A conversation is kept until
+midnight at the latest, or until it has been quiet for 30 minutes or 2
+hours if you choose so in Settings; then it is deleted, with the AI's own
+copy of it. **Settings → Assistant → Clear the conversation now** deletes it
+at once. Your voice is never kept: the recording lives in memory only until
+it is text. The conversation is kept in `~/.local/share/isle/chat.json`,
+readable by you alone, and the AI's copy apart from your own chats with it.
 
 ## AI usage
 
@@ -310,13 +365,22 @@ with usage turned off it asks nothing at all. ChatGPT's numbers
 are read from Codex's own logs, with no network at all, so they are as of
 your last use of Codex.
 
-**AI agents.** Turning on Claude Code's alerts adds Isle's hook to
-`~/.claude/settings.json` (Notification and Stop); Codex's sets `notify` in
-`~/.codex/config.toml`, unless Codex already notifies another program, which
-Isle leaves alone and says so. Each runs `isled --agent-hook`, which tells
-the island and exits at once. Your own hooks and settings are kept as they
-are; turning a switch off, or uninstalling Isle, takes out Isle's entry
-only. Nothing leaves the computer.
+**AI agents.** Isle connects to Claude Code and Codex when it finds them,
+also when you install one later, and says so once. It adds its hooks to
+`~/.claude/settings.json` (PermissionRequest, Notification and Stop) and to
+`~/.codex/hooks.json` (PermissionRequest and Stop); Codex asks once, at its
+next start, whether to trust them (or trust them in `/hooks`), and a Codex
+older than 0.124 gets `notify` in its `config.toml` instead, for done
+alerts only. Each hook runs `isled --agent-hook`, which asks the island and
+waits for your answer. With no answer (the alert put away, the agent's
+window in front, Do Not Disturb, isled not running) it says nothing, and the
+agent asks in its terminal as it would without Isle; answering in Claude
+Code's terminal first takes the alert away. **Always** keeps the rule
+Claude Code itself suggests, where it suggests it (usually the project's
+`.claude/settings.local.json`). Your own hooks and settings are kept as they
+are; turning a switch off in **Settings → AI Usage → AI Agents**, or
+uninstalling Isle, takes out Isle's entries only. Nothing leaves the
+computer.
 
 ## Resource usage
 

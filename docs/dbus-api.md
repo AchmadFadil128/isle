@@ -7,9 +7,10 @@ Timestamps are milliseconds since the Unix epoch; durations are
 milliseconds unless the name says `_us` (microseconds).
 
 Methods that read what the user copied (`Clipboard1.GetText`), steer the
-assistant (every `Assistant1` method) or change an AI's settings
-(`Agents1.SetHooked`) answer GNOME Shell only, where the extension runs; any
-other caller gets `org.freedesktop.DBus.Error.AccessDenied`.
+assistant (every `Assistant1` method but `ClearChat`), answer an AI agent
+(`Agents1.Resolve`) or change an AI's settings (`Agents1.SetHooked`) answer
+GNOME Shell only, where the extension runs; any other caller gets
+`org.freedesktop.DBus.Error.AccessDenied`.
 
 `isled --version`, `isled --doctor` (what works: the service, speech
 recognition, each AI's install and sign-in, and whether its alerts are on) and
@@ -143,18 +144,35 @@ tools the AI asks for (finding files and apps, reading small text files), and
 publishes the answer; the extension runs its actions. It works step by step:
 desktop actions the AI takes mid-way go to the extension in the `acting`
 phase, and what they did (`Results`) goes back to the AI for its next step.
-A request carries on after `End`; the AI and the speech model run only while
-needed and quit afterwards.
+A request carries on after `End`. The speech model runs only while needed;
+the AI starts on `Warm` and quits 3 minutes after the last request.
+
+Checks that only read (`uname`, `apt-cache policy`, `<program> --version`…)
+isled runs itself, without a shell. A command that changes the computer is
+a `run` action: `{type: "run", id, command, why, detail, risks, spawn}`,
+where `spawn` is the `systemd-run` argv that starts it as unit
+`isle-run-<id>` (the user's, or the system's for root), its output in
+`~/.cache/isle/runs/run-<id>.log`. The extension shows the card, waits for
+Run, checks `spawn` starts exactly `command` with Isle's own options, and
+starts it; isled follows the log to the end (its last line is
+`[isle-exit <code>]`) and, after a restart, finds running ones again in
+`tasks.json`.
 
 | Member | Signature | |
 |---|---|---|
-| `Listen(s context)` | | Records a request until the user pauses, then answers it. `context` is JSON from the extension: `{apps, running, windows, actions, provider, agy_model, claude_model, codex_model, whisper_model, language, selection, notifications}`; `actions` lists the action types it can run, and the AI is offered only those. |
+| `Listen(s context)` | | Records a request until the user pauses, then answers it. `context` is JSON from the extension: `{apps, running, windows, actions, provider, agy_model, claude_model, codex_model, whisper_model, language, keep_chat, selection, notifications}`; `keep_chat` is `day`, `idle-2h` or `idle-30m`; `actions` lists the action types it can run, and the AI is offered only those. |
+| `Warm(s context)` | | The island opened on the assistant: starts the AI so the request to come is answered sooner. Asks nothing. |
 | `Ask(s text, s context)` | | Answers a typed request, with the same context. |
 | `Stop()` | | Stops recording and answers what was said so far. |
 | `End()` | | The island closed: listening stops, and the AI and the speech model quit. A request being answered carries on in the background and finishes as a `reply` or `error`. |
 | `Results(t step, s results)` | | What the actions handed out as `step` did: JSON `[{type, ok, detail}]`, one per action, in order. Unanswered within 20 s, they count as not done. |
 | `Cancel()` | | Stops the request being answered; the AI quits. |
-| `State` | `s` | `{phase, heard, reply, actions, error, hint, sign_in, provider, set_up, model, listen, heard_nothing, activity, turn, step}`. With `sign_in`, signing in to `provider` fixes the error; with `set_up`, running `isle-setup-voice model` does. `phase` is `idle`, `listening`, `transcribing`, `thinking`, `acting`, `reply` or `error`. In `acting`, `actions` are to run now, once per `step`, and reported with `Results`; in `reply`, they are what the answer asks, run once per `turn`. `activity` says what the AI is doing while it thinks ("Searching ~/Downloads for “ttd”…"). |
+| `NewChat()` | | Starts a new conversation. The old one comes back with `UndoNewChat()` within 5 seconds; after that it is deleted, with the AI's copy. |
+| `UndoNewChat()` | | Brings back the conversation `NewChat` put away. |
+| `ClearChat()` | | Deletes the conversation now, with the AI's copy. Any caller (Settings asks it). |
+| `State` | `s` | `{phase, heard, reply, actions, error, hint, sign_in, provider, set_up, model, listen, heard_nothing, activity, turn, step}`. With `sign_in`, signing in to `provider` fixes the error; with `set_up`, running `isle-setup-voice model` does. `phase` is `idle`, `listening`, `transcribing`, `thinking`, `acting`, `reply` or `error`. In `acting`, `actions` are to run now, once per `step`, and reported with `Results`; in `reply`, they are what the answer asks, run once per `turn`. `activity` says what the AI is doing while it thinks ("Searching ~/Downloads for “ttd”…"); `draft`, its answer so far as it writes it. `card` is the command it asked to run, or null: `{id, command, why, detail, risks, status, output, seconds, exit, stop}`, `risks` some of `root`, `internet`, `removes`, `status` `waiting`, `running`, `done`, `failed`, `denied` or `stopped`, `output` its last lines (secrets blanked), and `stop` the argv that stops it. |
+| `History` | `s` | The conversation: `[{role, text, spoken, command, status, at}]`, `role` `user`, `assistant` or `command` (with `command` and its `status`), the newest 50. |
+| `Notice` (signal) | `sb` | `(text, ok)`: a command ended while no request watched it (isled had restarted). |
 | `Level` (signal) | `d` | The microphone's level (0..1) while listening, 20 times a second. |
 
 ## io.github.zickrian.isle.Usage1
@@ -174,15 +192,19 @@ ChatGPT's are read from Codex's own logs. Turned off, nothing runs.
 
 ## io.github.zickrian.isle.Agents1
 
-Alerts from AI coding agents: Claude Code when it needs a permission or the
-user's input, or finishes; Codex when it finishes a turn. Each is turned on
-in Settings, which puts a hook in that AI's own config, running isled as a
-client (`isled --agent-hook claude|codex`). The hook reports to `Report`
-and the island shows the `Event`.
+AI coding agents on the island: Claude Code and Codex ask their permissions
+there (`Decide`), and say when they are waiting or done (`Report`). The
+extension turns each on for an agent it finds (Settings can turn it off),
+which puts hooks in that AI's own config, running isled as a client
+(`isled --agent-hook claude|codex`).
 
 | Member | Signature | |
 |---|---|---|
 | `SetHooked(s provider, b on)` | | Puts Isle's hook in `claude`'s or `codex`'s config, or takes it out (below). GNOME Shell only. Fails with `Failed` and a message to show (`Codex already sends its notifications to another program`, a config that does not parse); an unknown `provider` is `InvalidArgs`. |
+| `Decide(s json)` | `s` | From the hook: `{provider, project, cwd, session, tool, input, always}` (`input` the command or file on one line, `always` whether the AI offers to keep a rule). Emits `Asking` and waits, at most 9½ minutes, for `Resolve`: returns `allow`, `always` or `deny`, or `""` when the island will not answer (the AI then asks in its own terminal). Returns `""` at once with 8 already waiting. When the caller leaves the bus first (the user answered in the terminal), it ends and emits `Withdrawn`. |
+| `Resolve(s id, s decision)` | | The island's answer to `Asking` `id`. GNOME Shell only. |
+| `Asking` (signal) | `s` | The `Decide` JSON with its `id`. |
+| `Withdrawn` (signal) | `s` | `id` needs no answer any more. |
 | `Report(s json)` | | From the hook: `{provider, kind, project, cwd, message, session}`. Unknown providers or kinds are `InvalidArgs`. Texts are put on one line and cut (`message` to 160 characters, `project` to 60, `session` to 100); a `cwd` that is not absolute is dropped, and `project` defaults to its last folder. An event follows another of the same `provider` and `kind` by at least 300 ms, or is dropped. |
 | `Agents` | `s` | `{claude: {found, hooked}, codex: {found, hooked}}`: `found`, the CLI is installed; `hooked`, Isle's hook is in its config. Read afresh on each `Get`, and published again after `SetHooked` and whenever either config file changes. |
 | `Event(s json)` | signal | `{provider, kind, project, cwd, message, session}`; `provider` is `claude` or `codex`, `kind` is `permission`, `waiting` or `done`, `project` the name of the folder it works in, `session` its session (Codex: thread) id or `""`. |
@@ -195,23 +217,33 @@ file that does not parse is never written.
 - **Claude Code**: `$CLAUDE_CONFIG_DIR/settings.json`, else
   `~/.claude/settings.json`, gets
   `{"hooks": [{"type": "command", "command": "<isled> --agent-hook claude"}]}`
-  under `hooks.Notification` and `hooks.Stop`, beside the user's own hooks
-  (every other key keeps its place). Lists and `hooks` that only Isle's hook
-  was in go again with it.
-- **Codex**: `$CODEX_HOME/config.toml`, else `~/.codex/config.toml`, gets
-  `notify = ["<isled>", "--agent-hook", "codex"]` (made if missing), with
-  its comments and layout kept. A `notify` that runs another program is
-  left alone, and `SetHooked` fails.
+  under `hooks.Notification` and `hooks.Stop`, and with `"timeout": 600`
+  under `hooks.PermissionRequest`, beside the user's own hooks (every other
+  key keeps its place). Lists and `hooks` that only Isle's hook was in go
+  again with it.
+- **Codex** 0.124 and newer: `$CODEX_HOME/hooks.json`, else
+  `~/.codex/hooks.json`, gets the same for `PermissionRequest` (timeout 600)
+  and `Stop`; Codex asks the user to trust them once. An older Codex gets
+  `notify = ["<isled>", "--agent-hook", "codex"]` in its `config.toml` (made
+  if missing), with its comments and layout kept; a `notify` that runs
+  another program is left alone, and `SetHooked` fails.
 
 `<isled>` is the running isled's own path (`~/.local/bin/isled` or
-`/usr/bin/isled`). The client reads Claude Code's hook JSON from standard
-input (at most 1 MB): `Notification` is `permission` (its
-`notification_type` is `permission_prompt`, or the message asks for a
-permission) or `waiting`, with Claude's message; `Stop` is `done`, with the
-first line of `last_assistant_message` when Claude Code sends one. Codex's
-`agent-turn-complete` JSON, its last argument, is `done`, with the first
-line of `last-assistant-message`. It calls `Report` with a one-second limit
-and without starting isled, prints nothing and always exits 0.
+`/usr/bin/isled`). The client reads the hook JSON from standard input (at
+most 1 MB). A `PermissionRequest` goes to `Decide` (without starting isled)
+and the answer is printed as the hook's decision,
+`{"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision":
+{"behavior": "allow" | "deny", …}}}`, with Claude's own suggested rule as
+`updatedPermissions` for `always`; no answer prints nothing. Claude Code
+asks in its terminal at the same time, and leaves the hook waiting when
+answered there, so the client watches its `transcript_path` for the call's
+result and ends then. Otherwise: Claude's `Notification` is `waiting`,
+with its message (one about a permission is left out: `PermissionRequest`
+asked already); `Stop`, Claude's or Codex's, is `done`, with the first line
+of `last_assistant_message`. An older Codex's `agent-turn-complete` JSON,
+its last argument, is `done`, with the first line of
+`last-assistant-message`. It calls `Report` with a one-second limit and
+without starting isled, prints nothing and always exits 0.
 
 ## io.github.zickrian.isle.Updates1
 

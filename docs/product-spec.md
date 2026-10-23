@@ -129,7 +129,8 @@ a scrollbar.
   moving there once closed. A display without the top bar has the island hang from its top edge, with
   a header of its own when open, and GNOME's clock comes back to the main top bar meanwhile.
 - Right slot, first that applies: a warning (Isle's service stopped; a click offers to restart it) →
-  a still mic (the assistant works on a request with the island closed; a click shows its steps) →
+  the bot, 18 px, in the look chosen, blinking and glancing every few seconds (the assistant works on
+  a request or a command runs with the island closed; a click shows it) →
   muted microphone on a call → a second activity → music bars → up to two privacy dots.
 - Two activities at once: the first of recording, call, music and timer keeps the left slot and the
   centre; the next takes the right slot, as on iPhone: the timer's ring and time left (white while
@@ -383,28 +384,44 @@ from the event itself, through Evolution Data Server, on this computer:
 Google's conference data first, then the URL, location and description. An
 alarm the computer slept through is dropped once the event has started.
 
-**AI agents.** Settings → AI Usage lists Claude Code and Codex only when
-installed. Turning one on adds one entry to its own settings: for Claude
-Code, `Notification` and `Stop` hooks in `~/.claude/settings.json` (or
-`$CLAUDE_CONFIG_DIR`, as isled's service sees it); for Codex, `notify` in
-`~/.codex/config.toml`, refused (the switch goes back off, saying why) when
-Codex already notifies another program. Each runs `isled --agent-hook`,
-which tells the island and exits at once, whatever happens. The user's own
-hooks, keys, comments and order are kept; turning the switch off, or
-uninstalling, takes out Isle's entry only. The alert names the project (the
-folder it works in); nothing shows while a window titled after that project
-is in front, or during Do Not Disturb.
+**AI agents.** Claude Code and Codex are connected as soon as Isle finds
+them (installed later too), once announced by an alert; Settings → AI Usage
+→ AI Agents turns each off. Connecting adds Isle's hooks to the agent's own
+settings: `PermissionRequest` (timeout 600 s), `Notification` and `Stop` in
+Claude Code's `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR`, as
+isled's service sees it); `PermissionRequest` and `Stop` in Codex's
+`~/.codex/hooks.json` (an older Codex: `notify` in its `config.toml`). The
+user's own hooks, keys, comments and order are kept; turning the switch
+off, or uninstalling, takes out Isle's entries only.
+
+A permission comes as an alert that stays until answered: the bot (46 px)
+with an amber "!" badge, "‹project› needs permission", the agent's name,
+the command or file in a code line, and Deny, Allow and (Claude Code)
+Always, the last a white pill. Pressed, the badge turns into a green tick
+and the bot hops ("Allowed", "Always allowed here"), or a red cross and a
+shake ("Denied"), and the alert goes 0.85 s later. Hovering it never opens
+the island. Put away unanswered, with the agent's window in front (then or
+later), during Do Not Disturb, or with the island hidden, the agent asks in
+its own terminal instead; answered there first, the alert goes. A finished
+agent's alert has the bot with a green tick, the first sentence of what it
+said, and Open terminal.
 
 ### Voice assistant
 
 Super+I opens a pill below the top bar (280 px wide while it listens, 460 px
-once there is more to show): the face on the left, the text beside it, one
-round 32 px button at the end. The face is a white head with two eyes that
-follow the pointer, glance about and blink; they read along as you type,
-look up while it thinks, smile at an answer and droop on an error. Light
-rises from the panel's edge, brightest along the bottom and gone by the top
-of the sides, its colours (violet, blue, cyan) flowing slowly; it follows
-the voice, each key typed, and breathes while it works. No blobs of colour.
+once there is more to show): the bot on the left (36 px), the text beside
+it, one round 32 px button at the end. The bot takes the shape (circle,
+pebble, squircle, capsule, cloud, hexagon, drop, ghost) and colour chosen
+in Settings → Assistant → Look, shaded with a soft highlight, a darker rim
+and a glint. Its eyes have lids: they follow the pointer on a spring, glance
+about and blink; they perk up and bounce with the voice, read along as you
+type and as the answer shows, look up while it thinks, narrow while a
+command runs, smile at an answer and droop on an error; it nods at Run and
+shakes at Deny. Light rises from the panel's edge, brightest along the
+bottom and gone by the top of the sides, in the bot's glow colours (or the
+classic violet, blue and cyan), two highlights travelling round the rim; it
+follows the voice, each key typed, and breathes while it works. No blobs of
+colour.
 
 | State | Text | End button |
 |---|---|---|
@@ -414,8 +431,32 @@ the voice, each key typed, and breathes while it works. No blobs of colour.
 | Answer | what was heard, the answer | keyboard (follow up) |
 | Error | what went wrong, what to do, and Sign in or Set up when that fixes it | keyboard |
 
-Closed while it works, the request carries on: a still mic shows in the
-closed island and the answer comes as an alert.
+After 8 s on one step, "Still working · 0:12" shows under it. While the AI
+writes its answer, the answer shows as it comes.
+
+**The command card.** A command the AI wants run shows in the pill as a
+small terminal: its purpose (bold) and a line on it, then `$ command` in
+monospace with the program bold and `sudo` amber, then, left, the one thing
+to know (Removes files or apps, red; Runs a script from the web, amber;
+Needs your password, amber) and, right, Deny `esc` and Run `↩`. Running:
+"Running · 1:12", the last two lines it printed, a light sweep under them,
+and Stop (for a package manager, pressed once it says "May leave it half
+installed" and turns into Stop anyway for 4 s). Ended, the card is one
+line: the command and ✓ with how long, ✕ with the exit code, Denied or
+Stopped. With the island closed, a waiting card comes as an alert with Deny
+and Run.
+
+**The conversation.** Scrolling up on the pill, or a click on the line above
+the field, grows it (up to 420 px) into the conversation: "Conversation"
+with + and a chevron to close; a time between messages more than 5 minutes
+apart; your messages as right-aligned bubbles; answers on the left after a
+small bot; commands that ran as one-line terminals with how they went. The
+field stays at the bottom, with the mic in it until there are words, then
+Send. Text can be selected and is copied as the selection settles; a click
+on a command copies it. + shows "Started a new chat · Undo" for 5 s.
+
+Closed while it works, the request and its command carry on: the bot shows
+in the closed island and the answer comes as an alert.
 
 ### Notifications and Do Not Disturb
 
@@ -444,9 +485,12 @@ hovering opens the Notifications page.
 - `isled` sleeps until its next real deadline (a timer phase, a reminder, midnight) and re-checks the
   clock on waking from suspend; AI usage asks nothing while it is off, nor Claude while the screen is
   locked.
-- The assistant's AI and speech recognition run only while a request is worked on, at a lower
-  priority, in a process group of their own that is killed whole; transcribing uses at most half the
-  cores. The files tray's helper quits 20 seconds after the tray closes.
+- Speech recognition runs only while a request is heard. The assistant's AI starts as the assistant
+  opens and quits 3 minutes after the last request; both run at a lower priority, in a process group
+  of their own that is killed whole; transcribing uses at most half the cores. A command the user ran
+  is followed by reading its log 2.5 times a second, only while it runs. An agent's hook waiting for
+  an answer sleeps on D-Bus. The files tray's helper quits 20 seconds after the tray closes.
+- The bot in the closed island is drawn once and moves only while the assistant works.
 - Animations run on the display's frame clock only while a spring moves.
 - The open island ticks only the visible page (scrubber 4×/s, timer 1×/s).
 - Calls are found from the shell's own audio events, never polled. The

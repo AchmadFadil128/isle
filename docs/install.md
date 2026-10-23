@@ -60,7 +60,7 @@ Super+I:
 1. Install and sign in to one of Claude Code, Codex or Antigravity (the
    [README](../README.md#voice-assistant) says how; each uses your own plan).
 2. Set up speech recognition once, in a terminal. It downloads the speech
-   model picked in Settings → Voice (`small`, 265 MB, by default; or name
+   model picked in Settings → Assistant (`small`, 265 MB, by default; or name
    one: `isle-setup-voice base`) and needs nothing else installed. A graphics
    card is used through Vulkan when there is one, else the processor:
 
@@ -74,8 +74,8 @@ Super+I:
    hand). In the assistant, a **Set up** button opens a terminal that runs
    `isle-setup-voice` for you.
 
-3. Pick the AI in Isle's Settings → Voice, or leave it on Automatic, and
-   press Super+I.
+3. Pick the AI in Isle's Settings → Assistant, or leave it on Automatic,
+   and press Super+I. An AI installed later is found by itself.
 
 `isle-setup-voice` ends by checking what Isle itself finds; run the same check
 any time:
@@ -86,8 +86,10 @@ isled --doctor
 
 It lists speech recognition (its models, and the GPU or processor it runs
 on) and each AI, where it is installed and whether
-you are signed in. Isle finds AIs installed with npm, nvm, volta, fnm, pnpm,
-bun or their own installers.
+you are signed in. Isle finds AIs installed with npm (also a prefix of your
+own), nvm, volta, fnm, pnpm, bun, Homebrew, mise, asdf, Nix or their own
+installers, and takes what your login shell sets for them
+(`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, an API key, a proxy).
 
 ## Updating
 
@@ -111,8 +113,7 @@ isle-uninstall
 This removes the extension, its programs, its service and its font, the
 voice assistant's speech recognition and its models, Isle's caches, and a
 battery charge limit Isle set (asking for your password), and takes Isle's
-hooks out of Claude Code's and Codex's settings if you turned on their
-alerts. Your tasks,
+hooks out of Claude Code's and Codex's settings. Your tasks,
 calendar events, clipboard history and timer settings stay in
 `~/.local/share/isle`; delete it too to remove everything.
 
@@ -137,8 +138,8 @@ system-wide packages, installed for every user of the computer with the
 system's package manager (so they update and uninstall with it):
 
 ```sh
-sudo apt install ./isle_0.9.0_amd64.deb         # Ubuntu 24.04 and newer, Debian 13
-sudo dnf install ./isle-0.9.0-1.x86_64.rpm      # Fedora 40 and newer
+sudo apt install ./isle_1.0.0_amd64.deb         # Ubuntu 24.04 and newer, Debian 13
+sudo dnf install ./isle-1.0.0-1.x86_64.rpm      # Fedora 40 and newer
 ```
 
 They put the programs in `/usr/bin`, the extension in
@@ -177,7 +178,7 @@ Release files are built by GitHub Actions from the tagged source, with a
 build provenance attestation. With the [GitHub CLI](https://cli.github.com):
 
 ```sh
-gh attestation verify isle-0.9.0-x86_64-linux.tar.gz --repo zickrian/isle
+gh attestation verify isle-1.0.0-x86_64-linux.tar.gz --repo zickrian/isle
 ```
 
 `get.sh` checks each download against its `.sha256` already.
@@ -195,9 +196,12 @@ Everything goes in your home folder:
 | `~/.local/share/isle` | Your data, and the speech models `isle-setup-voice` downloads (`models`) |
 | `~/.local/share/doc/isle` | This README |
 
-Turning on the AI agent alerts in Settings (off by default) adds Isle's
-hook to Claude Code's `~/.claude/settings.json` or Codex's
-`~/.codex/config.toml`; turning them off or uninstalling takes it out.
+Once running, Isle adds its hooks to Claude Code's `~/.claude/settings.json`
+and Codex's `~/.codex/hooks.json` when it finds them, so they ask you on
+the island (Codex asks once, at its next start, to trust them); turning
+them off in Settings → AI Usage → AI Agents, or uninstalling, takes them
+out. Commands you run from the assistant keep their logs in
+`~/.cache/isle/runs` until they end.
 
 On a first install only, it sets Isle's look (a slim glass top bar with the
 island in it); updates leave it as you have it. It never changes other

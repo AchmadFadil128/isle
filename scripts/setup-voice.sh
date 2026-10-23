@@ -2,7 +2,7 @@
 # Sets up speech recognition for Isle's voice assistant: downloads the speech model isle-whisper runs
 # (whisper.cpp, on the GPU through Vulkan or on the processor), checking its SHA-256. No Python.
 # Usage: isle-setup-voice [tiny|base|small|medium] [--remove-old]
-#   The model given, else the one chosen in Settings → Voice, else small.
+#   The model given, else the one chosen in Settings → Assistant, else small.
 #   --remove-old  also deletes what the older Python setup left: its venv and faster-whisper models.
 # Installed as `isle-setup-voice`; also runs from the source folder as scripts/setup-voice.sh.
 set -euo pipefail
@@ -132,4 +132,4 @@ if [ -x "$ISLED" ]; then
 else
     echo "isled is not installed yet; install Isle, then run isled --doctor."
 fi
-echo "Done. Pick the AI in Settings → Voice if you have more than one, then press Super+I and speak."
+echo "Done. Pick the AI in Settings → Assistant if you have more than one, then press Super+I and speak."
