@@ -63,8 +63,11 @@ export const ClipsView = GObject.registerClass({
         this._query = '';
         this._selected = 0;
         this._keyboard = false;
+        /** Every item, pinned first; the cards of those that match `kind` and `query` show. */
+        this._all = [];
         this._shown = [];
-        this._cards = [];
+        /** Drawn cards by item id, in the strip in the order of `_all`. */
+        this._cards = new Map();
         /** A card's "Copied" (or similar), kept across redraws while it shows. */
         this._flashing = null;
 
@@ -99,20 +102,29 @@ export const ClipsView = GObject.registerClass({
 
     /** Moves the cards' ages ("2m") on, for the page opening again later. */
     refreshAges() {
-        this._ages?.forEach(([ageLabel, age]) => (ageLabel.text = Format.ago(age)));
+        for (const card of this._cards.values()) {
+            const [ageLabel, age] = card._age;
+            ageLabel.text = Format.ago(age);
+        }
     }
 
     /** Shows only items of `kind` ('text', 'link', 'image', 'files'), or all. */
     set kind(kind) {
         this._kind = kind;
         this._selected = 0;
-        this.update();
+        this._filter();
     }
 
     set query(query) {
         this._query = query.trim().toLowerCase();
         this._selected = 0;
-        this.update();
+        this._filter();
+    }
+
+    /** Empties the search without showing the cards it hid yet: the next `update` does. */
+    clearQuery() {
+        this._query = '';
+        this._selected = 0;
     }
 
     /** Redraws the cards; `off` means clipboard history is switched off, `hidden` that the screen is
@@ -122,22 +134,52 @@ export const ClipsView = GObject.registerClass({
         this._hidden = hidden;
         // Pinned items stay at the front, the rest newest first (as isled
         // sends them).
-        const all = this._daemon.state.clipboard ?? [];
-        const items = [...all.filter(item => item.pinned), ...all.filter(item => !item.pinned)]
+        const all = hidden ? [] : this._daemon.state.clipboard ?? [];
+        this._all = [...all.filter(item => item.pinned), ...all.filter(item => !item.pinned)];
+
+        // An unchanged item keeps its card; a changed or removed one's goes.
+        const keys = new Map(this._all.map(item => [item.id, JSON.stringify(item)]));
+        for (const [id, card] of this._cards) {
+            if (keys.get(id) !== card._key || card._removed) {
+                card.destroy();
+                this._cards.delete(id);
+            }
+        }
+        // The kept ones in the items' order, which unpinning one changes.
+        let previous = null;
+        for (const item of this._all) {
+            const card = this._cards.get(item.id);
+            if (!card)
+                continue;
+            if (card.get_previous_sibling() !== previous) {
+                if (previous)
+                    this._strip.set_child_above_sibling(card, previous);
+                else
+                    this._strip.set_child_below_sibling(card, null);
+            }
+            previous = card;
+        }
+        this.refreshAges();
+        this._filter();
+    }
+
+    /** Shows the cards of the items that match `kind` and `query`, drawing those not drawn yet. */
+    _filter() {
+        const items = this._all
             .filter(item => !this._kind || item.kind === this._kind)
             .filter(item => matches(item, this._query));
-        this._shown = hidden ? [] : items.slice(0, MAX_CARDS);
+        this._shown = items.slice(0, MAX_CARDS);
         this._selected = Math.min(this._selected, Math.max(0, this._shown.length - 1));
+        const ids = new Set(this._shown.map(item => item.id));
+        for (const [id, card] of this._cards)
+            card.visible = ids.has(id);
 
         this._cancelPending();
-        this._strip.destroy_all_children();
-        this._cards = [];
-        this._ages = [];
-        this._addCards(FIRST_CARDS);
-        if (this._cards.length < this._shown.length) {
+        this._addCards(FIRST_CARDS, FIRST_CARDS);
+        if (this._undrawn()) {
             this._pending = GLib.idle_add(GLib.PRIORITY_LOW, () => {
                 this._addCards(CARDS_PER_IDLE);
-                if (this._cards.length < this._shown.length)
+                if (this._undrawn())
                     return GLib.SOURCE_CONTINUE;
                 this._pending = 0;
                 return GLib.SOURCE_REMOVE;
@@ -149,13 +191,28 @@ export const ClipsView = GObject.registerClass({
         this._updateEmpty();
     }
 
-    /** Draws up to `count` more of the shown items. */
-    _addCards(count) {
-        const end = Math.min(this._shown.length, this._cards.length + count);
-        for (let index = this._cards.length; index < end; index++) {
-            const card = this._card(this._shown[index], index);
-            this._cards.push(card);
-            this._strip.add_child(card);
+    _undrawn() {
+        return this._shown.some(item => !this._cards.has(item.id));
+    }
+
+    /** Draws up to `count` more of the first `end` shown items, in order. */
+    _addCards(count, end = this._shown.length) {
+        for (const item of this._shown.slice(0, end)) {
+            if (count <= 0)
+                break;
+            if (this._cards.has(item.id))
+                continue;
+            const card = this._card(item);
+            card._key = JSON.stringify(item);
+            // Before the next drawn card of a later item.
+            const later = this._all.slice(this._all.indexOf(item) + 1);
+            const next = later.map(other => this._cards.get(other.id)).find(Boolean);
+            if (next)
+                this._strip.insert_child_below(card, next);
+            else
+                this._strip.add_child(card);
+            this._cards.set(item.id, card);
+            count--;
         }
         this._syncSelection();
     }
@@ -201,12 +258,10 @@ export const ClipsView = GObject.registerClass({
             return;
         this._selected = Math.min(this._shown.length - 1, Math.max(0, this._selected + step));
         // Arrowing faster than the cards are drawn.
-        if (this._selected >= this._cards.length)
-            this._addCards(this._selected + 1 - this._cards.length);
-        this._syncSelection();
+        this._addCards(Infinity, this._selected + 1);
         // Keep the selected card in view.
         // Cards just drawn have no position yet; all are the same width.
-        const first = this._cards[0];
+        const first = this._cards.get(this._shown[0].id);
         const spacing = this._strip.get_theme_node().get_length('spacing');
         const width = first.width;
         const x = this._selected * (width + spacing);
@@ -225,12 +280,13 @@ export const ClipsView = GObject.registerClass({
     }
 
     _syncSelection() {
-        this._cards.forEach((card, index) => {
-            if (this._keyboard && index === this._selected)
+        const selected = this._keyboard ? this._cards.get(this._shown[this._selected]?.id) : null;
+        for (const card of this._cards.values()) {
+            if (card === selected)
                 card.add_style_pseudo_class('selected');
             else
                 card.remove_style_pseudo_class('selected');
-        });
+        }
     }
 
     _onScroll(event) {
@@ -259,7 +315,7 @@ export const ClipsView = GObject.registerClass({
 
     // Cards
 
-    _card(item, index) {
+    _card(item) {
         const card = new St.Widget({
             style_class: `isle-clip isle-clip-${item.kind}`,
             layout_manager: new Clutter.BinLayout(),
@@ -274,7 +330,7 @@ export const ClipsView = GObject.registerClass({
         card.add_child(this._body(item));
         const actions = this._actions(item, card);
         card.add_child(actions);
-        card.add_child(this._header(item));
+        card.add_child(this._header(item, card));
 
         const feedback = new St.BoxLayout({
             style_class: 'isle-clip-feedback',
@@ -296,7 +352,7 @@ export const ClipsView = GObject.registerClass({
         card.connect('button-release-event', (_actor, event) => {
             if (event.get_button() !== Clutter.BUTTON_PRIMARY)
                 return Clutter.EVENT_PROPAGATE;
-            this._selected = index;
+            this._selected = this._shown.findIndex(shown => shown.id === item.id);
             this._syncSelection();
             this.emit('activated', item, false);
             return Clutter.EVENT_STOP;
@@ -311,7 +367,7 @@ export const ClipsView = GObject.registerClass({
     /** Shows "Copied" (or similar) over the card for a moment. */
     flash(item, iconName, text) {
         this._flashing = {id: item.id, iconName, text, until: Date.now() + FEEDBACK_MS};
-        const card = this._cards.find(candidate => candidate._item.id === item.id);
+        const card = this._cards.get(item.id);
         if (card)
             this._showFlash(card, true);
     }
@@ -337,7 +393,7 @@ export const ClipsView = GObject.registerClass({
     }
 
     /** Pin, app icon and age in the top-left corner. */
-    _header(item) {
+    _header(item, card) {
         const header = new St.BoxLayout({
             style_class: 'isle-clip-header',
             x_expand: true,
@@ -352,7 +408,7 @@ export const ClipsView = GObject.registerClass({
             header.add_child(new St.Icon({gicon: app.get_icon(), icon_size: 13, y_align: Clutter.ActorAlign.CENTER}));
         const age = GLib.DateTime.new_from_unix_local(Math.floor(item.at_ms / 1000));
         const ageLabel = label(Format.ago(age), 'isle-clip-age', {y_align: Clutter.ActorAlign.CENTER});
-        this._ages.push([ageLabel, age]);
+        card._age = [ageLabel, age];
         header.add_child(ageLabel);
         return header;
     }
@@ -489,6 +545,7 @@ export const ClipsView = GObject.registerClass({
         actions.add_child(button('isle-close-symbolic', 'Remove', () => {
             // Removed at once; the card shrinks away until the list redraws.
             this._daemon.call('clipboard', 'Remove', item.id);
+            card._removed = true;
             card.reactive = false;
             card.ease({opacity: 0, scale_x: 0.9, scale_y: 0.9, duration: 150});
         }));
