@@ -291,32 +291,42 @@ class CalendarPage extends Page {
         this._today = startOfDay(new Date());
         // Redrawn only when what it shows changed: opening the page, or the desktop's calendars
         // answering again with the same events, must not rebuild it while it slides in.
+        const busy = this._busyDays();
+        const month = JSON.stringify([this._today.getTime(), this._month.getTime(), [...busy]]);
+        if (month !== this._shownMonth) {
+            this._shownMonth = month;
+            this._renderMonth(busy);
+        } else {
+            // Another day picked in the same month: only two days change.
+            this._dayButtons.forEach(button => (button.style_class = this._dayClass(button._day)));
+        }
+        this._renderDayHeader();
         const now = new Date();
-        const shown = JSON.stringify([
-            this._today.getTime(), this._month.getTime(), this._selected.getTime(), [...this._busyDays()],
-            this._eventsOn(this._selected).map(e => [e.title, +e.start, +e.end, e.allDay, e.ownId,
-                !e.allDay && (e.end ?? e.start) < now]),
+        const events = this._eventsOn(this._selected);
+        const agenda = JSON.stringify([
+            this._selected.getTime(),
+            events.map(e => [e.title, +e.start, +e.end, e.allDay, e.ownId, !e.allDay && (e.end ?? e.start) < now]),
         ]);
-        if (shown === this._shown)
-            return;
-        this._shown = shown;
-        this._renderMonth();
-        this._renderAgenda();
+        if (agenda !== this._shownAgenda) {
+            this._shownAgenda = agenda;
+            this._renderAgenda(events);
+        }
+        this._noAccounts.visible = this._source?.hasCalendars === false;
     }
 
-    _renderMonth() {
+    _renderMonth(busy) {
         const month = this._month;
         const now = GLib.DateTime.new_local(month.getFullYear(), month.getMonth() + 1, 1, 0, 0, 0);
         this._monthName.text = now.format('%B').toUpperCase();
         this._year.text = String(month.getFullYear());
 
-        const busy = this._busyDays();
         const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
         const lead = (month.getDay() - this._weekStart + 7) % 7;
         const rows = Math.ceil((lead + daysInMonth) / 7);
         const rowHeight = Math.min(MAX_ROW_HEIGHT, Math.floor(GRID_HEIGHT / rows));
 
         this._grid.destroy_all_children();
+        this._dayButtons = [];
         for (let row = 0; row < rows; row++) {
             const week = new St.BoxLayout({style_class: 'isle-cal-week', height: rowHeight});
             for (let column = 0; column < 7; column++) {
@@ -329,21 +339,23 @@ class CalendarPage extends Page {
         }
     }
 
+    /** A day's style: today, picked, or a weekend day. */
+    _dayClass(day) {
+        const classes = ['isle-cal-day'];
+        if (day.getTime() === this._today.getTime())
+            classes.push('today');
+        else if (day.getTime() === this._selected.getTime())
+            classes.push('selected');
+        else if (this._weekend.includes(day.getDay()))
+            classes.push('weekend');
+        return classes.join(' ');
+    }
+
     _dayCell(day, busy) {
         const today = day.getTime() === this._today.getTime();
-        const selected = day.getTime() === this._selected.getTime();
-        const weekend = this._weekend.includes(day.getDay());
-        const classes = ['isle-cal-day'];
-        if (today)
-            classes.push('today');
-        else if (selected)
-            classes.push('selected');
-        else if (weekend)
-            classes.push('weekend');
-
         const cell = new St.Widget({layout_manager: new Clutter.BinLayout(), style_class: 'isle-cal-cell'});
         const button = new St.Button({
-            style_class: classes.join(' '),
+            style_class: this._dayClass(day),
             label: String(day.getDate()),
             can_focus: true,
             accessible_name: dateTime(day).format('%A %-d %B'),
@@ -353,6 +365,8 @@ class CalendarPage extends Page {
             y_align: Clutter.ActorAlign.CENTER,
         });
         button.connect('clicked', () => this._select(day));
+        button._day = day;
+        this._dayButtons.push(button);
         cell.add_child(button);
         if (busy) {
             // Under the number, in the circle's bottom edge.
@@ -367,7 +381,8 @@ class CalendarPage extends Page {
         return cell;
     }
 
-    _renderAgenda() {
+    /** "Today, 21 October", and the Today button when another day or month is shown. */
+    _renderDayHeader() {
         const day = this._selected;
         const offset = Math.round((day - this._today) / DAY_MS);
         const name = {'-1': 'Yesterday', 0: 'Today', 1: 'Tomorrow'}[offset] ?? dateTime(day).format('%A');
@@ -377,18 +392,19 @@ class CalendarPage extends Page {
         // "8:00 pm" or "20:00", as the clock is set.
         const eight = Format.timeOfDay(GLib.DateTime.new_local(2000, 1, 1, 20, 0, 0)).toLowerCase();
         this._entry.hint_text = `Add event · e.g. Dinner ${eight}`;
+    }
 
+    _renderAgenda(events) {
+        const day = this._selected;
         this._list.destroy_all_children();
         // Another day's list starts at its top.
         if (day.getTime() !== this._listedDay?.getTime())
             this._scroll.vadjustment.value = 0;
         this._listedDay = day;
-        const events = this._eventsOn(day);
         const now = new Date();
         for (const event of events)
             this._list.add_child(this._eventRow(event, now));
         this._noEvents.visible = events.length === 0;
-        this._noAccounts.visible = this._source?.hasCalendars === false;
         this._scroll.visible = events.length > 0;
     }
 
