@@ -108,26 +108,56 @@ impl SystemService {
 /// Starts every system watcher. Missing services (no battery, no BlueZ) are
 /// logged and retried now and then.
 pub fn spawn_watchers(system: Connection, iface: InterfaceRef<SystemService>) {
+    let on_bus = |name| Some((system.clone(), name));
     let (bus, state) = (system.clone(), iface.clone());
-    supervise("battery", move || power::watch(bus.clone(), state.clone()));
+    supervise("battery", on_bus(UPOWER), move || {
+        power::watch(bus.clone(), state.clone())
+    });
     let (bus, state) = (system.clone(), iface.clone());
-    supervise("network", move || {
+    supervise("network", on_bus(NETWORK_MANAGER), move || {
         network::watch(bus.clone(), state.clone())
     });
     let bus = system.clone();
-    supervise("sleep", move || sleep::watch(bus.clone()));
+    supervise("sleep", on_bus(LOGIND), move || sleep::watch(bus.clone()));
     let bus = system.clone();
-    supervise("screen lock", move || sleep::watch_lock(bus.clone()));
-    let state = iface.clone();
-    supervise("bluetooth", move || {
-        bluetooth::watch(system.clone(), state.clone())
+    supervise("screen lock", on_bus(LOGIND), move || {
+        sleep::watch_lock(bus.clone())
     });
-    supervise("camera", move || camera::watch(iface.clone()));
+    let (bus, state) = (system.clone(), iface.clone());
+    supervise("bluetooth", on_bus(BLUEZ), move || {
+        bluetooth::watch(bus.clone(), state.clone())
+    });
+    supervise("camera", None, move || camera::watch(iface.clone()));
+}
+
+/// The system services the watchers follow, on the system bus.
+const UPOWER: &str = "org.freedesktop.UPower";
+const NETWORK_MANAGER: &str = "org.freedesktop.NetworkManager";
+const LOGIND: &str = "org.freedesktop.login1";
+const BLUEZ: &str = "org.bluez";
+
+/// Waits until `name` has an owner on `bus`: a service this machine lacks (no BlueZ) costs no
+/// wakeups, and one started later is followed at once.
+async fn owned(bus: &Connection, name: &'static str) -> zbus::Result<()> {
+    let dbus = zbus::fdo::DBusProxy::new(bus).await?;
+    let mut changes = dbus
+        .receive_name_owner_changed_with_args(&[(0, name)])
+        .await?;
+    if dbus.name_has_owner(name.try_into()?).await? {
+        return Ok(());
+    }
+    while let Some(change) = changes.next().await {
+        if change.args()?.new_owner().is_some() {
+            return Ok(());
+        }
+    }
+    Ok(())
 }
 
 /// Runs the watcher from `start`, restarting it whenever it stops (UPower, NetworkManager and
-/// BlueZ can restart under us), backing off from [`RESTART_MIN`] to [`RESTART_MAX`].
-fn supervise<F, W>(name: &'static str, start: F)
+/// BlueZ can restart under us), backing off from [`RESTART_MIN`] to [`RESTART_MAX`]; while
+/// `service` (the bus and the name it needs) isn't there, it waits for it instead.
+fn supervise<F, W>(name: &'static str, service: Option<(Connection, &'static str)>, start: F)
 where
     F: Fn() -> W + Send + 'static,
     W: Future<Output = anyhow::Result<()>> + Send + 'static,
@@ -153,6 +183,11 @@ where
             }
             tokio::time::sleep(delay).await;
             delay = (delay * 2).min(RESTART_MAX);
+            if let Some((bus, service)) = &service
+                && let Err(err) = owned(bus, service).await
+            {
+                debug!("could not wait for {service}: {err}");
+            }
         }
     });
 }
