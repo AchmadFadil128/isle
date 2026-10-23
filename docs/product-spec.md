@@ -133,8 +133,9 @@ a scrollbar.
   a request or a command runs with the island closed; a click shows it) →
   muted microphone on a call → a second activity → music bars → up to two privacy dots.
 - Two activities at once: the first of recording, call, music and timer keeps the left slot and the
-  centre; the next takes the right slot, as on iPhone: the timer's ring and time left (white while
-  focusing, green on a break), a call's green phone and length, or the music bars. The island widens
+  centre; the next takes the right slot, as on iPhone: the timer's time left (white while focusing,
+  green on a break; beside the music bars while a song is first), a call's green phone and length, or
+  the music bars. A second time is as large as the clock and on its line, with no ring. The island widens
   by as much as that is wider than a slot, on both sides, so the clock stays centred. Each side's sign
   keeps to its end of the island, all as far in.
 - Left slot, first that applies: breathing red dot (screen recording) →
@@ -408,8 +409,8 @@ said, and Open terminal.
 
 ### Voice assistant
 
-Super+I opens a pill below the top bar (280 px wide while it listens, 460 px
-once there is more to show): the bot on the left (36 px), the text beside
+Super+I opens a pill below the top bar (280 px wide while it listens, 600 px,
+as wide as the open island, once there is more to show): the bot on the left (36 px), the text beside
 it, one round 32 px button at the end. The bot takes the shape (circle,
 pebble, squircle, capsule, cloud, hexagon, drop, ghost) and colour chosen
 in Settings → Assistant → Look, shaded with a soft highlight, a darker rim

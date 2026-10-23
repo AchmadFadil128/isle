@@ -6,6 +6,27 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-24
+
+### Changed
+
+- The assistant's answers and the conversation are as wide as the open
+  island (600 px instead of 460), with wider bubbles.
+- A song and the focus timer together: the closed island keeps the music
+  bars on the right, with the timer's time beside them as large as the
+  clock and level with it, instead of a small ring.
+
+### Fixed
+
+- Pictures and text no longer shiver as the island opens, closes or shows
+  an alert: views slide by whole pixels instead of scaling.
+- Files dragged onto the island land wherever they are let go on it, not
+  only over the tray, and the drop light no longer blinks as the pointer
+  moves across the island.
+- Clicking an event from the desktop's calendars (Google and others) no
+  longer opens another app, such as a text editor, when GNOME Calendar is
+  not installed: those events are there to read.
+
 ## [1.0.0] - 2026-10-24
 
 The first stable release: the assistant can install and fix things for
@@ -743,7 +764,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/zickrian/isle/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/zickrian/isle/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/zickrian/isle/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/zickrian/isle/compare/v0.8.0...v0.8.1
