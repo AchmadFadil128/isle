@@ -9,8 +9,9 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
-/** Signals: `changed` (): the list or unseen set changed; `banner` (notification): to show, then acknowledge
- * once shown; `dnd-changed` (). */
+/** Signals: `changed` (): the list changed (and so maybe the unseen set); `seen-changed` (): only which are
+ * seen changed; `updated` (): one changed in place; `banner` (notification): to show, then acknowledge once
+ * shown; `dnd-changed` (). */
 export class NotificationCenter extends Signals.EventEmitter {
     /** `isleSettings` says whether GNOME keeps its own banners (`gnome-banners`). */
     constructor(isleSettings) {
@@ -38,7 +39,14 @@ export class NotificationCenter extends Signals.EventEmitter {
     }
 
     get unseenCount() {
-        return this.notifications.filter(notification => !notification.acknowledged).length;
+        let count = 0;
+        for (const source of this._sources.keys())
+            count += source.notifications.filter(notification => !notification.acknowledged).length;
+        return count;
+    }
+
+    get hasUnseen() {
+        return [...this._sources.keys()].some(source => source.notifications.some(n => !n.acknowledged));
     }
 
     get dnd() {
@@ -51,10 +59,11 @@ export class NotificationCenter extends Signals.EventEmitter {
 
     /** Marks every notification as seen, clearing the unread dot. */
     acknowledgeAll() {
-        const unseen = this.notifications.filter(notification => !notification.acknowledged);
+        const unseen = [...this._sources.keys()].flatMap(source => source.notifications)
+            .filter(notification => !notification.acknowledged);
         unseen.forEach(notification => (notification.acknowledged = true));
         if (unseen.length)
-            this.emit('changed');
+            this.emit('seen-changed');
     }
 
     clearAll() {
@@ -107,9 +116,12 @@ export class NotificationCenter extends Signals.EventEmitter {
         if (this._sources.has(source))
             return;
         const ids = [
-            source.connect('notification-added', () => this.emit('changed')),
+            source.connect('notification-added', (_source, notification) => {
+                this._added = notification;
+                this.emit('changed');
+            }),
             source.connect('notification-removed', () => this.emit('changed')),
-            source.connect('notification-request-banner', (_source, notification) => this._onBanner(notification)),
+            source.connect('notification-request-banner', (_source, notification) => this._onBannerRequest(notification)),
         ];
         this._sources.set(source, ids);
         this.emit('changed');
@@ -124,6 +136,24 @@ export class NotificationCenter extends Signals.EventEmitter {
         this.emit('changed');
     }
 
+    /** A banner asked for one already listed means it was updated in place: `updated` once complete. */
+    _onBannerRequest(notification) {
+        const updated = notification !== this._added;
+        this._added = null;
+        this._onBanner(notification);
+        if (updated) {
+            Promise.resolve().then(() => {
+                if (this._listed(notification))
+                    this.emit('updated');
+            });
+        }
+    }
+
+    _listed(notification) {
+        const source = notification.source;
+        return this._sources.has(source) && source.notifications.includes(notification);
+    }
+
     /** The same rules GNOME applies before showing a banner. */
     _onBanner(notification) {
         if (this._gnomeBanners || notification.acknowledged || notification.urgency === MessageTray.Urgency.LOW)
@@ -133,8 +163,7 @@ export class NotificationCenter extends Signals.EventEmitter {
             return;
         // An app updating one sets its text before its buttons: shown once the update is complete.
         Promise.resolve().then(() => {
-            const source = notification.source;
-            if (this._sources.has(source) && source.notifications.includes(notification) && !notification.acknowledged)
+            if (this._listed(notification) && !notification.acknowledged)
                 this.emit('banner', notification);
         });
     }
@@ -145,7 +174,7 @@ export class NotificationCenter extends Signals.EventEmitter {
             return;
         notification.playSound();
         notification.acknowledged = true;
-        this.emit('changed');
+        this.emit('seen-changed');
     }
 
     destroy() {

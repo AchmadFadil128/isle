@@ -64,27 +64,26 @@ class NotificationsPage extends Page {
 
         this._centerHandlers = [
             // Closed, the list is only rebuilt when next shown (see `onActivate`).
-            center.connect('changed', () => {
-                if (this.active)
-                    this._update();
-                else
-                    this._stale = true;
-                this.markCold();
-                this.emit('news-changed');
-            }),
+            center.connect('changed', () => this._onListChanged()),
+            // Shown anew but not marked seen: its banner does that once shown (see `acknowledge`).
+            center.connect('updated', () => this._onListChanged({seen: false})),
+            // Seen or not shows only in the tab's dot: the cards stay.
+            center.connect('seen-changed', () => this.emit('news-changed')),
             center.connect('dnd-changed', () => this._updateDnd()),
         ];
-        this._update();
+        // Built when first warmed up or shown (see `warmUp`).
+        this._times = [];
+        this._stale = true;
         this._updateDnd();
         this.connect('destroy', () => this._onDestroy());
     }
 
     get relevant() {
-        return this._center.unseenCount > 0;
+        return this._center.hasUnseen;
     }
 
     get hasNews() {
-        return this._center.unseenCount > 0;
+        return this._center.hasUnseen;
     }
 
     /** How many there are, then Do Not Disturb and Clear All as small round buttons. */
@@ -125,7 +124,16 @@ class NotificationsPage extends Page {
         return column;
     }
 
-    _update() {
+    _onListChanged({seen = true} = {}) {
+        if (this.active)
+            this._update({seen});
+        else
+            this._stale = true;
+        this.markCold();
+        this.emit('news-changed');
+    }
+
+    _update({seen = true} = {}) {
         this._stale = false;
         /** Each card's "5m ago", with when it came, to bring up to date without a rebuild. */
         this._times = [];
@@ -153,7 +161,7 @@ class NotificationsPage extends Page {
         this._scroll.visible = notifications.length > 0;
 
         // Seen while open: no unread dot for something already on screen.
-        if (this.active)
+        if (this.active && seen)
             this._center.acknowledgeAll();
     }
 

@@ -393,6 +393,7 @@ export class Controller {
         });
         notifications.connect('dnd-changed', () => (this._compact.doNotDisturb = notifications.dnd));
         notifications.connect('changed', () => (this._compact.unseenNotifications = notifications.unseenCount > 0));
+        notifications.connect('seen-changed', () => (this._compact.unseenNotifications = notifications.unseenCount > 0));
         this._compact.doNotDisturb = notifications.dnd;
         this._compact.unseenNotifications = notifications.unseenCount > 0;
     }
