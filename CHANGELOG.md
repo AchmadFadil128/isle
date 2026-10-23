@@ -6,6 +6,14 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-24
+
+### Fixed
+
+- Claude Code or Codex installed after logging in now gets its approvals on
+  the island at once, as its switch in Settings says; before, it only did
+  after the next login.
+
 ## [1.0.1] - 2026-10-24
 
 ### Changed
@@ -768,7 +776,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/zickrian/isle/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/zickrian/isle/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/zickrian/isle/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/zickrian/isle/compare/v0.8.1...v0.9.0
