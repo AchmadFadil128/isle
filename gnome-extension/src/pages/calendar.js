@@ -17,6 +17,7 @@ import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import {icon, iconButton, label} from '../widgets.js';
 import {Page} from './page.js';
+import {onHover} from './tasks.js';
 
 /** The month grid's height, shared by its rows. */
 const GRID_HEIGHT = 108;
@@ -392,7 +393,7 @@ class CalendarPage extends Page {
     }
 
     _eventRow(event, now) {
-        const row = new St.BoxLayout({style_class: 'isle-cal-event', reactive: true, track_hover: true});
+        const row = new St.BoxLayout({style_class: 'isle-cal-event', reactive: true});
         const [r, g, b] = event.color;
         row.style = `background-color: rgba(${r}, ${g}, ${b}, ${PILL_ALPHA});`;
         // Finished ones recede.
@@ -420,7 +421,7 @@ class CalendarPage extends Page {
             const remove = iconButton('isle-close-symbolic', 'isle-button-flat isle-task-remove',
                 () => this.daemon.call('calendar', 'Remove', event.ownId), {size: 10, accessibleName: 'Remove event'});
             remove.opacity = 0;
-            row.connect('notify::hover', () => remove.ease({opacity: row.hover ? 255 : 0, duration: 120}));
+            onHover(row, hovered => remove.ease({opacity: hovered ? 255 : 0, duration: 120}));
             row.add_child(remove);
         } else {
             row.connect('button-release-event', () => {
