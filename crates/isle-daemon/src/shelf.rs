@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::path::Path;
-
 use isle_core::shelf::{CAPACITY, Shelf, ShelfItem};
-use url::Url;
 use zbus::object_server::SignalEmitter;
 use zbus::{fdo, interface};
 
 use crate::clock::now_ms;
 use crate::store::{Store, data_dir};
+use crate::uri;
 
 pub struct ShelfService {
     shelf: Shelf,
@@ -48,10 +46,7 @@ impl ShelfService {
         let mut full = Vec::new();
         let mut added = false;
         for uri in uris {
-            let Some(path) = Url::parse(&uri)
-                .ok()
-                .and_then(|url| url.to_file_path().ok())
-            else {
+            let Some(path) = uri::to_path(&uri) else {
                 rejected.push(uri);
                 continue;
             };
@@ -132,7 +127,7 @@ impl ShelfService {
 /// Deletes the shelf's own copy of a clipboard image (kept so it outlives the history).
 /// The user's own files are never touched.
 fn forget(uri: &str) {
-    let Some(path) = Url::parse(uri).ok().and_then(|url| url.to_file_path().ok()) else {
+    let Some(path) = uri::to_path(uri) else {
         return;
     };
     if path.starts_with(owned_dir())
@@ -149,8 +144,10 @@ fn remove_unlisted_copies(shelf: &Shelf) {
         return;
     };
     for path in entries.flatten().map(|entry| entry.path()) {
-        let listed = Url::from_file_path(&path)
-            .is_ok_and(|url| shelf.items().iter().any(|item| item.uri == url.as_str()));
+        let listed = shelf
+            .items()
+            .iter()
+            .any(|item| uri::to_path(&item.uri).as_ref() == Some(&path));
         if !listed && let Err(err) = std::fs::remove_file(&path) {
             log::debug!("could not remove {}: {err}", path.display());
         }
@@ -163,8 +160,5 @@ fn owned_dir() -> std::path::PathBuf {
 }
 
 fn file_exists(uri: &str) -> bool {
-    Url::parse(uri)
-        .ok()
-        .and_then(|url| url.to_file_path().ok())
-        .is_some_and(|path| Path::new(&path).exists())
+    uri::to_path(uri).is_some_and(|path| path.exists())
 }

@@ -271,10 +271,7 @@ pub fn recent_files(home: &Path) -> String {
                 .split('"')
                 .next()?
                 .to_owned();
-            let path = url::Url::parse(&href.replace("&amp;", "&"))
-                .ok()?
-                .to_file_path()
-                .ok()?;
+            let path = crate::uri::to_path(&href.replace("&amp;", "&"))?;
             Some((modified, path))
         })
         .filter(|(_, path)| path.exists())

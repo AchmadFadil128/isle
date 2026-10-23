@@ -6,8 +6,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use url::Url;
-
 use crate::store::cache_dir;
 
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10);
@@ -16,15 +14,11 @@ const MAX_BYTES: u64 = 8 * 1024 * 1024;
 
 /// Returns a local path for `art_url` if one exists without a download.
 pub fn local_path(art_url: &str) -> Option<String> {
-    let url = Url::parse(art_url).ok()?;
-    match url.scheme() {
-        "file" => Some(url.to_file_path().ok()?.to_string_lossy().into_owned()),
-        "http" | "https" => {
-            let path = cached_path(art_url);
-            path.exists().then(|| path.to_string_lossy().into_owned())
-        }
-        _ => None,
+    if is_remote(art_url) {
+        let path = cached_path(art_url);
+        return path.exists().then(|| path.to_string_lossy().into_owned());
     }
+    Some(crate::uri::to_path(art_url)?.to_string_lossy().into_owned())
 }
 
 /// Whether `art_url` is remote and needs [`download`] first.

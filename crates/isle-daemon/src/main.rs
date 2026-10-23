@@ -16,6 +16,7 @@ mod store;
 mod system;
 mod todo;
 mod updates;
+mod uri;
 mod usage;
 
 use anyhow::{Context, bail};
