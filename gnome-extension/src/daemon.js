@@ -190,9 +190,10 @@ export class Daemon extends Signals.EventEmitter {
                 for (const [property, key] of Object.entries(properties))
                     this._update(key, proxy[property]);
             };
-            // Only what changed: NowPlaying changing many times a song should not re-read the lyrics.
+            // Only what changed: NowPlaying changing many times a song should not re-read the lyrics. Its
+            // names only (`unpack`, not `deep_unpack`): the values, large JSON, are read once, below.
             proxy.connect('g-properties-changed', (_proxy, changed, invalidated) => {
-                for (const property of [...Object.keys(changed.deep_unpack()), ...invalidated]) {
+                for (const property of [...Object.keys(changed.unpack()), ...invalidated]) {
                     if (property in properties)
                         this._update(properties[property], proxy[property]);
                 }

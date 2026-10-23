@@ -200,7 +200,8 @@ export const ExpandedView = GObject.registerClass({
                 y_align: Clutter.ActorAlign.CENTER,
             });
             tab.connect('clicked', () => this.showPage(index));
-            tab.connect('notify::hover', () => this._syncTabs());
+            // Hovering fades its icon only: nothing else of the tabs changes.
+            tab.connect('notify::hover', () => this._syncTabIcon(this._tabs[index]));
             tabs.add_child(tab);
             return {tab, icon: tabIcon, name, nameClip, badge};
         });
@@ -208,9 +209,21 @@ export const ExpandedView = GObject.registerClass({
     }
 
     /** Lights the open page's tab and shows which pages have news. */
+    /** The tab's icon as bright as its state (open, hovered or idle), fading with its background. */
+    _syncTabIcon(entry) {
+        if (!entry)
+            return;
+        const {tab, icon: tabIcon} = entry;
+        // 150 ms, as the tab's background in the stylesheet.
+        const open = this._tabs[this._index] === entry;
+        const opacity = TAB_OPACITY[open ? 'open' : tab.hover ? 'hover' : 'idle'];
+        if (tabIcon.opacity !== opacity)
+            tabIcon.ease({opacity, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+    }
+
     _syncTabs() {
         const animate = this.mapped && St.Settings.get().enable_animations;
-        this._tabs.forEach(({tab, icon: tabIcon, name, nameClip, badge}, index) => {
+        this._tabs.forEach(({tab, name, nameClip, badge}, index) => {
             const open = index === this._index;
             if (open)
                 tab.add_style_pseudo_class('checked');
@@ -230,10 +243,7 @@ export const ExpandedView = GObject.registerClass({
                 }
             }
             tab.visible = this._pages[index].available;
-            // Fades with the tab's background (150 ms in the stylesheet).
-            const opacity = TAB_OPACITY[open ? 'open' : tab.hover ? 'hover' : 'idle'];
-            if (tabIcon.opacity !== opacity)
-                tabIcon.ease({opacity, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            this._syncTabIcon(this._tabs[index]);
             badge.visible = !open && Boolean(this._pages[index].hasNews);
         });
         // The open tab's name may need more room.

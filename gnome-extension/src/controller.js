@@ -129,6 +129,8 @@ export class Controller {
         this._tintStyle = null;
         this._voiceOpen = false;
         this._voiceBound = false;
+        /** Whether the alert and voice views were laid out ahead since the theme last changed (see `_warmUp`). */
+        this._viewsWarm = false;
         /** Counts `_listen` calls, so only the latest sends its request. */
         this._listenRequest = 0;
         this._voiceCloseMs = VOICE_ERROR_MS;
@@ -145,19 +147,27 @@ export class Controller {
         this._voiceAfter = [];
         /** The window text was last selected in, so a selection only goes to the AI from where it was made. */
         this._selectedIn = null;
-        this._primaryChanged = global.display.get_selection().connect('owner-changed', (_selection, type) => {
-            if (type === Meta.SelectionType.SELECTION_PRIMARY)
-                this._selectedIn = global.display.focus_window;
-        });
-        // Clicking into a window, or one an action opened, puts an answer away.
-        this._focusChanged = global.display.connect('notify::focus-window', () => {
-            const focus = global.display.focus_window;
-            if (this._voiceOpen && this._voiceAnswered && focus && focus !== this._voiceTarget)
-                this.collapse();
-            this._syncMonitor();
-        });
 
-        this._topBar = new TopBar(this._settings);
+        // Built a part at a time, frames drawn in between: all at once, it held the screen still for a tenth
+        // of a second at every login and unlock. Nothing outside calls in before the last part.
+        this._buildSteps = [
+            () => this._buildServices(),
+            () => this._buildViews(),
+            () => (this._pages = this._buildPages()),
+            () => (this._expanded = this._buildExpanded(this._pages)),
+            () => this._buildIsland(),
+            () => this._connectAll(),
+        ];
+        this._building = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._buildSteps.shift()();
+            if (this._buildSteps.length)
+                return GLib.SOURCE_CONTINUE;
+            this._building = 0;
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _buildServices() {
         // One "system alerts" switch before 0.7: an "off" there carries over to each of its parts.
         if (!this._settings.get_boolean('system-alerts')) {
             for (const category of ['power', 'network', 'bluetooth', 'caps-lock'])
@@ -171,6 +181,9 @@ export class Controller {
         this._focusMode = new FocusMode(this._daemon, this._notifications, this._settings);
         this._clipboard = new ClipboardHistory(this._daemon, this._settings);
         this._writer = new TextWriter(this._clipboard);
+    }
+
+    _buildViews() {
         this._island = new Island();
         if (hasSfPro())
             this._island.add_style_class_name(SF_PRO_CLASS);
@@ -179,13 +192,32 @@ export class Controller {
         this._peeks = [new PeekView(), new PeekView()];
         this._peek = this._peeks[0];
         this._voice = new VoiceView();
-        this._expanded = this._buildExpanded();
+    }
+
+    // The bar and the island appear together: the clock gives way to it in the same frame.
+    _buildIsland() {
+        this._topBar = new TopBar(this._settings);
         this._shelf = this._expanded.pageNamed('shelf');
         this._shelfHelper = new ShelfHelper(this._island, this._shelf);
-
         for (const view of [this._compact, ...this._peeks, this._expanded, this._voice])
             this._island.addView(view);
         Main.layoutManager.addChrome(this._island, {trackFullscreen: true});
+        this._updateGeometry();
+        this._render();
+    }
+
+    _connectAll() {
+        this._primaryChanged = global.display.get_selection().connect('owner-changed', (_selection, type) => {
+            if (type === Meta.SelectionType.SELECTION_PRIMARY)
+                this._selectedIn = global.display.focus_window;
+        });
+        // Clicking into a window, or one an action opened, puts an answer away.
+        this._focusChanged = global.display.connect('notify::focus-window', () => {
+            const focus = global.display.focus_window;
+            if (this._voiceOpen && this._voiceAnswered && focus && focus !== this._voiceTarget)
+                this.collapse();
+            this._syncMonitor();
+        });
         // Hidden by a fullscreen window meanwhile: what waited shows now.
         this._island.connect('notify::visible', () => {
             if (this._island.visible && !this._alert)
@@ -205,15 +237,13 @@ export class Controller {
         });
         this._syncVoiceEnabled();
         this._syncUsage();
-
-        this._updateGeometry();
         this._render();
         this._later('warm', WARM_START_MS, () => this._warmUp(true));
     }
 
-    _buildExpanded() {
+    _buildPages() {
         const size = {height: PAGE_HEIGHT};
-        const pages = [
+        return [
             new CallPage(this._daemon, this._call, this._privacy, this._settings, size),
             new MediaPage(this._daemon, this._audio, size),
             new NotificationsPage(this._daemon, this._notifications, size),
@@ -222,6 +252,9 @@ export class Controller {
             new CalendarPage(this._daemon, size),
             new UsagePage(this._daemon, size),
         ];
+    }
+
+    _buildExpanded(pages) {
         for (const page of pages) {
             page.connect('request-keyboard', (_page, wanted) => this._setKeyboard(wanted));
             page.connect('request-close', () => this.collapse());
@@ -259,6 +292,8 @@ export class Controller {
         island.connect('notify::hovered', () => this._onHoverChanged());
         // Hidden (under a fullscreen window), nothing can be laid out: it waits until shown again.
         island.connect('notify::mapped', () => this._scheduleWarm());
+        // A new theme or text size restyles every view: laid out ahead again at the next warm-up.
+        island.connect('style-changed', () => (this._viewsWarm = false));
         island.connect('button-release-event', (_actor, event) => this._onClick(event));
         island.connect('geometry-changed', () => this._shelfHelper.sync());
 
@@ -553,6 +588,8 @@ export class Controller {
                 return;
             }
             this._warmedAt = GLib.get_monotonic_time() / 1000;
+            if (all)
+                this._viewsWarm = true;
             this._scheduleWarm();
         };
         next();
@@ -729,8 +766,9 @@ export class Controller {
             return;
         this._cancel('collapse');
         this._setKeyboard(false);
-        // Once closed and settled, what changed meanwhile is laid out for next time (see `_warmUp`).
-        this._later('warm', WARM_AFTER_CLOSE_MS, () => this._warmUp(true));
+        // Once closed and settled, what changed meanwhile is laid out for next time (see `_warmUp`); the
+        // alert and voice views keep their layout, unless the theme changed.
+        this._later('warm', WARM_AFTER_CLOSE_MS, () => this._warmUp(!this._viewsWarm));
         if (this._voiceOpen) {
             this._closeVoice();
             this._nextAlert();
@@ -1034,6 +1072,8 @@ export class Controller {
                 this.collapse();
         }
         this._voiceBound = enabled;
+        if (enabled)
+            this._viewsWarm = false;
         this._expanded.voiceEnabled = enabled;
         this._voice.shortcut = this._voiceShortcut;
     }
@@ -1381,6 +1421,13 @@ export class Controller {
     }
 
     destroy() {
+        // Turned off while still being built (locked at once): only what was built goes.
+        if (this._building) {
+            GLib.source_remove(this._building);
+            this._building = 0;
+            this._destroyPartial();
+            return;
+        }
         global.display.get_selection().disconnect(this._primaryChanged);
         global.display.disconnect(this._focusChanged);
         global.display.disconnect(this._focusMonitorChanged);
@@ -1424,6 +1471,27 @@ export class Controller {
         this._notifications.destroy();
         this._topBar.destroy();
         this._daemon.destroy();
+        this._settings = null;
+    }
+
+    /** Frees what the steps of building (see the constructor) made before it was turned off: nothing
+     * outside knows of it yet, but for what it built. */
+    _destroyPartial() {
+        this._destroying = true;
+        for (const name of [...this._timeouts.keys()])
+            this._cancel(name);
+        this._shelfHelper?.destroy();
+        // The views are the island's once it is on screen (see `_buildIsland`); before, each goes by itself.
+        if (!this._island?.get_parent()) {
+            for (const view of [this._compact, ...this._peeks ?? [], this._voice, this._expanded])
+                view?.destroy();
+            if (!this._expanded)
+                this._pages?.forEach(page => page.destroy());
+        }
+        this._island?.destroy();
+        for (const service of [this._topBar, this._writer, this._clipboard, this._focusMode, this._call,
+            this._privacy, this._audio, this._notifications, this._daemon])
+            service?.destroy();
         this._settings = null;
     }
 }

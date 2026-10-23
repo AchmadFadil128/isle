@@ -92,10 +92,12 @@ export const CompactView = GObject.registerClass({
         this._settingsChanged = settings.connect('changed::privacy-indicators', () => this._refresh());
         this._privacyChanged = privacy.connect('changed', () => this._refresh());
         this._callChanged = call.connect('changed', () => this._refresh());
-        // Music bars only dance, and the call's time only ticks, while this view is on screen.
+        // Music bars only dance, and the times and the timer's ring only tick, while this view is on screen.
         this.connect('notify::mapped', () => {
             this._syncBars();
             this._tickCall();
+            this._tickRecording();
+            this._refreshRing();
             // Measure the privacy dots' balance now that they can be.
             if (this.mapped && this._privacyBalance.visible && !this._privacyBalance.width)
                 this._refresh();
@@ -291,8 +293,10 @@ export const CompactView = GObject.registerClass({
 
     _refreshRing() {
         const {pomodoro} = this._daemon.state;
-        if (!pomodoro || pomodoro.phase === 'idle')
+        if (!pomodoro || pomodoro.phase === 'idle' || !this.mapped) {
+            this._cancel('ring');
             return;
+        }
         const remaining = pomodoro.running
             ? Math.max(0, pomodoro.ends_at_ms - Format.nowMs())
             : pomodoro.remaining_ms;
@@ -305,8 +309,12 @@ export const CompactView = GObject.registerClass({
         this._bars.playing = this.mapped && !this._idle && Playback.isPlaying(this._daemon.state.nowPlaying);
     }
 
-    /** Shows how long the screen has been recording, once a second. */
+    /** Shows how long the screen has been recording, once a second while on screen. */
     _tickRecording() {
+        if (!this._privacy.recording || !this.mapped) {
+            this._cancel('recording');
+            return;
+        }
         const elapsedMs = (GLib.get_monotonic_time() - this._privacy.recordingSince) / 1000;
         this._elapsed.text = Format.duration(elapsedMs);
         this._later('recording', 1000 - (elapsedMs % 1000) + 10, () => this._tickRecording());

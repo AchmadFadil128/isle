@@ -63,6 +63,12 @@ export const Island = GObject.registerClass({
         this._tintStyle = 'wash';
         this._tintStrength = 0;
         this._motion = {time: 0, level: 0};
+        /** The shape as last drawn (see `_sync`): unchanged, it isn't drawn again. */
+        this._drawn = {width: -1, height: -1, radius: -1, shoulder: -1, fraction: 0, inset: -1};
+        /** The shape's box as last traced (see `_outline`). */
+        this._outlineBox = {left: 0, right: 0, top: 0, radius: 0};
+        /** The glow's rising mask, kept while its top and height stay. */
+        this._rising = null;
 
         /** Where the island and its views' frame were last put, in whole pixels (see `_sync`). */
         this._islandX = 0;
@@ -170,7 +176,8 @@ export const Island = GObject.registerClass({
 
     /** Moves the 'siri' tint: `time` in seconds, `level` (0..1) swells it. */
     setTintMotion(time, level) {
-        this._motion = {time, level};
+        this._motion.time = time;
+        this._motion.level = level;
         if (this._glow.visible)
             this._glow.queue_repaint();
     }
@@ -215,7 +222,8 @@ export const Island = GObject.registerClass({
             for (const spring of this._springs)
                 spring.reset(spring.target);
             this._sync();
-        } else {
+        } else if (this._springs.some(spring => !spring.settled)) {
+            // Already its size (an alert updating in place): no frame to run.
             this._driver.start();
         }
         this._showView(view);
@@ -351,10 +359,29 @@ export const Island = GObject.registerClass({
         }
         for (const view of this._views)
             this._placeView(view);
-        this._shape.queue_repaint();
-        if (this._glow.visible)
-            this._glow.queue_repaint();
+        if (this._shapeChanged()) {
+            this._shape.queue_repaint();
+            if (this._glow.visible)
+                this._glow.queue_repaint();
+        }
         this.emit('geometry-changed');
+    }
+
+    /** Whether the shape differs from the one last drawn; notes it as drawn. */
+    _shapeChanged() {
+        const drawn = this._drawn;
+        const width = this._width.value, height = this._height.value;
+        const radius = this._radius.value, shoulder = this._shoulder.value;
+        if (drawn.width === width && drawn.height === height && drawn.radius === radius &&
+            drawn.shoulder === shoulder && drawn.fraction === this._islandFraction && drawn.inset === this._topInset)
+            return false;
+        drawn.width = width;
+        drawn.height = height;
+        drawn.radius = radius;
+        drawn.shoulder = shoulder;
+        drawn.fraction = this._islandFraction;
+        drawn.inset = this._topInset;
+        return true;
     }
 
     _repaint(area) {
@@ -411,7 +438,11 @@ export const Island = GObject.registerClass({
         cr.lineTo(left, top + shoulder);
         cr.arcNegative(left - shoulder, top + shoulder, shoulder, 0, -Math.PI / 2);
         cr.closePath();
-        this._outlineBox = {left, right, top, radius};
+        const box = this._outlineBox;
+        box.left = left;
+        box.right = right;
+        box.top = top;
+        box.radius = radius;
     }
 
     // Light from the edge inside the shape, as Siri's: brightest along the bottom and fading up the
@@ -420,14 +451,7 @@ export const Island = GObject.registerClass({
         const {time, level} = this._motion;
         const strength = this._tintStrength;
         const r = Math.max(0, radius);
-        const sides = () => {
-            cr.moveTo(left, top);
-            cr.lineTo(left, height - r);
-            cr.arcNegative(left + r, height - r, r, Math.PI, Math.PI / 2);
-            cr.lineTo(right - r, height);
-            cr.arcNegative(right - r, height - r, r, Math.PI / 2, 0);
-            cr.lineTo(right, top);
-        };
+        const sides = () => this._traceSides(cr, left, right, top, height, r);
         cr.pushGroup();
         cr.setOperator(Cairo.Operator.ADD);
         // Faint strokes, each narrower, so the edge glows softly inwards.
@@ -452,12 +476,25 @@ export const Island = GObject.registerClass({
         cr.stroke();
         cr.popGroupToSource();
         // Rising from the bottom: gone by the top of the sides.
-        const rising = new Cairo.LinearGradient(0, top, 0, height);
-        rising.addColorStopRGBA(0, 0, 0, 0, 0);
-        rising.addColorStopRGBA(0.55, 0, 0, 0, 0.35);
-        rising.addColorStopRGBA(1, 0, 0, 0, 1);
+        if (this._rising?.top !== top || this._rising.height !== height) {
+            const pattern = new Cairo.LinearGradient(0, top, 0, height);
+            pattern.addColorStopRGBA(0, 0, 0, 0, 0);
+            pattern.addColorStopRGBA(0.55, 0, 0, 0, 0.35);
+            pattern.addColorStopRGBA(1, 0, 0, 0, 1);
+            this._rising = {top, height, pattern};
+        }
         cr.setOperator(Cairo.Operator.OVER);
-        cr.mask(rising);
+        cr.mask(this._rising.pattern);
+    }
+
+    /** The glow's path: up both sides and along the bottom, round its corners (`r`). */
+    _traceSides(cr, left, right, top, height, r) {
+        cr.moveTo(left, top);
+        cr.lineTo(left, height - r);
+        cr.arcNegative(left + r, height - r, r, Math.PI, Math.PI / 2);
+        cr.lineTo(right - r, height);
+        cr.arcNegative(right - r, height - r, r, Math.PI / 2, 0);
+        cr.lineTo(right, top);
     }
 
     /** A left-to-right gradient of the tint's colours, shifted by `time` so they flow. */
@@ -469,12 +506,12 @@ export const Island = GObject.registerClass({
             const at = (i / STOPS + time * 0.12) * colors.length;
             const index = Math.floor(at);
             const mix = at - index;
-            const [r1, g1, b1] = colors[index % colors.length];
-            const [r2, g2, b2] = colors[(index + 1) % colors.length];
+            const from = colors[index % colors.length];
+            const to = colors[(index + 1) % colors.length];
             // A slow swell of brightness travelling along, so the light moves, not only its hue.
             const swell = shimmer ? 0.7 + 0.3 * Math.sin((i / STOPS) * 2 * Math.PI * 1.5 - time * 1.6) : 1;
-            gradient.addColorStopRGBA(i / STOPS, r1 + (r2 - r1) * mix, g1 + (g2 - g1) * mix,
-                b1 + (b2 - b1) * mix, alpha * swell);
+            gradient.addColorStopRGBA(i / STOPS, from[0] + (to[0] - from[0]) * mix,
+                from[1] + (to[1] - from[1]) * mix, from[2] + (to[2] - from[2]) * mix, alpha * swell);
         }
         return gradient;
     }

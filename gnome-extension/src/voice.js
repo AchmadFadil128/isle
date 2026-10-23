@@ -164,6 +164,7 @@ class Face extends St.DrawingArea {
         this._last = 0;
         this._gaze = {x: 0, y: 0};
         this._glance = {x: 0, y: 0};
+        this._targetOut = {x: 0, y: 0};
         this._nextGlance = 0;
         this._pointerAt = -POINTER_REST_S;
         this._blinkAt = -1;
@@ -191,7 +192,8 @@ class Face extends St.DrawingArea {
 
         const [px, py] = global.get_pointer();
         if (px !== this._pointer[0] || py !== this._pointer[1]) {
-            this._pointer = [px, py];
+            this._pointer[0] = px;
+            this._pointer[1] = py;
             this._pointerAt = time;
         }
         const target = this._target(time, px, py);
@@ -251,31 +253,50 @@ class Face extends St.DrawingArea {
         }
     }
 
-    /** Where the eyes look, each of x and y in -1..1. */
+    /** Where the eyes look, each of x and y in -1..1 (one object, reused each frame). */
     _target(time, px, py) {
-        const [fx, fy] = this.get_transformed_position();
-        const towards = (x, y) => ({x: clamp((x - fx - FACE_SIZE / 2) / 260), y: clamp((y - fy - FACE_SIZE / 2) / 180)});
+        const out = this._targetOut;
         // Reading along as you type.
         const caret = this._form === 'typing' ? this.lookAt?.() : null;
         if (caret)
-            return towards(...caret);
+            return this._towards(caret[0], caret[1]);
+        switch (this._form) {
         // Thinking, sad and confused look where their expression turns the head, swaying a little.
-        if (this._form === 'thinking')
-            return {x: 0.3 * Math.sin(time * 1.3), y: -0.15};
+        case 'thinking':
+            out.x = 0.3 * Math.sin(time * 1.3);
+            out.y = -0.15;
+            return out;
         // Reading along, line after line: a sweep left to right, then back.
-        if (this._form === 'searching')
-            return {x: 0.9 * Math.sin(time * 2.2), y: 0.15 + 0.1 * Math.sin(time * 0.7)};
-        if (this._form === 'error')
-            return {x: 0.15 * Math.sin(time * 0.8), y: 0.1};
-        if (this._form === 'confused')
-            return {x: 0.12 * Math.sin(time * 1.6), y: 0};
+        case 'searching':
+            out.x = 0.9 * Math.sin(time * 2.2);
+            out.y = 0.15 + 0.1 * Math.sin(time * 0.7);
+            return out;
+        case 'error':
+            out.x = 0.15 * Math.sin(time * 0.8);
+            out.y = 0.1;
+            return out;
+        case 'confused':
+            out.x = 0.12 * Math.sin(time * 1.6);
+            out.y = 0;
+            return out;
+        }
         if (time - this._pointerAt < POINTER_REST_S)
-            return towards(px, py);
+            return this._towards(px, py);
         if (time >= this._nextGlance) {
-            this._glance = {x: (Math.random() * 2 - 1) * 0.8, y: (Math.random() * 2 - 1) * 0.5};
+            this._glance.x = (Math.random() * 2 - 1) * 0.8;
+            this._glance.y = (Math.random() * 2 - 1) * 0.5;
             this._nextGlance = time + 1 + Math.random() * 2.2;
         }
         return this._glance;
+    }
+
+    /** Looking towards the point `x`, `y` on screen. */
+    _towards(x, y) {
+        const [fx, fy] = this.get_transformed_position();
+        const out = this._targetOut;
+        out.x = clamp((x - fx - FACE_SIZE / 2) / 260);
+        out.y = clamp((y - fy - FACE_SIZE / 2) / 180);
+        return out;
     }
 
     _paint(area) {
@@ -335,7 +356,7 @@ class Face extends St.DrawingArea {
             cr.clip();
         }
         // A capsule either way: tall, or wide (a happy squint).
-        const [left, top, right, bottom] = [-w / 2 + r, -h / 2 + r, w / 2 - r, h / 2 - r];
+        const left = -w / 2 + r, top = -h / 2 + r, right = w / 2 - r, bottom = h / 2 - r;
         cr.newSubPath();
         cr.arc(right, top, r, -Math.PI / 2, 0);
         cr.arc(right, bottom, r, 0, Math.PI / 2);
@@ -645,6 +666,26 @@ export const VoiceView = GObject.registerClass({
         }
     }
 
+    /** The edge glow's level for the phase at `t` (s). */
+    _levelFor(t) {
+        switch (this._phase) {
+        case 'listening':
+            return this._mic;
+        // Each key lights it a little, as a syllable does.
+        case 'typing':
+            return 0.08 + 0.6 * this._mic;
+        case 'transcribing':
+            return 0.28 + 0.05 * Math.sin(t * 2);
+        case 'thinking':
+        case 'acting':
+            return 0.32 + 0.08 * Math.sin(t * 1.8);
+        case 'reply':
+            return 0.12 + 0.03 * Math.sin(t * 1.2);
+        default:
+            return 0.05;
+        }
+    }
+
     _tick() {
         const t = (Date.now() - this._start) / 1000;
         const dt = Math.min(0.1, Math.max(0, t - this._lastTick));
@@ -655,15 +696,7 @@ export const VoiceView = GObject.registerClass({
         const rate = this._micTarget > this._mic ? MIC_ATTACK : MIC_RELEASE;
         this._mic += (this._micTarget - this._mic) * (1 - Math.exp(-dt * rate));
         // The edge glow swells with your voice, breathes while thinking and settles once answered.
-        const target = {
-            listening: this._mic,
-            // Each key lights it a little, as a syllable does.
-            typing: 0.08 + 0.6 * this._mic,
-            transcribing: 0.28 + 0.05 * Math.sin(t * 2),
-            thinking: 0.32 + 0.08 * Math.sin(t * 1.8),
-            acting: 0.32 + 0.08 * Math.sin(t * 1.8),
-            reply: 0.12 + 0.03 * Math.sin(t * 1.2),
-        }[this._phase] ?? 0.05;
+        const target = this._levelFor(t);
         this._level += (target - this._level) * (1 - Math.exp(-dt * LEVEL_RATE));
         this._face.level = this._level;
         this._face.step(t);

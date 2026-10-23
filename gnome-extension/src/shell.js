@@ -27,8 +27,8 @@ export const SF_PRO_CLASS = 'isle-sf';
 
 /** Whether Apple's SF Pro is installed, to use it instead of Inter. */
 export function hasSfPro() {
-    return PangoCairo.FontMap.get_default().list_families()
-        .some(family => family.get_name() === 'SF Pro Display');
+    // Looked up by name, without listing every family the system has.
+    return PangoCairo.FontMap.get_default().get_family('SF Pro Display') !== null;
 }
 /** Style class making the top bar slimmer; see stylesheet.css. */
 const COMPACT_BAR_CLASS = 'isle-compact-bar';
@@ -101,10 +101,12 @@ export class TopBar extends Signals.EventEmitter {
     _applyStyle() {
         this._syncColor();
         // The bar's height changes with these; `height-changed` re-lays out the island.
-        toggleStyleClass(Main.panel, COMPACT_BAR_CLASS, this._settings.get_boolean('compact-top-bar'));
-        toggleStyleClass(Main.panel, NOTCH_BAR_CLASS, this._settings.get_boolean('island-in-top-bar'));
-        toggleStyleClass(Main.panel, GLASS_BAR_CLASS, this._settings.get_string('top-bar-style') === 'glass');
-        toggleStyleClass(Main.panel, SF_PRO_CLASS, hasSfPro());
+        setStyleClasses(Main.panel, {
+            [COMPACT_BAR_CLASS]: this._settings.get_boolean('compact-top-bar'),
+            [NOTCH_BAR_CLASS]: this._settings.get_boolean('island-in-top-bar'),
+            [GLASS_BAR_CLASS]: this._settings.get_string('top-bar-style') === 'glass',
+            [SF_PRO_CLASS]: hasSfPro(),
+        });
     }
 
     // Another extension that sets the bar's style too would undo Isle's rule each time Isle set it, in a
@@ -147,21 +149,22 @@ export class TopBar extends Signals.EventEmitter {
 
         // No colour of Isle's: the theme's again.
         this._syncColor(null);
-        Main.panel.remove_style_class_name(COMPACT_BAR_CLASS);
-        Main.panel.remove_style_class_name(NOTCH_BAR_CLASS);
-        Main.panel.remove_style_class_name(GLASS_BAR_CLASS);
-        Main.panel.remove_style_class_name(SF_PRO_CLASS);
+        setStyleClasses(Main.panel, {
+            [COMPACT_BAR_CLASS]: false, [NOTCH_BAR_CLASS]: false, [GLASS_BAR_CLASS]: false, [SF_PRO_CLASS]: false,
+        });
         this._dateMenu.set_width(-1);
         this._dateMenu.opacity = 255;
         this._dateMenu.reactive = true;
     }
 }
 
-function toggleStyleClass(actor, name, on) {
-    if (on)
-        actor.add_style_class_name(name);
-    else
-        actor.remove_style_class_name(name);
+// Adds or removes each of `classes` ({name: on}) in one change: each change restyles the whole bar at once.
+function setStyleClasses(actor, classes) {
+    const current = (actor.get_style_class_name() ?? '').split(/\s+/).filter(Boolean);
+    const kept = current.filter(name => !(name in classes));
+    const wanted = [...kept, ...Object.keys(classes).filter(name => classes[name])];
+    if (wanted.length !== current.length || wanted.some(name => !current.includes(name)))
+        actor.set_style_class_name(wanted.join(' ') || null);
 }
 
 // Routes GNOME's volume and brightness OSDs to `handler`; if it returns false, GNOME shows its own.
