@@ -163,8 +163,7 @@ function keyButton(text, key, styleClass, onClick) {
     return button;
 }
 
-// The card for one command, made like a small terminal. Waiting: the terminal's sign beside what it is for and
-// a line on it, the command coloured as a shell would, then what to know (a password, a script from the web) on
+// The card for one command, set straight on the pill: no box of its own. Waiting: what it is for and a line on it, the command coloured as a shell would, then what to know (a password, a script from the web) on
 // the left and Deny or Run (Esc, Enter) on the right. Running: how long, its last lines as they print, and Stop.
 // Ended: a single line, done, failed (with the error), denied or stopped.
 export const CommandCard = GObject.registerClass({
@@ -178,11 +177,9 @@ export const CommandCard = GObject.registerClass({
         super._init({...VERTICAL, style_class: 'isle-card', x_expand: true});
         this.set_pivot_point(0.5, 0.5);
 
-        // The head: the sign, what it is for and a line under it, and once ended how it went.
+        // The head: what it is for and a line under it; gone once it ended (the answer says it).
         const head = new St.BoxLayout({style_class: 'isle-card-head'});
-        this._glyph = new St.Bin({style_class: 'isle-card-glyph', y_align: Clutter.ActorAlign.CENTER,
-            child: new St.Icon({gicon: icon('isle-terminal-symbolic'), icon_size: 13})});
-        head.add_child(this._glyph);
+        this._head = head;
         const titles = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         this._title = label('', 'isle-card-title');
         this._title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
@@ -191,20 +188,23 @@ export const CommandCard = GObject.registerClass({
         titles.add_child(this._title);
         titles.add_child(this._subtitle);
         head.add_child(titles);
+        this.add_child(head);
+
+        // The terminal: the command, then what it prints.
+        this._terminal = new St.BoxLayout({...VERTICAL, style_class: 'isle-card-terminal'});
+        // Its colours are markup, which the hyphen fix of `wrapLines` would undo at the start. Once ended, how it
+        // went sits at the line's end: the card is that one line.
+        const line = new St.BoxLayout({style_class: 'isle-card-line'});
+        this._command = label('', 'isle-card-command', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        this._command.clutter_text.set({use_markup: true, line_wrap_mode: Pango.WrapMode.WORD_CHAR});
+        line.add_child(this._command);
         this._status = new St.BoxLayout({style_class: 'isle-card-status', y_align: Clutter.ActorAlign.CENTER});
         this._statusIcon = new St.Icon({icon_size: 11, y_align: Clutter.ActorAlign.CENTER});
         this._statusText = label('', 'isle-card-status-text', {y_align: Clutter.ActorAlign.CENTER});
         this._status.add_child(this._statusIcon);
         this._status.add_child(this._statusText);
-        head.add_child(this._status);
-        this.add_child(head);
-
-        // The terminal: the command, then what it prints.
-        this._terminal = new St.BoxLayout({...VERTICAL, style_class: 'isle-card-terminal'});
-        // Its colours are markup, which the hyphen fix of `wrapLines` would undo at the start.
-        this._command = label('', 'isle-card-command');
-        this._command.clutter_text.set({use_markup: true, line_wrap_mode: Pango.WrapMode.WORD_CHAR});
-        this._terminal.add_child(this._command);
+        line.add_child(this._status);
+        this._terminal.add_child(line);
         this._output = label('', 'isle-card-output');
         this._output.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this._terminal.add_child(this._output);
@@ -265,13 +265,15 @@ export const CommandCard = GObject.registerClass({
         this._output.style_class = card.status === 'failed' ? 'isle-card-output isle-card-output-failed' : 'isle-card-output';
         this._sweep.visible = running;
 
+        this._head.visible = !ended;
         const [iconName, text, styleClass] = STATUS[card.status] ?? [null, '', ''];
         this._status.visible = ended;
         if (ended) {
             this._statusIcon.gicon = icon(iconName);
-            const time = card.seconds >= 1 ? ` · ${elapsed(card.seconds)}` : '';
-            const exit = card.status === 'failed' && card.exit ? ` · exit ${card.exit}` : '';
-            this._statusText.text = `${text}${exit}${time}`;
+            // Short, so the command keeps its line: a tick and how long, the exit code, or the word.
+            const done = card.status === 'done' && card.seconds >= 1 ? elapsed(card.seconds) : null;
+            const failed = card.status === 'failed' && card.exit ? `exit ${card.exit}` : null;
+            this._statusText.text = done ?? failed ?? text;
             this._status.style_class = `isle-card-status ${styleClass}`;
         }
         this._foot.visible = waiting || running;
