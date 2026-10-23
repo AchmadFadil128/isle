@@ -67,9 +67,54 @@ pub fn from_text(text: &str) -> Answer {
     serde_json::from_str(inner).unwrap_or_else(|_| Answer::plain(text))
 }
 
+/// What `say` holds so far in an answer still being written (`{"say": "Hel`), for the island to show as it
+/// comes; `None` until its value has begun.
+pub fn partial_say(json: &str) -> Option<String> {
+    let at = json.find("\"say\"")?;
+    let rest = json[at + 5..].trim_start().strip_prefix(':')?.trim_start();
+    let mut chars = rest.strip_prefix('"')?.chars();
+    let mut say = String::new();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => break,
+            '\\' => match chars.next() {
+                Some('n') => say.push('\n'),
+                Some('t') => say.push('\t'),
+                Some('u') => {
+                    let code: String = chars.by_ref().take(4).collect();
+                    // Half a \u escape so far, or half a surrogate pair: shown once it is whole.
+                    match u32::from_str_radix(&code, 16).ok().and_then(char::from_u32) {
+                        Some(c) if code.len() == 4 => say.push(c),
+                        _ => break,
+                    }
+                }
+                Some(other) => say.push(other),
+                None => break,
+            },
+            c => say.push(c),
+        }
+    }
+    Some(say)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_say_as_it_is_written() {
+        assert_eq!(partial_say(r#"{"actions":[],"#), None);
+        assert_eq!(partial_say(r#"{"say": "Hel"#).as_deref(), Some("Hel"));
+        assert_eq!(
+            partial_say(r#"{"say":"a \"b\"\nc","listen":false}"#).as_deref(),
+            Some("a \"b\"\nc")
+        );
+        assert_eq!(
+            partial_say(r#"{"say":"caf\u00e9 \u00"#).as_deref(),
+            Some("café ")
+        );
+        assert_eq!(partial_say(r#"{"say":"end\"#).as_deref(), Some("end"));
+    }
 
     #[test]
     fn reads_an_answer_however_it_is_wrapped() {

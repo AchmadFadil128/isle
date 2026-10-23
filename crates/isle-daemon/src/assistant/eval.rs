@@ -888,8 +888,16 @@ async fn run(case: &Case) -> Result<Vec<Answer>, String> {
         ..Session::default()
     };
     let provider = eval_provider();
-    let mut agy = Brain::start(provider, &model, None, &data_dir().join("assistant"))
-        .map_err(|err| format!("{err:#}"))?;
+    session.provider = Some(provider);
+    let mut agy = Brain::start(
+        provider,
+        &model,
+        None,
+        &data_dir().join("assistant"),
+        &session.instructions(),
+    )
+    .await
+    .map_err(|err| format!("{err:#}"))?;
     let facts = system::facts();
     let mut agenda = Agenda::new();
     let mut answers = Vec::new();
@@ -914,7 +922,7 @@ async fn run(case: &Case) -> Result<Vec<Answer>, String> {
             }
             taken
         });
-        let answer = agent::think(&mut agy, &prompt, &activity, &desk)
+        let answer = agent::think(&mut agy, &prompt, &activity, &activity, &desk)
             .await
             .map_err(|err| format!("{err:#}"));
         drop(desk);
@@ -1004,4 +1012,68 @@ fn show(answers: &[Answer]) -> String {
         answer.say,
         serde_json::to_string(&answer.actions).unwrap_or_default()
     )
+}
+
+/// How long a request takes, start to answer, the way isled now runs it: the AI started and warmed as the
+/// island opens, then two requests on the same process.
+#[tokio::test]
+#[ignore = "asks the real AI"]
+async fn latency() {
+    let provider = eval_provider();
+    let model = std::env::var("ISLE_EVAL_MODEL").unwrap_or_default();
+    let mut session = Session {
+        context: Context {
+            apps: APPS.iter().map(|app| app.to_string()).collect(),
+            actions: super::action_kinds().to_vec(),
+            ..Context::default()
+        },
+        provider: Some(provider),
+        ..Session::default()
+    };
+    let started = std::time::Instant::now();
+    let mut brain = Brain::start(
+        provider,
+        &model,
+        None,
+        &data_dir().join("assistant"),
+        &session.instructions(),
+    )
+    .await
+    .unwrap();
+    brain.warm().await.unwrap();
+    println!(
+        "{}: started and warm in {:.2} s",
+        provider.name(),
+        started.elapsed().as_secs_f64()
+    );
+    let data = format!("{}\n{}", system::facts(), Agenda::new().summary());
+    for request in [
+        "hello",
+        "what is 12 times 12?",
+        "terus dalam bahasa indonesia?",
+    ] {
+        let prompt = session.prompt(request, &data);
+        let (activity, _steps) = tokio::sync::mpsc::unbounded_channel();
+        let (draft, mut drafts) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let (desk, _acts) = tokio::sync::mpsc::unbounded_channel::<agent::Act>();
+        let asked = std::time::Instant::now();
+        let first =
+            tokio::spawn(async move { drafts.recv().await.map(|_| asked.elapsed().as_secs_f64()) });
+        let answer = agent::think(&mut brain, &prompt, &activity, &draft, &desk)
+            .await
+            .unwrap();
+        let total = asked.elapsed().as_secs_f64();
+        drop(draft);
+        let first = first.await.unwrap();
+        println!(
+            "  {request:?}: {total:.2} s (first words {}) → {}",
+            first.map_or("-".into(), |f| format!("{f:.2} s")),
+            answer.say
+        );
+        session.sent_data = Some(data.clone());
+    }
+    if let Some(id) = brain.conversation() {
+        drop(brain);
+        Brain::forget(provider, &id);
+    }
 }

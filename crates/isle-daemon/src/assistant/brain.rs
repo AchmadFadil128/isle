@@ -83,6 +83,12 @@ impl Provider {
         }
     }
 
+    /// Whether it takes Isle's job as its own instructions (a system prompt), once per conversation;
+    /// agy gets it with the conversation's first request instead.
+    pub fn takes_instructions(self) -> bool {
+        self != Provider::Agy
+    }
+
     pub fn all() -> [Provider; 3] {
         AUTO
     }
@@ -136,20 +142,39 @@ pub enum Brain {
 }
 
 impl Brain {
-    pub fn start(
+    /// Starts `provider`'s CLI, resuming conversation `resume` or starting one with `instructions` as its
+    /// job (see `Provider::takes_instructions`). It stays up for the next turns until dropped.
+    pub async fn start(
         provider: Provider,
         model: &str,
         resume: Option<&str>,
         workspace: &Path,
+        instructions: &str,
     ) -> anyhow::Result<Self> {
         let program = provider.program().ok_or_else(|| {
             anyhow::anyhow!("could not start {}: no such file", provider.command())
         })?;
         Ok(match provider {
             Provider::Agy => Brain::Agy(Agy::start_program(&program, model, resume, workspace)?),
-            Provider::Claude => Brain::Claude(Claude::start(&program, model, resume, workspace)?),
-            Provider::Codex => Brain::Codex(Codex::start(&program, model, resume, workspace)?),
+            Provider::Claude => Brain::Claude(Claude::start(
+                &program,
+                model,
+                resume,
+                workspace,
+                instructions,
+            )?),
+            Provider::Codex => {
+                Brain::Codex(Codex::start(&program, model, resume, workspace, instructions).await?)
+            }
         })
+    }
+
+    /// Gets ready for the first turn, so it need not wait: Codex opens its conversation now.
+    pub async fn warm(&mut self) -> anyhow::Result<()> {
+        match self {
+            Brain::Codex(codex) => codex.warm().await,
+            Brain::Agy(_) | Brain::Claude(_) => Ok(()),
+        }
     }
 
     pub fn provider(&self) -> Provider {
@@ -160,16 +185,18 @@ impl Brain {
         }
     }
 
-    /// One turn; `activity` hears what it does meanwhile ("Searching the web for …").
+    /// One turn; `activity` hears what it does meanwhile ("Searching the web for …"), and `draft` what it
+    /// has said so far, as it writes (Claude and Codex).
     pub async fn ask(
         &mut self,
         prompt: &str,
         activity: Option<&UnboundedSender<String>>,
+        draft: Option<&UnboundedSender<String>>,
     ) -> anyhow::Result<Answer> {
         match self {
             Brain::Agy(agy) => agy.ask(prompt, activity).await,
-            Brain::Claude(claude) => claude.ask(prompt, activity).await,
-            Brain::Codex(codex) => codex.ask(prompt, activity).await,
+            Brain::Claude(claude) => claude.ask(prompt, activity, draft).await,
+            Brain::Codex(codex) => codex.ask(prompt, activity, draft).await,
         }
     }
 
@@ -182,8 +209,7 @@ impl Brain {
         }
     }
 
-    /// Deletes the conversation `id` had with `provider` now (the eval leaves nothing behind).
-    #[cfg(test)]
+    /// Deletes the conversation `id` had with `provider` now: a chat that ended, or the eval's.
     pub fn forget(provider: Provider, id: &str) {
         match provider {
             Provider::Agy => agy::forget(id),

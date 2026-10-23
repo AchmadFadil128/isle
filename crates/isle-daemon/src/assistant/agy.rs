@@ -97,7 +97,6 @@ fn prune_in(store: &Path, today: NaiveDate) {
 }
 
 /// Deletes the conversation `id` now.
-#[cfg(test)]
 pub fn forget(id: &str) {
     if id.is_empty() || !id.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
         return;

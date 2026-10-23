@@ -19,9 +19,6 @@ use tokio::sync::mpsc::UnboundedSender;
 use super::answer::{Answer, SCHEMA};
 use super::child::{self, Events, Group};
 
-/// Claude Code's own coding-agent prompt is replaced by this; the job comes with the first request.
-const SYSTEM: &str = "You are Isle, a voice assistant on the user's Linux desktop, not a coding agent. Follow \
-     the instructions in the user's messages and answer only in the JSON they describe.";
 /// The tools it may use: the web, nothing on this computer.
 const TOOLS: &str = "WebSearch,WebFetch";
 const STDERR_LINES: usize = 20;
@@ -35,11 +32,13 @@ pub struct Claude {
 }
 
 impl Claude {
+    /// Starts Claude Code with Isle's job (`instructions`) in place of its own coding-agent prompt.
     pub fn start(
         program: &Path,
         model: &str,
         resume: Option<&str>,
         workspace: &Path,
+        instructions: &str,
     ) -> anyhow::Result<Self> {
         std::fs::create_dir_all(workspace)?;
         let mut command = Command::new(program);
@@ -51,11 +50,13 @@ impl Claude {
                 "--output-format",
                 "stream-json",
                 "--verbose",
+                // Its words as they come, for the island to show while it writes.
+                "--include-partial-messages",
             ])
             .args(["--tools", TOOLS, "--allowedTools", TOOLS])
             // None of the user's settings, hooks, CLAUDE.md or MCP servers: only its sign-in.
             .args(["--setting-sources", "", "--strict-mcp-config"])
-            .args(["--system-prompt", SYSTEM, "--json-schema", SCHEMA]);
+            .args(["--system-prompt", instructions, "--json-schema", SCHEMA]);
         if !model.is_empty() {
             command.args(["--model", model]);
         }
@@ -96,9 +97,10 @@ impl Claude {
         &mut self,
         prompt: &str,
         activity: Option<&UnboundedSender<String>>,
+        draft: Option<&UnboundedSender<String>>,
     ) -> anyhow::Result<Answer> {
         self.stderr.lock().unwrap().clear();
-        self.turn(prompt, activity).await.map_err(|err| {
+        self.turn(prompt, activity, draft).await.map_err(|err| {
             let stderr = Vec::from(self.stderr.lock().unwrap().clone()).join(" | ");
             if stderr.is_empty() {
                 err
@@ -112,6 +114,7 @@ impl Claude {
         &mut self,
         prompt: &str,
         activity: Option<&UnboundedSender<String>>,
+        draft: Option<&UnboundedSender<String>>,
     ) -> anyhow::Result<Answer> {
         let message =
             serde_json::json!({"type": "user", "message": {"role": "user", "content": prompt}});
@@ -121,16 +124,36 @@ impl Claude {
             .write_all(format!("{message}\n").as_bytes())
             .await;
         // Its first event and its answer carry the conversation's id; tool results, the bulk, are skipped.
-        let words: &[&str] = match activity {
-            Some(_) => &["\"init\"", "\"result\"", "\"tool_use\""],
-            None => &["\"init\"", "\"result\""],
-        };
+        // Its answer is written into the StructuredOutput tool: that JSON, as it comes, is the draft.
+        let words: &[&str] = &[
+            "\"init\"",
+            "\"result\"",
+            "\"tool_use\"",
+            "\"input_json_delta\"",
+        ];
+        let mut written = String::new();
+        let mut shown = String::new();
         while let Some(event) = self.events.next(words).await? {
             if let Some(id) = event["session_id"].as_str() {
                 self.conversation = Some(id.to_owned());
             }
             match event["type"].as_str() {
                 Some("result") => return parse_result(&event),
+                Some("stream_event") => {
+                    let delta = &event["event"]["delta"];
+                    if delta["type"] == "input_json_delta" {
+                        written.push_str(delta["partial_json"].as_str().unwrap_or_default());
+                        if let (Some(draft), Some(say)) =
+                            (draft, super::answer::partial_say(&written))
+                            && say != shown
+                        {
+                            draft.send(say.clone()).ok();
+                            shown = say;
+                        }
+                    } else if event["event"]["type"] == "content_block_start" {
+                        written.clear();
+                    }
+                }
                 Some("assistant") => {
                     if let Some(activity) = activity {
                         steps(&event).into_iter().for_each(|step| {
@@ -202,7 +225,6 @@ fn store() -> Option<PathBuf> {
 }
 
 /// Deletes Isle's Claude conversation `id` now.
-#[cfg(test)]
 pub fn forget(id: &str) {
     if let Some(dir) = store() {
         std::fs::remove_file(dir.join(format!("{id}.jsonl"))).ok();
