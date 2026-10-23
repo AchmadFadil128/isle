@@ -356,7 +356,7 @@ export class Controller {
             this._settingsChanged.push(this._settings.connect(`changed::${key}`, () => this._syncEventAlerts()));
         for (const provider of AGENT_PROVIDERS) {
             this._settingsChanged.push(this._settings.connect(`changed::agent-alerts-${provider}`, () =>
-                this._daemon.call('agents', 'SetHooked', provider, this._settings.get_boolean(`agent-alerts-${provider}`))));
+                this._hookAgent(provider)));
         }
 
         this._topBar.connect('height-changed', () => this._updateGeometry());
@@ -403,13 +403,15 @@ export class Controller {
             else if (name === 'media')
                 this._daemon.call('media', 'SetLyrics', this._settings.get_boolean('lyrics-online'));
             else if (name === 'agents')
-                this._syncAgents();
+                this._syncAgents(true);
         });
         daemon.connect('agent-event', (_daemon, event) => this._onAgentEvent(event));
         this._expanded.pageNamed('calendar').connect('event-soon', (_page, json) => this._onEventSoon(JSON.parse(json)));
         daemon.connect('changed', (_daemon, key) => {
             if (key === 'updates')
                 this._onLatest();
+            else if (key === 'agents' && this._agentsUnsynced)
+                this._syncAgents();
         });
         this._settingsChanged.push(this._settings.connect('changed::check-updates', () => this._syncUpdates()));
         this._settingsChanged.push(this._settings.connect('changed::lyrics-online', () =>
@@ -519,6 +521,9 @@ export class Controller {
         const [source, uid] = event.id?.split('\n') ?? [];
         if (source && uid)
             link = (await this._daemon.call('calendar', 'MeetingLink', source, uid))?.[0] ?? '';
+        // Isle turned off, or Do Not Disturb on, while the link was looked for.
+        if (this._destroying || this._notifications.dnd)
+            return;
         this._post(Alerts.meeting(event, link, () => {
             try {
                 Gio.AppInfo.launch_default_for_uri(link, global.create_app_launch_context(0, -1));
@@ -528,13 +533,30 @@ export class Controller {
         }));
     }
 
-    /** The hooks as Settings say, once isled is there: a switch left on comes back after a reinstall. */
-    _syncAgents() {
-        const agents = this._daemon.state.agents ?? {};
+    /** The hooks as Settings say, once isled is there: a switch left on comes back after a reinstall, and one
+     * turned off while isled was away takes its hook out. */
+    _syncAgents(appeared = false) {
+        // Started again, isled's properties may come a moment after it: then on the first of them.
+        this._agentsUnsynced = !this._daemon.state.agents && (appeared || this._agentsUnsynced);
+        if (this._agentsUnsynced)
+            return;
+        const agents = this._daemon.state.agents;
         for (const provider of AGENT_PROVIDERS) {
-            if (agents[provider]?.found && !agents[provider].hooked && this._settings.get_boolean(`agent-alerts-${provider}`))
-                this._daemon.call('agents', 'SetHooked', provider, true);
+            const {found, hooked} = agents[provider] ?? {};
+            // Not found any more, a hook left behind still goes when its switch is off.
+            if ((found || hooked) && Boolean(hooked) !== this._settings.get_boolean(`agent-alerts-${provider}`))
+                this._hookAgent(provider);
         }
+    }
+
+    /** Puts in or takes out `provider`'s hook, as its switch says; refused, the switch goes off and says why. */
+    async _hookAgent(provider) {
+        const on = this._settings.get_boolean(`agent-alerts-${provider}`);
+        const {error} = await this._daemon.attempt('agents', 'SetHooked', provider, on);
+        if (!error || !on || this._destroying)
+            return;
+        this._settings.set_boolean(`agent-alerts-${provider}`, false);
+        this._post(Alerts.agentRefused(provider, error));
     }
 
     /** Claude Code or Codex needs the user, or is done: an alert, unless its window is the one in front. */

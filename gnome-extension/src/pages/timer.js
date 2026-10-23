@@ -101,21 +101,27 @@ class TimerPage extends Page {
     }
 
     _step(key, step, min, max) {
-        const config = this.daemon.state.pomodoroConfig;
+        // From what was last asked for: clicks faster than isled answers each count.
+        const config = this._asked ?? this.daemon.state.pomodoroConfig;
         if (!config)
             return;
         const minutes = Math.min(max, Math.max(min, (config[key] ?? min) + step));
         if (minutes === config[key])
             return;
+        this._asked = {...config, [key]: minutes};
         // Shown at once; isled's answer brings the same.
         this._values.get(key).text = String(minutes);
-        this.daemon.call('pomodoro', 'SetConfig', JSON.stringify({...config, [key]: minutes}));
+        this.daemon.call('pomodoro', 'SetConfig', JSON.stringify(this._asked));
     }
 
     _syncSteppers() {
         const config = this.daemon.state.pomodoroConfig;
+        // isled has caught up with the clicks (or another change came): its config holds again.
+        if (this._asked && (!config || STEPPERS.every(({key}) => config[key] === this._asked[key])))
+            this._asked = null;
+        const shown = this._asked ?? config;
         for (const {key} of STEPPERS)
-            this._values.get(key).text = config?.[key] !== undefined ? String(config[key]) : '–';
+            this._values.get(key).text = shown?.[key] !== undefined ? String(shown[key]) : '–';
     }
 
     get relevant() {
@@ -160,5 +166,11 @@ class TimerPage extends Page {
 
     onActivate() {
         this._update();
+    }
+
+    onDeactivate() {
+        // A click isled refused, or a change from Settings meanwhile: what it holds shows next time.
+        this._asked = null;
+        this._syncSteppers();
     }
 });

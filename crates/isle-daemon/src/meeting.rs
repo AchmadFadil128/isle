@@ -20,7 +20,7 @@ const FACTORY: &str = "org.gnome.evolution.dataserver.CalendarFactory";
 const CALENDAR: &str = "org.gnome.evolution.dataserver.Calendar";
 /// The properties a link is looked for in, in this order.
 const PROPERTIES: [&str; 4] = ["X-GOOGLE-CONFERENCE", "URL", "LOCATION", "DESCRIPTION"];
-/// A lookup (opening a calendar can reach its server) gives up after this.
+/// Each step of a lookup (opening a calendar can reach its server) gives up after this.
 const TIMEOUT: Duration = Duration::from_secs(5);
 const KEEP: Duration = Duration::from_secs(6 * 60 * 60);
 const CACHED: usize = 256;
@@ -46,18 +46,14 @@ impl MeetingLinks {
         if let Some(link) = self.cached(&key, Instant::now()) {
             return link;
         }
-        match tokio::time::timeout(TIMEOUT, read_event(bus, source, event)).await {
-            Ok(Ok(ical)) => {
+        match read_event(bus, source, event).await {
+            Ok(ical) => {
                 let link = find_link(&ical).unwrap_or_default();
                 self.remember(key, link.clone(), Instant::now());
                 link
             }
-            Ok(Err(err)) => {
+            Err(err) => {
                 debug!("could not read calendar event {event}: {err}");
-                String::new()
-            }
-            Err(_) => {
-                debug!("reading calendar event {event} took too long");
                 String::new()
             }
         }
@@ -84,8 +80,35 @@ impl MeetingLinks {
     }
 }
 
+/// `step`, or an error once it has taken `TIMEOUT`.
+async fn timed<T>(step: impl Future<Output = zbus::Result<T>>) -> zbus::Result<T> {
+    tokio::time::timeout(TIMEOUT, step)
+        .await
+        .unwrap_or_else(|_| Err(zbus::Error::Failure("timed out".into())))
+}
+
 /// The event's iCalendar text, from the calendar `source` in EDS.
 async fn read_event(bus: &Connection, source: &str, event: &str) -> zbus::Result<String> {
+    let (path, name) = timed(open_calendar(bus, source)).await?;
+    let (path, name) = (path.as_str(), name.as_str());
+    let ical = timed(async {
+        bus.call_method(Some(name), path, Some(CALENDAR), "Open", &())
+            .await?;
+        bus.call_method(Some(name), path, Some(CALENDAR), "GetObject", &(event, ""))
+            .await?
+            .body()
+            .deserialize::<String>()
+    })
+    .await;
+    // Lets go of isled's hold on the calendar however reading it went; GNOME Shell keeps its own.
+    if let Err(err) = timed(bus.call_method(Some(name), path, Some(CALENDAR), "Close", &())).await {
+        debug!("could not close calendar {source}: {err}");
+    }
+    ical
+}
+
+/// Opens the calendar `source` for isled: its object path and bus name.
+async fn open_calendar(bus: &Connection, source: &str) -> zbus::Result<(String, String)> {
     let mut opened = None;
     let mut failure = None;
     for factory in FACTORIES {
@@ -106,25 +129,7 @@ async fn read_event(bus: &Connection, source: &str, event: &str) -> zbus::Result
             Err(err) => failure = Some(err),
         }
     }
-    let Some((path, name)) = opened else {
-        return Err(failure.unwrap_or(zbus::Error::Unsupported));
-    };
-    let path = path.as_str();
-    let name = name.as_str();
-    bus.call_method(Some(name), path, Some(CALENDAR), "Open", &())
-        .await?;
-    let ical = bus
-        .call_method(Some(name), path, Some(CALENDAR), "GetObject", &(event, ""))
-        .await
-        .and_then(|reply| reply.body().deserialize::<String>());
-    // Lets go of isled's hold on the calendar; GNOME Shell keeps its own.
-    if let Err(err) = bus
-        .call_method(Some(name), path, Some(CALENDAR), "Close", &())
-        .await
-    {
-        debug!("could not close calendar {source}: {err}");
-    }
-    ical
+    opened.ok_or_else(|| failure.unwrap_or(zbus::Error::Unsupported))
 }
 
 /// The first meeting link in an event's iCalendar text, looked for property by property.

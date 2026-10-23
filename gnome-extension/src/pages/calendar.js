@@ -110,9 +110,18 @@ export const CalendarPage = GObject.registerClass({
     /** Asks the desktop's calendars for the current month, where today's events are. */
     _requestThisMonth() {
         const today = new Date();
+        this._requestRange(new Date(today.getFullYear(), today.getMonth(), 1));
+    }
+
+    /** Asks for the month from `begin` and, for this month, tomorrow too: on its last day, the alarms look
+     * a day ahead. The calendars answer with `changed`. */
+    _requestRange(begin) {
+        const today = startOfDay(new Date());
+        let end = new Date(begin.getFullYear(), begin.getMonth() + 1, 1);
+        if (begin.getFullYear() === today.getFullYear() && begin.getMonth() === today.getMonth())
+            end = new Date(Math.max(end, addDays(today, 2)));
         try {
-            this._source?.requestRange(new Date(today.getFullYear(), today.getMonth(), 1),
-                new Date(today.getFullYear(), today.getMonth() + 1, 1));
+            this._source?.requestRange(begin, end);
         } catch (e) {
             console.warn(`Isle: could not ask for calendar events: ${e.message}`);
         }
@@ -137,16 +146,20 @@ export const CalendarPage = GObject.registerClass({
         if (!next)
             return;
         const due = next.start.getTime() - this._alarmLeadMs - now;
+        // Kept while the page is closed: the alarms are for the desktop, not the page.
         if (due > ALARM_CHECK_MS) {
-            this.later('alarm', ALARM_CHECK_MS, () => this._scheduleAlarm());
+            this.later('alarm', ALARM_CHECK_MS, () => this._scheduleAlarm(), {keep: true});
             return;
         }
         this.later('alarm', Math.max(0, due), () => {
             this._alarmed.add(key(next));
-            this.emit('event-soon', JSON.stringify({id: next.id, title: next.title,
-                start_ms: next.start.getTime(), end_ms: next.end?.getTime() ?? null}));
+            // Late past its start (the computer slept): too late to remind of it.
+            if (next.start.getTime() > Date.now()) {
+                this.emit('event-soon', JSON.stringify({id: next.id, title: next.title,
+                    start_ms: next.start.getTime(), end_ms: next.end?.getTime() ?? null}));
+            }
             this._scheduleAlarm();
-        });
+        }, {keep: true});
     }
 
     // Building
@@ -544,12 +557,7 @@ export const CalendarPage = GObject.registerClass({
 
     /** Asks the desktop's calendars for the month shown; they answer with `changed`. */
     _requestMonth() {
-        const begin = this._month;
-        try {
-            this._source?.requestRange(begin, new Date(begin.getFullYear(), begin.getMonth() + 1, 1));
-        } catch (e) {
-            console.warn(`Isle: could not ask for calendar events: ${e.message}`);
-        }
+        this._requestRange(this._month);
     }
 
     async _add() {
@@ -588,10 +596,11 @@ export const CalendarPage = GObject.registerClass({
         this.later('midnight', addDays(startOfDay(now), 1) - now + 1000, () => {
             if (!this._followToday())
                 this._refresh();
-            // A new month: its events, for the alarms.
+            // A new month: its events, for the alarms; the same range answers nothing, so plan anew too.
             this._requestThisMonth();
+            this._scheduleAlarm();
             this._scheduleMidnight();
-        });
+        }, {keep: true});
     }
 
     onActivate() {

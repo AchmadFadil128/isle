@@ -29,6 +29,8 @@ export const Page = GObject.registerClass({
         this.daemon = daemon;
         this._active = false;
         this._timeouts = new Map();
+        /** Timeouts that outlive the page going off screen (see `later`'s `keep`). */
+        this._kept = new Set();
         this._daemonHandlers = [];
         /** Whether it changed since last laid out out of sight (see `Expanded.warmPage`). */
         this.cold = true;
@@ -44,7 +46,10 @@ export const Page = GObject.registerClass({
             this.onActivate();
         } else {
             this.onDeactivate();
-            this.cancelAll();
+            for (const name of [...this._timeouts.keys()]) {
+                if (!this._kept.has(name))
+                    this.cancel(name);
+            }
         }
     }
 
@@ -111,9 +116,14 @@ export const Page = GObject.registerClass({
         }));
     }
 
-    /** Runs `callback` after `ms`, replacing any pending timeout of the same name. */
-    later(name, ms, callback) {
+    /** Runs `callback` after `ms`, replacing any pending timeout of the same name; with `keep`, also while
+     * the page is off screen. */
+    later(name, ms, callback, {keep = false} = {}) {
         this.cancel(name);
+        if (keep)
+            this._kept.add(name);
+        else
+            this._kept.delete(name);
         // An await that ends after the page went (the extension turned off) schedules nothing.
         if (this._destroyed)
             return;

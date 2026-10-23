@@ -292,20 +292,27 @@ export class Daemon extends Signals.EventEmitter {
 
     /** Calls `method` on interface `name`. Failures are logged, not thrown, as callers can rarely do better. */
     call(name, method, ...args) {
+        return this.attempt(name, method, ...args).then(({result}) => result);
+    }
+
+    /** As `call`, with why it failed: {result, error}; `error` is isled's own message when it refused. */
+    attempt(name, method, ...args) {
         const proxy = this._proxies[name];
         if (!proxy)
-            return Promise.resolve(null);
+            return Promise.resolve({result: null, error: null});
         return new Promise(resolve => {
             try {
                 proxy[`${method}Remote`](...args, (result, error) => {
                     if (error)
                         console.warn(`Isle: ${method} failed: ${error.message}`);
-                    resolve(error ? null : result);
+                    const refused = error && Gio.DBusError.get_remote_error(error) === 'org.freedesktop.DBus.Error.Failed';
+                    // "GDBus.Error:org.freedesktop.DBus.Error.Failed: <isled's words>"
+                    resolve({result: error ? null : result, error: refused ? error.message.replace(/^GDBus\.Error:[\w.]+:\s*/, '') : null});
                 });
             } catch (e) {
                 // Arguments that do not fit the method's signature.
                 console.warn(`Isle: ${method} failed: ${e.message}`);
-                resolve(null);
+                resolve({result: null, error: null});
             }
         });
     }

@@ -391,6 +391,20 @@ export function agent(event, show) {
     };
 }
 
+/** The alerts from `provider` could not be turned on; `reason` is isled's. */
+export function agentRefused(provider, reason) {
+    const name = AGENT_NAMES[provider] ?? 'Your AI';
+    return {
+        key: `agent-refused:${provider}`,
+        icon: provider === 'codex' ? 'isle-openai' : 'isle-claude',
+        motion: 'shake',
+        title: `Couldn’t turn on ${name} alerts`,
+        subtitle: reason,
+        tone: 'bad',
+        duration: REMINDER_DURATION,
+    };
+}
+
 /** A newer Isle is out; `howTo` shows how to update. */
 export function update(version, howTo) {
     return {
