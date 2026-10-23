@@ -3,6 +3,7 @@
 //! `isled`: the Isle background service, on the session bus as `io.github.zickrian.isle.Daemon`.
 //! See `docs/dbus-api.md` for the interfaces.
 
+mod agents;
 mod assistant;
 mod calendar;
 mod caller;
@@ -27,6 +28,7 @@ use tokio::signal::unix::{SignalKind, signal};
 use zbus::connection;
 use zbus::fdo::{DBusProxy, RequestNameFlags, RequestNameReply};
 
+use crate::agents::AgentsService;
 use crate::assistant::AssistantService;
 use crate::calendar::CalendarService;
 use crate::clipboard::ClipboardService;
@@ -46,16 +48,31 @@ const CACHED_SONGS: usize = 500;
 
 const HELP: &str = "isled: the Isle background service (started by systemd or D-Bus, not by hand)
 
-Usage: isled [--version | --doctor | --report | --help]
-  --version  print the version
-  --doctor   check the service, speech recognition and each AI's install and sign-in
-  --report   everything a bug report needs: versions, the doctor's check and recent logs
-  --help     print this";
+Usage: isled [--version | --doctor | --report | --unhook-all | --help]
+  --version     print the version
+  --doctor      check the service, speech recognition, each AI's install and sign-in, and its alerts
+  --report      everything a bug report needs: versions, the doctor's check and recent logs
+  --unhook-all  take Isle's alert hooks out of Claude Code's and Codex's settings
+  --help        print this
+
+Claude Code and Codex run `isled --agent-hook claude|codex` themselves, once their alerts are on.";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    match std::env::args().nth(1).as_deref() {
+    let args: Vec<String> = std::env::args_os()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    match args.get(1).map(String::as_str) {
         None => {}
+        // Run by an AI's hook: says nothing and always succeeds.
+        Some("--agent-hook") => {
+            agents::hook::run(&args[2..]).await;
+            return Ok(());
+        }
+        Some("--unhook-all") => {
+            agents::unhook_all();
+            return Ok(());
+        }
         Some("--version" | "-V") => {
             println!("isled {}", env!("CARGO_PKG_VERSION"));
             return Ok(());
@@ -113,6 +130,7 @@ async fn main() -> anyhow::Result<()> {
     server.at(OBJECT_PATH, assistant).await?;
     server.at(OBJECT_PATH, usage).await?;
     server.at(OBJECT_PATH, updates).await?;
+    server.at(OBJECT_PATH, AgentsService::default()).await?;
 
     let media = server.interface::<_, MediaService>(OBJECT_PATH).await?;
     let pomodoro = server.interface::<_, PomodoroService>(OBJECT_PATH).await?;
@@ -123,6 +141,8 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(usage::run(usage, usage_refresh));
     let updates = server.interface::<_, UpdatesService>(OBJECT_PATH).await?;
     tokio::spawn(updates::run(updates, updates_wake));
+    let agents = server.interface::<_, AgentsService>(OBJECT_PATH).await?;
+    tokio::spawn(agents::watch(agents));
     let own_data = assistant::Sources {
         todo: todo.clone(),
         calendar: server.interface::<_, CalendarService>(OBJECT_PATH).await?,
@@ -224,6 +244,7 @@ async fn doctor() {
         }
     );
     println!("Voice assistant:\n{}", assistant::report());
+    println!("AI alerts:\n{}", agents::report());
 }
 
 /// `isled --report`: what a bug report needs, to paste whole; it holds no clipboard, tasks or chats.

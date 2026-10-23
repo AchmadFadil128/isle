@@ -37,7 +37,8 @@ use zbus::object_server::{InterfaceRef, SignalEmitter};
 use zbus::{Connection, fdo, interface};
 
 pub use self::agenda::Sources;
-use self::brain::{Brain, Failure, Provider};
+pub use self::brain::Provider;
+use self::brain::{Brain, Failure};
 use self::mic::Mic;
 use self::whisper::Whisper;
 use crate::store::data_dir;

@@ -6,15 +6,18 @@ properties holding JSON, with `PropertiesChanged` emitted on every change.
 Timestamps are milliseconds since the Unix epoch; durations are
 milliseconds unless the name says `_us` (microseconds).
 
-Methods that read what the user copied (`Clipboard1.GetText`) or steer the
-assistant (every `Assistant1` method) answer GNOME Shell only, where the
-extension runs; any other caller gets `org.freedesktop.DBus.Error.AccessDenied`.
+Methods that read what the user copied (`Clipboard1.GetText`), steer the
+assistant (every `Assistant1` method) or change an AI's settings
+(`Agents1.SetHooked`) answer GNOME Shell only, where the extension runs; any
+other caller gets `org.freedesktop.DBus.Error.AccessDenied`.
 
 `isled --version`, `isled --doctor` (what works: the service, speech
-recognition, each AI's install and sign-in) and `isled --report` (that, the
-versions and recent logs, for a bug report) print and exit. A second `isled`
-started by hand exits at once ("already running") and leaves the running one
-alone.
+recognition, each AI's install and sign-in, and whether its alerts are on) and
+`isled --report` (that, the versions and recent logs, for a bug report) print
+and exit. `isled --unhook-all` takes Isle's alert hooks out of Claude Code's
+and Codex's settings (`uninstall.sh` runs it), one line per AI. A second
+`isled` started by hand exits at once ("already running") and leaves the
+running one alone.
 
 ## io.github.zickrian.isle.Media1
 
@@ -155,6 +158,47 @@ ChatGPT's are read from Codex's own logs. Turned off, nothing runs.
 | `Refresh()` | | Reads again now (Claude at most every two minutes). |
 | `Usage` | `s` | `{providers: [{id, name, plan, windows: [{label, percent, resets_at_ms}], updated_ms, note}]}`; a provider not signed in is left out. |
 | `Alert` (signal) | `ssdx` | `(provider, window, percent, resets_at_ms)`: a limit passed the warning or the critical share, once per window. |
+
+## io.github.zickrian.isle.Agents1
+
+Alerts from AI coding agents: Claude Code when it needs a permission or the
+user's input, or finishes; Codex when it finishes a turn. Each is turned on
+in Settings, which puts a hook in that AI's own config, running isled as a
+client (`isled --agent-hook claude|codex`). The hook reports to `Report`
+and the island shows the `Event`.
+
+| Member | Signature | |
+|---|---|---|
+| `SetHooked(s provider, b on)` | | Puts Isle's hook in `claude`'s or `codex`'s config, or takes it out (below). GNOME Shell only. Fails with `Failed` and a message to show (`Codex already sends its notifications to another program`, a config that does not parse); an unknown `provider` is `InvalidArgs`. |
+| `Report(s json)` | | From the hook: `{provider, kind, project, cwd, message, session}`. Unknown providers or kinds are `InvalidArgs`. Texts are put on one line and cut (`message` to 160 characters, `project` to 60, `session` to 100); a `cwd` that is not absolute is dropped, and `project` defaults to its last folder. An event follows another of the same `provider` and `kind` by at least 300 ms, or is dropped. |
+| `Agents` | `s` | `{claude: {found, hooked}, codex: {found, hooked}}`: `found`, the CLI is installed; `hooked`, Isle's hook is in its config. Read afresh on each `Get`, and published again after `SetHooked` and whenever either config file changes. |
+| `Event(s json)` | signal | `{provider, kind, project, cwd, message, session}`; `provider` is `claude` or `codex`, `kind` is `permission`, `waiting` or `done`, `project` the name of the folder it works in, `session` its session (Codex: thread) id or `""`. |
+
+The hooks, put in idempotently; taking them out removes only Isle's, and a
+file is copied to `<name>.isle-backup` once, before Isle first changes it.
+Each is rewritten whole and moved into place, keeping its permissions; a
+file that does not parse is never written.
+
+- **Claude Code**: `$CLAUDE_CONFIG_DIR/settings.json`, else
+  `~/.claude/settings.json`, gets
+  `{"hooks": [{"type": "command", "command": "<isled> --agent-hook claude"}]}`
+  under `hooks.Notification` and `hooks.Stop`, beside the user's own hooks
+  (every other key keeps its place). Lists and `hooks` that only Isle's hook
+  was in go again with it.
+- **Codex**: `$CODEX_HOME/config.toml`, else `~/.codex/config.toml`, gets
+  `notify = ["<isled>", "--agent-hook", "codex"]` (made if missing), with
+  its comments and layout kept. A `notify` that runs another program is
+  left alone, and `SetHooked` fails.
+
+`<isled>` is the running isled's own path (`~/.local/bin/isled` or
+`/usr/bin/isled`). The client reads Claude Code's hook JSON from standard
+input (at most 1 MB): `Notification` is `permission` (its
+`notification_type` is `permission_prompt`, or the message asks for a
+permission) or `waiting`, with Claude's message; `Stop` is `done`, with the
+first line of `last_assistant_message` when Claude Code sends one. Codex's
+`agent-turn-complete` JSON, its last argument, is `done`, with the first
+line of `last-assistant-message`. It calls `Report` with a one-second limit
+and without starting isled, prints nothing and always exits 0.
 
 ## io.github.zickrian.isle.Updates1
 
