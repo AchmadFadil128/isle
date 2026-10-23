@@ -29,6 +29,7 @@ import {PeekView} from './peek.js';
 import * as Playback from './playback.js';
 import {KeyboardWatcher, OsdHook, SF_PRO_CLASS, TopBar, hasSfPro} from './shell.js';
 import {ShelfHelper} from './shelfHelper.js';
+import {IslandBubble} from './bubble.js';
 import {CallPage} from './pages/call.js';
 import {CalendarPage} from './pages/calendar.js';
 import {MediaPage} from './pages/media.js';
@@ -116,6 +117,8 @@ const VOICE_WORKING = ['transcribing', 'thinking', 'acting'];
 // Pages that open by default when they have something to show, best first, unless one was picked
 // by hand lately. Notifications count only when some arrived unseen (others were shown as alerts).
 const DEFAULT_PAGE_ORDER = ['call', 'notifications', 'music', 'focus'];
+/** The page a click on the bubble opens, by what it shows. */
+const BUBBLE_PAGES = {timer: 'focus', music: 'music', call: 'call'};
 
 export class Controller {
     constructor(extension) {
@@ -215,6 +218,10 @@ export class Controller {
         for (const view of [this._compact, ...this._peeks, this._expanded, this._voice])
             this._island.addView(view);
         Main.layoutManager.addChrome(this._island, {trackFullscreen: true});
+        // A second activity beside the closed island.
+        this._bubble = new IslandBubble(this._daemon);
+        // Hidden with the island under a fullscreen window (see `_syncBubble`), not by the layout manager.
+        Main.layoutManager.addChrome(this._bubble);
         this._updateGeometry();
         this._render();
     }
@@ -235,6 +242,7 @@ export class Controller {
         this._island.connect('notify::visible', () => {
             if (this._island.visible && !this._alert)
                 this._nextAlert();
+            this._syncBubble();
         });
         this._connectSignals();
         this._keyboard = new KeyboardWatcher();
@@ -312,7 +320,13 @@ export class Controller {
         island.connect('style-changed', () => (this._viewsWarm = false));
         island.connect('button-release-event', (_actor, event) => this._onClick(event));
         island.connect('scroll-event', (_actor, event) => this._onAlertScroll(event));
-        island.connect('geometry-changed', () => this._shelfHelper.sync());
+        island.connect('geometry-changed', () => {
+            this._shelfHelper.sync();
+            if (this._bubble.visible)
+                this._bubble.place(island.bodyRect);
+        });
+        this._compact.connect('bubble-changed', () => this._syncBubble());
+        this._bubble.connect('clicked', () => this.expand(BUBBLE_PAGES[this._bubble.kind]));
 
         // A file dragged towards the island opens the shelf to drop it on.
         this._shelfHelper.connect('drag-near', () => {
@@ -489,6 +503,17 @@ export class Controller {
         return this._onBar && this._topBar.blendsIn;
     }
 
+    /** The bubble beside the island, only while it is closed and on screen. */
+    _syncBubble() {
+        if (!this._bubble)
+            return;
+        const kind = this._presentation === 'compact' && this._island.visible ? this._compact.bubble : null;
+        if (kind)
+            this._bubble.show(kind, this._island.bodyRect);
+        else
+            this._bubble.hideAway();
+    }
+
     _render() {
         if (this._destroying)
             return;
@@ -497,6 +522,7 @@ export class Controller {
         this._presentation = presentation;
         if (presentation !== 'compact')
             this._putAwayWarm();
+        this._syncBubble();
         // A display without the top bar: the island hangs from its top edge.
         const top = this._onBar ? this._topBar.height : 0;
         const inBar = this._onBar && this._settings.get_boolean('island-in-top-bar');
@@ -1449,6 +1475,7 @@ export class Controller {
         const monitor = global.backend.get_core_idle_monitor();
         const rest = () => {
             this._compact.idle = true;
+            this._bubble.idle = true;
             // Away: a reminder on screen waits for them.
             if (this._alert?.sticky)
                 this._cancel('alert');
@@ -1456,6 +1483,7 @@ export class Controller {
                 this._activeWatch = monitor.add_user_active_watch(() => {
                     this._activeWatch = 0;
                     this._compact.idle = false;
+                    this._bubble.idle = false;
                     // Back: a reminder that waited starts its time now.
                     this._timeAlert();
                 });
@@ -1531,6 +1559,7 @@ export class Controller {
         this._focusMode.destroy();
 
         // The views listen to the services below, so they go first.
+        this._bubble.destroy();
         this._island.destroy();
         this._writer.destroy();
         this._installedApps.destroy();
@@ -1551,6 +1580,7 @@ export class Controller {
         for (const name of [...this._timeouts.keys()])
             this._cancel(name);
         this._shelfHelper?.destroy();
+        this._bubble?.destroy();
         // The views are the island's once it is on screen (see `_buildIsland`); before, each goes by itself.
         if (!this._island?.get_parent()) {
             for (const view of [this._compact, ...this._peeks ?? [], this._voice, this._expanded])

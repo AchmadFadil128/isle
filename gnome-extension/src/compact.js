@@ -29,7 +29,7 @@ export function timerColor(phase) {
 }
 
 export const CompactView = GObject.registerClass({
-    Signals: {'width-changed': {}},
+    Signals: {'width-changed': {}, 'bubble-changed': {}},
 }, class CompactView extends St.Widget {
     _init(daemon, settings, privacy, call) {
         super._init({
@@ -201,24 +201,22 @@ export const CompactView = GObject.registerClass({
         const onCall = this._call.active;
         const widthBefore = this.preferredWidth;
 
-        // Left, first that applies: recording, call, focus timer, cover, unread dot, DND.
-        // Both slots keep their width when empty, so the centre stays centred.
-        let left = null;
-        if (recording)
-            left = this._recordingDot;
-        else if (onCall)
-            left = this._phone;
-        else if (timerActive)
-            left = this._ring;
-        else if (hasTrack)
-            left = this._art;
-        else if (this._unseen)
+        // The first activity that applies keeps the island: recording, a call, the music, the timer. The
+        // next goes in the bubble beside it (bubble.js), as on an iPhone.
+        const activities = [recording && 'recording', onCall && 'call', hasTrack && 'music', timerActive && 'timer']
+            .filter(Boolean);
+        const [primary] = activities;
+        this._setBubble(activities[1] ?? null);
+        // Left: the activity's sign, else the unread dot or DND. Both slots keep their width when empty, so
+        // the centre stays centred.
+        let left = {recording: this._recordingDot, call: this._phone, music: this._art, timer: this._ring}[primary] ?? null;
+        if (!left && this._unseen)
             left = this._dot;
-        else if (this._dnd)
+        else if (!left && this._dnd)
             left = this._moon;
         if (this._left.child !== left)
             this._left.child = left;
-        let right = hasTrack ? this._bars : null;
+        let right = primary === 'music' ? this._bars : null;
         if (onCall && this._call.muted)
             right = this._micOff;
         if (this._assistantBusy)
@@ -291,9 +289,22 @@ export const CompactView = GObject.registerClass({
         }
     }
 
+    /** The second activity, for the bubble beside the island: 'call', 'music', 'timer' or null. */
+    get bubble() {
+        return this._bubble ?? null;
+    }
+
+    _setBubble(kind) {
+        if (kind === this.bubble)
+            return;
+        this._bubble = kind;
+        this.emit('bubble-changed');
+    }
+
     _refreshRing() {
         const {pomodoro} = this._daemon.state;
-        if (!pomodoro || pomodoro.phase === 'idle' || !this.mapped) {
+        // Only while it shows: the timer may be in the bubble instead.
+        if (!pomodoro || pomodoro.phase === 'idle' || !this.mapped || this._left.child !== this._ring) {
             this._cancel('ring');
             return;
         }

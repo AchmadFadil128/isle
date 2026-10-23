@@ -203,6 +203,13 @@ export const Island = GObject.registerClass({
         };
     }
 
+    /** The island's body on screen as it is now, without its shoulders: {x, y, width, height}. */
+    get bodyRect() {
+        const [x, y] = this.get_transformed_position();
+        const shoulder = Math.max(0, this._shoulder.value);
+        return {x: x + shoulder, y, width: Math.max(0, this._width.value), height: Math.max(0, this._height.value)};
+    }
+
     /** Whether the island's shape, as it is right now, covers `rect`. */
     covers({x, y, width, height}) {
         const [left, top] = this.get_transformed_position();
