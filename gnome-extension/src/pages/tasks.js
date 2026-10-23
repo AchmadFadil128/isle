@@ -22,6 +22,32 @@ const LEAVE_MS = 260;
 const STRIKE_MS = 180;
 const ARRIVE_MS = 220;
 
+/** Calls `callback(hovered)` as the pointer comes onto `actor` or leaves it, as St's `hover` would, but
+ * without the :hover restyle of all inside it (for rows with no :hover style). */
+export function onHover(actor, callback) {
+    let hovered = false;
+    const set = value => {
+        if (value === hovered)
+            return;
+        hovered = value;
+        callback(value);
+    };
+    actor.connect('enter-event', () => {
+        set(true);
+        return Clutter.EVENT_PROPAGATE;
+    });
+    actor.connect('leave-event', (_actor, event) => {
+        const related = event.get_related();
+        if (!related || !actor.contains(related))
+            set(false);
+        return Clutter.EVENT_PROPAGATE;
+    });
+    actor.connect('notify::mapped', () => {
+        if (!actor.mapped)
+            set(false);
+    });
+}
+
 export const TasksPage = GObject.registerClass(
 class TasksPage extends Page {
     _init(daemon, {height}) {
@@ -200,7 +226,7 @@ class TasksPage extends Page {
     _row(task) {
         // Never y_expand: its column fills it, and once a child changes (a rename) the row would ask to
         // expand too and take all the list's room.
-        const row = new St.BoxLayout({style_class: 'isle-reminder', reactive: true, track_hover: true, y_expand: false});
+        const row = new St.BoxLayout({style_class: 'isle-reminder', reactive: true, y_expand: false});
 
         // The tick box: a ring, and a dot that pops into it when ticked.
         const dot = new St.Widget({style_class: 'isle-reminder-dot', scale_x: 0, scale_y: 0, x_expand: true, y_expand: true});
@@ -237,7 +263,7 @@ class TasksPage extends Page {
         const remove = iconButton('isle-close-symbolic', 'isle-button-flat isle-reminder-remove',
             () => this.daemon.call('todo', 'Remove', task.id), {size: 9, accessibleName: 'Delete reminder'});
         remove.opacity = 0;
-        row.connect('notify::hover', () => remove.ease({opacity: row.hover ? 255 : 0, duration: 120}));
+        onHover(row, hovered => remove.ease({opacity: hovered ? 255 : 0, duration: 120}));
         content.add_child(remove);
         column.add_child(content);
         column.add_child(new St.Widget({style_class: 'isle-reminder-line'}));
