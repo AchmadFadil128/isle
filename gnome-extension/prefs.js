@@ -17,6 +17,7 @@ const DAEMON = 'io.github.zickrian.isle.Daemon';
 const DAEMON_PATH = '/io/github/zickrian/isle/Daemon';
 const POMODORO_INTERFACE = 'io.github.zickrian.isle.Pomodoro1';
 const CLIPBOARD_INTERFACE = 'io.github.zickrian.isle.Clipboard1';
+const AGENTS_INTERFACE = 'io.github.zickrian.isle.Agents1';
 /** Edits to the timer are sent once typing pauses for this long. */
 const SAVE_DELAY_MS = 400;
 
@@ -101,6 +102,19 @@ export default class IslePreferences extends ExtensionPreferences {
         }
         enabled.sensitive = found.length > 0;
         page.add(group);
+
+        // Only the AIs found on this computer; none, and the group is not there at all.
+        const agents = agentsFound();
+        if (agents.length) {
+            const agentGroup = new Adw.PreferencesGroup({
+                title: 'AI Agents',
+                description: 'An alert when an AI coding agent needs your OK or is done, unless its window is in ' +
+                    'front. Turning one on adds a small hook to its own settings; turning it off removes it.',
+            });
+            for (const {provider, title, subtitle} of agents)
+                agentGroup.add(switchRow(settings, `agent-alerts-${provider}`, title, subtitle));
+            page.add(agentGroup);
+        }
         return page;
     }
 
@@ -259,6 +273,11 @@ export default class IslePreferences extends ExtensionPreferences {
         alerts.add(switchRow(settings, 'alert-network', 'Network', 'When the connection drops'));
         alerts.add(switchRow(settings, 'alert-bluetooth', 'Bluetooth', 'Devices connecting, with their battery'));
         alerts.add(switchRow(settings, 'alert-caps-lock', 'Caps Lock', 'When it turns on or off'));
+        alerts.add(switchRow(settings, 'event-alerts', 'Calendar events',
+            'Before each event with a time, with Join for a Meet, Zoom or Teams link'));
+        const eventMinutes = spinRow(settings, 'event-alert-minutes', 'Minutes before an event', null, 1, 60);
+        settings.bind('event-alerts', eventMinutes, 'sensitive', Gio.SettingsBindFlags.GET);
+        alerts.add(eventMinutes);
         alerts.add(switchRow(settings, 'gnome-banners', 'GNOME’s notification banners',
             'Show notifications as GNOME does instead of in the island'));
         alerts.add(choiceRow(settings, 'super-v', 'Super+V', 'GNOME’s calendar shortcut', [
@@ -366,6 +385,22 @@ export default class IslePreferences extends ExtensionPreferences {
         group.add(toggle('auto_start_focus', 'Start focus automatically', 'After a break ends'));
         return page;
     }
+}
+
+/** The AI agents isled found installed: `{provider, title, subtitle}` each. */
+function agentsFound() {
+    let agents = {};
+    try {
+        const proxy = Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE,
+            null, DAEMON, DAEMON_PATH, AGENTS_INTERFACE, null);
+        agents = JSON.parse(proxy.get_cached_property('Agents')?.unpack() ?? '{}');
+    } catch (e) {
+        console.warn(`Isle: could not ask which AI agents are installed: ${e.message}`);
+    }
+    return [
+        {provider: 'claude', title: 'Claude Code', subtitle: 'When Claude needs your permission, waits for you, or is done'},
+        {provider: 'codex', title: 'Codex', subtitle: 'When Codex is done'},
+    ].filter(({provider}) => agents[provider]?.found);
 }
 
 function switchRow(settings, key, title, subtitle) {

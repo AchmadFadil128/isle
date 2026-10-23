@@ -119,6 +119,8 @@ const VOICE_WORKING = ['transcribing', 'thinking', 'acting'];
 const DEFAULT_PAGE_ORDER = ['call', 'notifications', 'music', 'focus'];
 /** The page a click on the bubble opens, by what it shows. */
 const BUBBLE_PAGES = {timer: 'focus', music: 'music', call: 'call'};
+/** The AI agents Isle can hear from (see `Agents1` in the daemon). */
+const AGENT_PROVIDERS = ['claude', 'codex'];
 
 export class Controller {
     constructor(extension) {
@@ -258,6 +260,7 @@ export class Controller {
         });
         this._syncVoiceEnabled();
         this._syncUsage();
+        this._syncEventAlerts();
         this._render();
         this._later('warm', WARM_START_MS, () => this._warmUp(true));
         this._daemon.release();
@@ -363,6 +366,12 @@ export class Controller {
         this._settingsChanged.push(this._settings.connect('changed::voice-shortcut', () => (this._voice.shortcut = this._voiceShortcut)));
         for (const key of ['usage-enabled', 'usage-claude', 'usage-codex', 'usage-warn', 'usage-critical'])
             this._settingsChanged.push(this._settings.connect(`changed::${key}`, () => this._syncUsage()));
+        for (const key of ['event-alerts', 'event-alert-minutes'])
+            this._settingsChanged.push(this._settings.connect(`changed::${key}`, () => this._syncEventAlerts()));
+        for (const provider of AGENT_PROVIDERS) {
+            this._settingsChanged.push(this._settings.connect(`changed::agent-alerts-${provider}`, () =>
+                this._daemon.call('agents', 'SetHooked', provider, this._settings.get_boolean(`agent-alerts-${provider}`))));
+        }
 
         this._topBar.connect('height-changed', () => this._updateGeometry());
         this._topBar.connect('style-changed', () => this._updateGeometry());
@@ -407,7 +416,11 @@ export class Controller {
                 this._syncUpdates();
             else if (name === 'media')
                 this._daemon.call('media', 'SetLyrics', this._settings.get_boolean('lyrics-online'));
+            else if (name === 'agents')
+                this._syncAgents();
         });
+        daemon.connect('agent-event', (_daemon, event) => this._onAgentEvent(event));
+        this._expanded.pageNamed('calendar').connect('event-soon', (_page, json) => this._onEventSoon(JSON.parse(json)));
         daemon.connect('changed', (_daemon, key) => {
             if (key === 'updates')
                 this._onLatest();
@@ -501,6 +514,61 @@ export class Controller {
     /** Whether it grows out of a black top bar there. */
     get _blendsIn() {
         return this._onBar && this._topBar.blendsIn;
+    }
+
+    // Calendar and AI agents
+
+    /** The calendar alarms, as Settings say (see `CalendarPage.alarmLead`). */
+    _syncEventAlerts() {
+        const minutes = this._settings.get_boolean('event-alerts') ? this._settings.get_int('event-alert-minutes') : 0;
+        this._expanded.pageNamed('calendar').alarmLead = minutes;
+    }
+
+    /** An event starts soon: an alert, with Join when the event has a meeting link. Not in Do Not Disturb. */
+    async _onEventSoon(event) {
+        if (this._notifications.dnd)
+            return;
+        let link = '';
+        // GNOME's id: the calendar, the event and its recurrence, a line each.
+        const [source, uid] = event.id?.split('\n') ?? [];
+        if (source && uid)
+            link = (await this._daemon.call('calendar', 'MeetingLink', source, uid))?.[0] ?? '';
+        this._post(Alerts.meeting(event, link, () => {
+            try {
+                Gio.AppInfo.launch_default_for_uri(link, global.create_app_launch_context(0, -1));
+            } catch (e) {
+                console.warn(`Isle: could not open the meeting: ${e.message}`);
+            }
+        }));
+    }
+
+    /** The hooks as Settings say, once isled is there: a switch left on comes back after a reinstall. */
+    _syncAgents() {
+        const agents = this._daemon.state.agents ?? {};
+        for (const provider of AGENT_PROVIDERS) {
+            if (agents[provider]?.found && !agents[provider].hooked && this._settings.get_boolean(`agent-alerts-${provider}`))
+                this._daemon.call('agents', 'SetHooked', provider, true);
+        }
+    }
+
+    /** Claude Code or Codex needs the user, or is done: an alert, unless its window is the one in front. */
+    _onAgentEvent(event) {
+        if (!this._settings.get_boolean(`agent-alerts-${event.provider}`) || this._notifications.dnd)
+            return;
+        const window = this._agentWindow(event.project);
+        if (window && window === global.display.focus_window)
+            return;
+        this._post(Alerts.agent(event, window ? () => Main.activateWindow(window) : null));
+    }
+
+    /** The window (a terminal, VS Code) whose title names `project`, the latest used first. */
+    _agentWindow(project) {
+        if (!project)
+            return null;
+        return global.get_window_actors()
+            .map(actor => actor.meta_window)
+            .filter(window => (window.get_title() ?? '').includes(project))
+            .sort((a, b) => b.get_user_time() - a.get_user_time())[0] ?? null;
     }
 
     /** The bubble beside the island, only while it is closed and on screen. */

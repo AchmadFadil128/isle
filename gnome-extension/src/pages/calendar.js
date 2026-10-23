@@ -56,8 +56,14 @@ function timeText(date) {
     return Format.timeOfDay(dateTime(date));
 }
 
-export const CalendarPage = GObject.registerClass(
-class CalendarPage extends Page {
+/** Its alarm is planned again at least this often, as a sleeping computer stops the time-outs' clock. */
+const ALARM_CHECK_MS = 10 * 60 * 1000;
+
+// Signals: `event-soon` (json): an event with a time starts in `alarmLead` minutes, {id, title, start_ms,
+// end_ms}; `id` is GNOME's (source, event and recurrence, a line each), null for one of Isle's own.
+export const CalendarPage = GObject.registerClass({
+    Signals: {'event-soon': {param_types: [GObject.TYPE_STRING]}},
+}, class CalendarPage extends Page {
     _init(daemon, {height}) {
         super._init(daemon, {
             style_class: 'isle-page isle-calendar',
@@ -78,9 +84,69 @@ class CalendarPage extends Page {
         this.add_child(this._buildMonth());
         this.add_child(this._buildAgenda());
 
-        this.watch(['events'], () => this._refresh());
+        this.watch(['events'], () => {
+            this._refresh();
+            this._scheduleAlarm();
+        });
         this.connect('destroy', () => this._unbindSource());
+        /** How long before an event its alarm goes, in ms; 0: none. */
+        this._alarmLeadMs = 0;
+        /** The events already alarmed, by id (or title) and start. */
+        this._alarmed = new Set();
         this._refresh();
+    }
+
+    /** Minutes before an event with a time that `event-soon` is emitted; 0 turns it off. */
+    set alarmLead(minutes) {
+        this._alarmLeadMs = Math.max(0, minutes) * 60000;
+        // The desktop's events of this month, to know what comes even if the page never opens.
+        this._bindSource();
+        this._requestThisMonth();
+        this._scheduleAlarm();
+        // Each new day (and month) asked for, opened or not.
+        this._scheduleMidnight();
+    }
+
+    /** Asks the desktop's calendars for the current month, where today's events are. */
+    _requestThisMonth() {
+        const today = new Date();
+        try {
+            this._source?.requestRange(new Date(today.getFullYear(), today.getMonth(), 1),
+                new Date(today.getFullYear(), today.getMonth() + 1, 1));
+        } catch (e) {
+            console.warn(`Isle: could not ask for calendar events: ${e.message}`);
+        }
+    }
+
+    /** Waits for the next event with a time (today or tomorrow), to emit `event-soon` `alarmLead` before it. */
+    _scheduleAlarm() {
+        this.cancel('alarm');
+        if (!this._alarmLeadMs)
+            return;
+        const now = Date.now();
+        const today = startOfDay(new Date());
+        const key = event => `${event.id ?? event.title}@${event.start.getTime()}`;
+        // Forget the alarms of events gone by.
+        for (const done of this._alarmed) {
+            if (Number(done.slice(done.lastIndexOf('@') + 1)) < now)
+                this._alarmed.delete(done);
+        }
+        const next = [...this._eventsOn(today), ...this._eventsOn(addDays(today, 1))]
+            .filter(event => !event.allDay && event.start.getTime() > now && !this._alarmed.has(key(event)))
+            .sort((a, b) => a.start - b.start)[0];
+        if (!next)
+            return;
+        const due = next.start.getTime() - this._alarmLeadMs - now;
+        if (due > ALARM_CHECK_MS) {
+            this.later('alarm', ALARM_CHECK_MS, () => this._scheduleAlarm());
+            return;
+        }
+        this.later('alarm', Math.max(0, due), () => {
+            this._alarmed.add(key(next));
+            this.emit('event-soon', JSON.stringify({id: next.id, title: next.title,
+                start_ms: next.start.getTime(), end_ms: next.end?.getTime() ?? null}));
+            this._scheduleAlarm();
+        });
     }
 
     // Building
@@ -192,6 +258,7 @@ class CalendarPage extends Page {
             this._sourceChanged = source.connect('changed', () => {
                 this._refresh();
                 this.markCold();
+                this._scheduleAlarm();
             });
     }
 
@@ -219,6 +286,7 @@ class CalendarPage extends Page {
         const begin = startOfDay(day);
         const end = addDays(begin, 1);
         const events = this._systemEvents(begin, end).map(event => ({
+            id: event.id ?? null,
             title: event.summary || 'Untitled',
             start: event.date,
             end: event.end,
@@ -235,6 +303,7 @@ class CalendarPage extends Page {
                 return new Date(begin.getFullYear(), begin.getMonth(), begin.getDate(), hours, minutes);
             };
             events.push({
+                id: null,
                 title: event.title,
                 start: event.start ? at(event.start) : begin,
                 end: event.end ? at(event.end) : null,
@@ -519,6 +588,8 @@ class CalendarPage extends Page {
         this.later('midnight', addDays(startOfDay(now), 1) - now + 1000, () => {
             if (!this._followToday())
                 this._refresh();
+            // A new month: its events, for the alarms.
+            this._requestThisMonth();
             this._scheduleMidnight();
         });
     }
@@ -534,5 +605,8 @@ class CalendarPage extends Page {
 
     onDeactivate() {
         this._stopAdding();
+        // Left on another month: the alarms need this one's events.
+        if (this._alarmLeadMs)
+            this._requestThisMonth();
     }
 });

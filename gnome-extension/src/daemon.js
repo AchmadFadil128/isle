@@ -79,6 +79,7 @@ const INTERFACES = {
         xml: node('Calendar1', `
             <method name="Add"><arg name="date" type="s" direction="in"/><arg name="text" type="s" direction="in"/><arg type="t" direction="out"/></method>
             <method name="Remove"><arg name="id" type="t" direction="in"/></method>
+            <method name="MeetingLink"><arg name="source_uid" type="s" direction="in"/><arg name="event_uid" type="s" direction="in"/><arg type="s" direction="out"/></method>
             <property name="Events" type="s" access="read"/>`),
         properties: {Events: 'events'},
     },
@@ -109,6 +110,13 @@ const INTERFACES = {
             <property name="Latest" type="s" access="read"/>`),
         properties: {Latest: 'updates'},
     },
+    agents: {
+        xml: node('Agents1', `
+            <method name="SetHooked"><arg name="provider" type="s" direction="in"/><arg name="on" type="b" direction="in"/></method>
+            <signal name="Event"><arg name="event" type="s"/></signal>
+            <property name="Agents" type="s" access="read"/>`),
+        properties: {Agents: 'agents'},
+    },
     assistant: {
         xml: node('Assistant1', `
             <method name="Listen"><arg name="context" type="s" direction="in"/></method>
@@ -126,6 +134,7 @@ const INTERFACES = {
 // Signals: `changed` (key): `state[key]` is new; `pomodoro-finished` (finished, next): phase names;
 // `system-event` (event): see `SystemEvent` in the daemon; `voice-level` (level): the mic, 0..1;
 // `usage-alert` (provider, window, percent, resets_at_ms): an AI plan limit nears its end;
+// `agent-event` (event): Claude Code or Codex needs the user or is done ({provider, kind, project, message});
 // `assistant-lost`: isled stopped or restarted, so a request in flight will not be answered;
 // `appeared` (name): interface `name` can be called now (isled started, or started again);
 // `running-changed`: isled came or went (see `running`).
@@ -215,7 +224,7 @@ export class Daemon extends Signals.EventEmitter {
                 });
             }
             proxy.connect('g-signal', (_proxy, _sender, signal, parameters) =>
-                this._onSignal(signal, parameters.deep_unpack()));
+                this._onSignal(name, signal, parameters.deep_unpack()));
             refresh();
             if (proxy.g_name_owner)
                 this.emit('appeared', name);
@@ -259,7 +268,7 @@ export class Daemon extends Signals.EventEmitter {
         this.emit('changed', key);
     }
 
-    _onSignal(signal, args) {
+    _onSignal(name, signal, args) {
         switch (signal) {
         case 'PhaseFinished':
             this.emit('pomodoro-finished', ...args);
@@ -272,9 +281,10 @@ export class Daemon extends Signals.EventEmitter {
             break;
         case 'Event':
             try {
-                this.emit('system-event', JSON.parse(args[0]));
+                // System1's and Agents1's: the computer, or an AI agent that needs you or is done.
+                this.emit(name === 'agents' ? 'agent-event' : 'system-event', JSON.parse(args[0]));
             } catch (e) {
-                console.warn(`Isle: invalid system event: ${e.message}`);
+                console.warn(`Isle: invalid ${name} event: ${e.message}`);
             }
             break;
         }

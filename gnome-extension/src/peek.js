@@ -36,6 +36,7 @@ const TONE_COLORS = {
     claude: [0.85, 0.47, 0.34],
     codex: [0.06, 0.64, 0.5],
     break: Palette.BLUE,
+    calendar: Palette.BLUE,
 };
 
 const css = ([r, g, b], alpha = 1) =>

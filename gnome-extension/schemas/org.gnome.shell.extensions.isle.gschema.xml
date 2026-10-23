@@ -88,6 +88,26 @@
       <default>true</default>
       <summary>Show Caps Lock alerts</summary>
     </key>
+    <key name="event-alerts" type="b">
+      <default>true</default>
+      <summary>Alert before calendar events</summary>
+      <description>An alert before each event with a time, with a Join button when it has a meeting link.</description>
+    </key>
+    <key name="event-alert-minutes" type="i">
+      <range min="1" max="60"/>
+      <default>5</default>
+      <summary>Minutes before an event its alert shows</summary>
+    </key>
+    <key name="agent-alerts-claude" type="b">
+      <default>false</default>
+      <summary>Alerts from Claude Code</summary>
+      <description>When on, Isle adds a hook to Claude Code's settings so it hears when Claude needs you or is done; off removes it.</description>
+    </key>
+    <key name="agent-alerts-codex" type="b">
+      <default>false</default>
+      <summary>Alerts from Codex</summary>
+      <description>When on, Isle sets Codex's notify program so it hears when Codex is done; off removes it.</description>
+    </key>
     <key name="gnome-banners" type="b">
       <default>false</default>
       <summary>Leave notifications to GNOME's own banners</summary>

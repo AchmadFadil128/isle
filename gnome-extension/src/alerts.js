@@ -331,6 +331,64 @@ export function reminder({id, text}, onShown) {
     };
 }
 
+/** The meeting service a link goes to, by its host. */
+function meetingService(link) {
+    const host = (/^https:\/\/([^/]+)/.exec(link)?.[1] ?? '').toLowerCase();
+    if (host === 'meet.google.com')
+        return 'Google Meet';
+    if (host.endsWith('zoom.us'))
+        return 'Zoom';
+    if (host.startsWith('teams.'))
+        return 'Microsoft Teams';
+    if (host.endsWith('webex.com'))
+        return 'Webex';
+    return null;
+}
+
+/** An event starts soon ({title, start_ms, end_ms} from the Calendar page); with a meeting `link`, Join opens it. */
+export function meeting(event, link, join) {
+    const start = new Date(event.start_ms);
+    const minutes = Math.max(0, Math.round((event.start_ms - Date.now()) / 60000));
+    const at = date => Format.timeOfDay(GLib.DateTime.new_from_unix_local(Math.floor(date.getTime() / 1000)));
+    const span = event.end_ms ? `${at(start)} – ${at(new Date(event.end_ms))}` : at(start);
+    const service = link ? meetingService(link) : null;
+    return {
+        key: `meeting:${event.id ?? event.title}:${event.start_ms}`,
+        icon: link ? 'isle-video-symbolic' : 'isle-calendar',
+        motion: 'bounce',
+        title: minutes > 0 ? `${event.title} in ${minutes} min` : `${event.title} now`,
+        subtitle: service ? `${span} · ${service}` : span,
+        tone: 'calendar',
+        duration: REMINDER_DURATION,
+        // Its time only runs while someone is there to see it, as a reminder's.
+        sticky: true,
+        action: link ? {label: 'Join', callback: join} : null,
+    };
+}
+
+const AGENT_NAMES = {claude: 'Claude', codex: 'Codex'};
+
+/** An AI agent needs the user, or is done ({provider, kind, project, message}); `show` brings its window up. */
+export function agent(event, show) {
+    const name = AGENT_NAMES[event.provider] ?? 'Your AI';
+    const waiting = event.kind === 'permission' || event.kind === 'waiting';
+    const title = {permission: `${name} needs your OK`, waiting: `${name} is waiting for you`}[event.kind] ?? `${name} is done`;
+    const detail = event.message?.trim();
+    return {
+        // One per session: a newer word from the same one replaces it.
+        key: `agent:${event.provider}:${event.session || event.project}`,
+        icon: event.provider === 'codex' ? 'isle-openai' : 'isle-claude',
+        motion: waiting ? 'ring' : 'bounce',
+        title,
+        subtitle: [event.project, detail].filter(Boolean).join(' · '),
+        tone: event.provider === 'codex' ? 'codex' : 'claude',
+        duration: waiting ? REMINDER_DURATION + 4000 : REMINDER_DURATION,
+        // It waits on the user: it stays until they are there to see it.
+        sticky: waiting,
+        action: show ? {label: 'Show', callback: show} : null,
+    };
+}
+
 /** A newer Isle is out; `howTo` shows how to update. */
 export function update(version, howTo) {
     return {
