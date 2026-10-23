@@ -308,6 +308,10 @@ export class Controller {
                 this._render();
         });
         expanded.connect('tint-changed', () => this._syncTint());
+        expanded.connect('tint-motion', (_view, time, level) => {
+            if (this._presentation === 'expanded')
+                this._island.setTintMotion(time, level);
+        });
         expanded.connect('voice-requested', () => this._openVoice({typing: true}));
         // Settings open in their own window; the island gets out of its way.
         expanded.connect('settings-requested', () => {
@@ -336,8 +340,12 @@ export class Controller {
             // The shelf stays the page to open on, to drag the files out again.
             this._pagePickedAt = Date.now();
         });
-        this._shelfHelper.connect('drag-end', () => {
-            this._shelf.dropping = false;
+        this._shelfHelper.connect('drag-over', (_helper, over) => (this._shelf.dropOver = over));
+        this._shelfHelper.connect('drag-files', (_helper, uris) => this._shelf.showDragged(uris));
+        this._shelfHelper.connect('drag-end', (_helper, onShelf = false) => {
+            // A full shelf turns the file away: the island shakes its head.
+            if (this._shelf.endDrop(onShelf))
+                this._island.nudge();
             if (!this._island.hovered)
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
         });

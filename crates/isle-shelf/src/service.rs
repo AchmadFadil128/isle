@@ -27,6 +27,11 @@ const INTERFACE: &str = r#"
     <signal name="Dragging">
       <arg name="active" type="b"/>
     </signal>
+    <!-- The files dragged over the window, so the island can light in their
+         colours; none once they leave. -->
+    <signal name="Hovering">
+      <arg name="uris" type="as"/>
+    </signal>
   </interface>
 </node>"#;
 
@@ -70,17 +75,18 @@ pub fn register(connection: &gio::DBusConnection, window: ShelfWindow) -> Result
 
 /// Tells the extension whether a file is being dragged out of the shelf.
 pub fn announce_dragging(active: bool) {
-    let result =
-        gio::bus_get_sync(gio::BusType::Session, None::<&gio::Cancellable>).and_then(|bus| {
-            bus.emit_signal(
-                None,
-                OBJECT_PATH,
-                INTERFACE_NAME,
-                "Dragging",
-                Some(&(active,).to_variant()),
-            )
-        });
+    announce("Dragging", &(active,).to_variant());
+}
+
+/// Tells the extension which files are dragged over the window (none once they leave).
+pub fn announce_hovering(uris: &[String]) {
+    announce("Hovering", &(uris,).to_variant());
+}
+
+fn announce(signal: &str, args: &glib::Variant) {
+    let result = gio::bus_get_sync(gio::BusType::Session, None::<&gio::Cancellable>)
+        .and_then(|bus| bus.emit_signal(None, OBJECT_PATH, INTERFACE_NAME, signal, Some(args)));
     if let Err(err) = result {
-        log::warn!("could not announce the drag: {err}");
+        log::warn!("could not announce {signal}: {err}");
     }
 }

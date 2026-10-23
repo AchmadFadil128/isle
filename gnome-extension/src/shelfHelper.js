@@ -19,6 +19,7 @@ const ShelfWindowProxy = Gio.DBusProxy.makeProxyWrapper(`
   <method name="Hide"/>
   <method name="SetDropping"><arg name="dropping" type="b" direction="in"/></method>
   <signal name="Dragging"><arg name="active" type="b"/></signal>
+  <signal name="Hovering"><arg name="uris" type="as"/></signal>
 </interface></node>`);
 
 /** Errors meaning the helper cannot be started at all. */
@@ -37,8 +38,8 @@ const RECHECK_MS = 24;
 /** A drag that opened the shelf and then goes this far off closes it again. */
 const DRAG_AWAY = 260;
 
-// Signals: `drag-near`, `drag-away` (went elsewhere), `drag-end` (a drag in or out
-// ended), `available-changed`.
+// Signals: `drag-near`, `drag-over` (over the shelf or not), `drag-files` (the URIs over it), `drag-away` (went elsewhere),
+// `drag-end` (a drag in or out ended; whether it ended over the shelf), `available-changed`.
 export class ShelfHelper extends Signals.EventEmitter {
     constructor(island, page) {
         super();
@@ -191,6 +192,9 @@ export class ShelfHelper extends Signals.EventEmitter {
                         if (!active)
                             this.emit('drag-end');
                     });
+                    // Before 1.0 the helper never says; the light keeps its own colours then.
+                    this._hoveringId = proxy.connectSignal('Hovering', (_proxy, _sender, [uris]) =>
+                        this.emit('drag-files', uris));
                     this._signalProxy = proxy;
                     // A helper that quits mid-drag never says the drag ended.
                     this._ownerId = proxy.connect('notify::g-name-owner', () => {
@@ -209,10 +213,12 @@ export class ShelfHelper extends Signals.EventEmitter {
         this._dnd = global.backend.get_dnd();
         this._dragNear = false;
         this._dragSeen = false;
+        this._dragOver = false;
         this._dndPosition = this._dnd.connect('dnd-position-change', (_dnd, x, y) => {
             // Not for a file carried out of the shelf itself.
             if (this._dragging || !this._proxy)
                 return;
+            this._setDragOver(this._dragNear && this._over(x, y));
             if (!this._dragSeen) {
                 this._dragSeen = true;
                 this.prepare();
@@ -224,6 +230,7 @@ export class ShelfHelper extends Signals.EventEmitter {
                 this.emit('drag-near');
             } else if (this._dragNear && distance > DRAG_AWAY) {
                 this._dragNear = false;
+                this._setDragOver(false);
                 this._setDropping(false);
                 this.emit('drag-away');
             }
@@ -231,11 +238,26 @@ export class ShelfHelper extends Signals.EventEmitter {
         this._dndLeave = this._dnd.connect('dnd-leave', () => {
             this._dragSeen = false;
             if (this._dragNear) {
-                this._dragNear = false;
+                // Quietly: the drop's end says where it was let go.
+                const over = this._dragOver;
+                this._dragNear = this._dragOver = false;
                 this._setDropping(false);
-                this.emit('drag-end');
+                this.emit('drag-end', over);
             }
         });
+    }
+
+    /** Whether (x, y) is on the shown window, where a drop lands. */
+    _over(x, y) {
+        const rect = this._shownRect;
+        return Boolean(rect) && x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+    }
+
+    _setDragOver(over) {
+        if (over === this._dragOver)
+            return;
+        this._dragOver = over;
+        this.emit('drag-over', over);
     }
 
     /** How far (x, y) is from the island; 0 on it, or above it in the top bar. */
@@ -264,6 +286,7 @@ export class ShelfHelper extends Signals.EventEmitter {
         this._hide();
         if (this._draggingId) {
             this._signalProxy.disconnectSignal(this._draggingId);
+            this._signalProxy.disconnectSignal(this._hoveringId);
             this._signalProxy.disconnect(this._ownerId);
         }
         this._proxy = null;

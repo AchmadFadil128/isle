@@ -3,6 +3,7 @@
 // The shelf's Files tab. The `isle-shelf` helper draws it over this view for drag and
 // drop; both look the same tile for tile, so the hand-over cannot be seen.
 
+import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
@@ -26,6 +27,15 @@ const NAME_WIDTH = 76;
 const FRAME_HEIGHT = PREVIEW_SIZE + 6;
 /** How long "copied" shows on a tile. */
 const COPIED_MS = 1100;
+/** The dashed outlines, as the helper's style.css draws them (St borders cannot dash). */
+const ZONE_RADIUS = 16;
+const SLOT_RADIUS = 12;
+const DASH = [4, 3];
+/** The drop zone's outline and fill (white alphas): at rest, a file on its way, a file over it. */
+const ZONE = {idle: [0.22, 0.025], near: [0.35, 0.035], over: [0.65, 0.06]};
+/** The light rising inside it from the bottom, until the drop light gives its colours: blue into violet. */
+const ZONE_GLOW = [[0.43, 0.48, 1], [0.54, 0.36, 1]];
+const ZONE_GLOW_ALPHA = [0.45, 0.12];
 const FILES_TYPE = 'x-special/gnome-copied-files';
 
 export const FilesView = GObject.registerClass(
@@ -42,6 +52,10 @@ class FilesView extends St.Widget {
         this._helperActive = false;
         this._helperAvailable = false;
         this._dropping = false;
+        this._dropOver = false;
+        /** How lit the zone is (0..1), with the island's drop light, and in which colours. */
+        this._light = 0;
+        this._glow = ZONE_GLOW;
         this._lastClick = {uri: null, at: 0};
 
         // Expanding, as BinLayout only honours START for children that do.
@@ -65,6 +79,10 @@ class FilesView extends St.Widget {
         this._empty.add_child(this._emptyTitle);
         this._empty.add_child(this._emptyHint);
         this.add_child(this._empty);
+        // Behind the tiles, so its fill never tints them.
+        this._zone = new St.DrawingArea({x_expand: true, y_expand: true, visible: false});
+        this._zone.connect('repaint', area => this._paintZone(area));
+        this.insert_child_at_index(this._zone, 0);
         this.connect('destroy', () => (this._destroyed = true));
         this.update();
     }
@@ -93,6 +111,60 @@ class FilesView extends St.Widget {
         this.update();
     }
 
+    /** The file is right over the drop zone. */
+    set dropOver(over) {
+        if (over === this._dropOver)
+            return;
+        this._dropOver = over;
+        this._zone.queue_repaint();
+        this._updateEmptyText();
+    }
+
+    /** How lit the zone is (0..1); it follows the island's drop light. */
+    set light(level) {
+        this._light = level;
+        if (this._zone.visible)
+            this._zone.queue_repaint();
+    }
+
+    /** The light's colours (RGB 0..1, eased in place): the zone glows in the first into the last. */
+    set glowColors(colors) {
+        this._glow = [colors[0], colors[colors.length - 1]];
+        this._zone.queue_repaint();
+    }
+
+    _paintZone(area) {
+        const cr = area.get_context();
+        const [width, height] = area.get_surface_size();
+        const full = (this._daemon.state.shelf ?? []).length >= SHELF_CAPACITY;
+        const dragging = this._dropping && this._helperAvailable;
+        const [from, to] = [ZONE[dragging ? 'near' : 'idle'], ZONE.over];
+        const t = full ? 0 : Math.min(1, this._light);
+        const [line, fill] = from.map((value, i) => value + (to[i] - value) * t);
+        roundedRect(cr, width, height, ZONE_RADIUS, 0.5);
+        cr.setSourceRGBA(1, 1, 1, fill);
+        cr.fillPreserve();
+        if (t > 0) {
+            cr.save();
+            cr.clipPreserve();
+            const glow = new Cairo.RadialGradient(width / 2, height * 1.3, 0, width / 2, height * 1.3, width * 0.55);
+            glow.addColorStopRGBA(0, ...this._glow[0], ZONE_GLOW_ALPHA[0] * t);
+            glow.addColorStopRGBA(0.55, ...this._glow[1], ZONE_GLOW_ALPHA[1] * t);
+            glow.addColorStopRGBA(1, 0, 0, 0, 0);
+            cr.setSource(glow);
+            cr.paint();
+            cr.restore();
+        }
+        if (!this._helperActive) {
+            if (full && dragging)
+                cr.setSourceRGBA(1, 0.36, 0.36, 0.6);
+            else
+                cr.setSourceRGBA(1, 1, 1, line);
+            strokeDashed(cr);
+        }
+        cr.$dispose();
+    }
+
     update() {
         const items = this._daemon.state.shelf ?? [];
         // Not while isled is away (no list), or every preview would go.
@@ -101,10 +173,10 @@ class FilesView extends St.Widget {
         this._tiles.destroy_all_children();
         const dragging = this._dropping && this._helperAvailable;
         const full = items.length >= SHELF_CAPACITY;
-        if (dragging)
-            this.add_style_pseudo_class('drop');
-        else
-            this.remove_style_pseudo_class('drop');
+        // At rest it marks an empty shelf. Under the helper only its fill and light show: the helper,
+        // which can't know the files' colours, draws the dashes.
+        this._zone.visible = dragging || items.length === 0;
+        this._zone.queue_repaint();
 
         if (this._helperActive) {
             this._tiles.hide();
@@ -118,16 +190,19 @@ class FilesView extends St.Widget {
         this._tiles.visible = items.length > 0;
         this._empty.visible = items.length === 0;
 
-        if (!this._helperAvailable) {
-            this._emptyTitle.text = 'No files on the shelf';
-            this._emptyHint.text = 'Drag and drop needs the shelf helper; run install.sh again';
-        } else if (dragging) {
-            this._emptyTitle.text = 'Drop to add it';
-            this._emptyHint.text = 'Then drag it into any app, or click to copy it';
-        } else {
-            this._emptyTitle.text = 'Drop files here';
-            this._emptyHint.text = 'Then drag them into any app, or click to copy';
-        }
+        this._updateEmptyText();
+    }
+
+    /** What the empty shelf says, as the helper does: where to drop, and what then. */
+    _updateEmptyText() {
+        const dragging = this._dropping && this._helperAvailable;
+        let title = 'Drop files here', hint = 'Then drag them into any app, or click to copy';
+        if (!this._helperAvailable)
+            [title, hint] = ['No files on the shelf', 'Drag and drop needs the shelf helper; run install.sh again'];
+        else if (dragging)
+            [title, hint] = [this._dropOver ? 'Release to add it' : 'Drop to add it', 'Then drag it into any app, or click to copy it'];
+        this._emptyTitle.text = title;
+        this._emptyHint.text = hint;
     }
 
     // Tiles
@@ -171,12 +246,24 @@ class FilesView extends St.Widget {
 
     /** The empty slot a dragged file will land in. */
     _slot() {
-        const square = new St.Bin({
+        const square = new St.Widget({
             style_class: 'isle-shelf-preview isle-shelf-slot',
+            layout_manager: new Clutter.BinLayout(),
             width: PREVIEW_SIZE,
             height: PREVIEW_SIZE,
-            child: new St.Icon({gicon: icon('isle-plus-symbolic'), icon_size: 18}),
         });
+        const dashes = new St.DrawingArea({x_expand: true, y_expand: true});
+        dashes.connect('repaint', area => {
+            const cr = area.get_context();
+            const [width, height] = area.get_surface_size();
+            roundedRect(cr, width, height, SLOT_RADIUS, 0.5);
+            cr.setSourceRGBA(1, 1, 1, 0.45);
+            strokeDashed(cr);
+            cr.$dispose();
+        });
+        square.add_child(dashes);
+        square.add_child(new St.Icon({gicon: icon('isle-plus-symbolic'), icon_size: 18,
+            x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER}));
         const tile = this._tileBox(this._frame(square), 'Drop here');
         tile.reactive = false;
         return tile;
@@ -257,3 +344,22 @@ class FilesView extends St.Widget {
             GLib.Bytes.new(new TextEncoder().encode(`copy\n${item.uri}`)));
     }
 });
+
+/** Traces a rounded rectangle `inset` px inside `width` × `height`. */
+function roundedRect(cr, width, height, radius, inset) {
+    const r = Math.min(radius, width / 2, height / 2) - inset;
+    const [left, top, right, bottom] = [inset, inset, width - inset, height - inset];
+    cr.newSubPath();
+    cr.arc(right - r, top + r, r, -Math.PI / 2, 0);
+    cr.arc(right - r, bottom - r, r, 0, Math.PI / 2);
+    cr.arc(left + r, bottom - r, r, Math.PI / 2, Math.PI);
+    cr.arc(left + r, top + r, r, Math.PI, 1.5 * Math.PI);
+    cr.closePath();
+}
+
+/** Strokes the traced path in 1 px dashes, as GTK draws a dashed border. */
+function strokeDashed(cr) {
+    cr.setLineWidth(1);
+    cr.setDash(DASH, 0);
+    cr.stroke();
+}

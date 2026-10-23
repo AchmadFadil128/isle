@@ -271,3 +271,4 @@ Served by `isle-shelf` (not `isled`) as `io.github.zickrian.isle.ShelfWindow` at
 | `Show(i x, i y, i width, i height)` | | Show the shelf window over this area, in logical pixels. |
 | `Hide()` | | |
 | `SetDropping(b dropping)` | | A file is being dragged towards the island: show where it will land. |
+| `Hovering` | signal `as uris` | The files dragged over the window, for the island to light in their colours; empty once they leave. |

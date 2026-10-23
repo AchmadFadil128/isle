@@ -5,13 +5,14 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::time::Duration;
 
 use gtk::{gdk, gdk_pixbuf, gio, glib, prelude::*};
 use gtk4 as gtk;
 use log::warn;
 use serde::Deserialize;
 
-use crate::{tile, x11};
+use crate::{service, tile, x11};
 
 const DAEMON: &str = "io.github.zickrian.isle.Daemon";
 const DAEMON_PATH: &str = "/io/github/zickrian/isle/Daemon";
@@ -22,6 +23,8 @@ const SHELF_ICON: &[u8] = include_bytes!("../../../gnome-extension/icons/isle-sh
 const CAPACITY: usize = 6;
 /// Hidden this long, the helper quits, its memory freed; the extension's next Show starts it again.
 const IDLE_QUIT_SECS: u32 = 20;
+/// The drop area flashes this long once a file lands (see style.css).
+const LANDED_FOR: Duration = Duration::from_millis(700);
 
 /// One file on the shelf, as isled describes it.
 #[derive(Debug, Clone, Deserialize)]
@@ -189,6 +192,19 @@ impl ShelfWindow {
     /// Files dropped anywhere on the window go onto the shelf.
     fn accept_drops(&self) {
         let target = gtk::DropTarget::new(gdk::FileList::static_type(), gdk::DragAction::COPY);
+        // Read while hovering, so the island can light in the files' colours before the drop.
+        target.set_preload(true);
+        target.connect_value_notify(|target| {
+            if dragged_from_here(target) {
+                return;
+            }
+            let uris = target
+                .value()
+                .and_then(|value| value.get::<gdk::FileList>().ok())
+                .map(|files| local_uris(&files))
+                .unwrap_or_default();
+            service::announce_hovering(&uris);
+        });
         // A full shelf refuses the drop; the island's hint says why.
         let weak = Rc::downgrade(&self.0);
         target.connect_enter(move |target, _, _| {
@@ -233,19 +249,27 @@ impl ShelfWindow {
             let Ok(files) = value.get::<gdk::FileList>() else {
                 return false;
             };
-            let uris: Vec<String> = files
-                .files()
-                .iter()
-                .filter(|file| file.is_native())
-                .map(|file| file.uri().to_string())
-                .collect();
+            let uris = local_uris(&files);
             if uris.is_empty() {
                 return false;
             }
             shelf.call("Add", Some(&(uris,).to_variant()));
+            shelf.flash_landed();
             true
         });
         self.0.window.add_controller(target);
+    }
+
+    fn flash_landed(&self) {
+        let stack = &self.0.stack;
+        stack.remove_css_class("landed");
+        stack.add_css_class("landed");
+        let stack = stack.downgrade();
+        glib::timeout_add_local_once(LANDED_FOR, move || {
+            if let Some(stack) = stack.upgrade() {
+                stack.remove_css_class("landed");
+            }
+        });
     }
 
     fn connect_daemon(&self) {
@@ -317,6 +341,7 @@ impl ShelfWindow {
         set_class(&inner.stack, "dropping", dragging);
         set_class(&inner.stack, "over", inner.over.get());
         set_class(&inner.stack, "full", dragging && full);
+        set_class(&inner.stack, "empty", count == 0 && !dragging);
 
         // Where the file will land: the newest file comes first. The tiles stay as they are.
         let slot = dragging && !full && count > 0;
@@ -328,7 +353,12 @@ impl ShelfWindow {
             }
         }
 
-        let (title, hint) = if dragging {
+        let (title, hint) = if inner.over.get() && !full {
+            (
+                "Release to add it",
+                "Then drag it into any app, or click to copy it",
+            )
+        } else if dragging {
             (
                 "Drop to add it",
                 "Then drag it into any app, or click to copy it",
@@ -369,6 +399,16 @@ impl ShelfWindow {
         }
         inner.tile_cache.replace(cache);
     }
+}
+
+/// The files' URIs, local ones only: isled keeps nothing else.
+fn local_uris(files: &gdk::FileList) -> Vec<String> {
+    files
+        .files()
+        .iter()
+        .filter(|file| file.is_native())
+        .map(|file| file.uri().to_string())
+        .collect()
 }
 
 /// Whether the drag is a tile carried out of this window, not a file coming in.

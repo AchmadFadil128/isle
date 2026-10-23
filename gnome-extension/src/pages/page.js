@@ -14,6 +14,8 @@ export const Page = GObject.registerClass({
         'width-changed': {},
         // `tint` changed.
         'tint-changed': {},
+        // A 'siri' tint moved: time (s), level (0..1); see `Island.setTintMotion`.
+        'tint-motion': {param_types: [GObject.TYPE_DOUBLE, GObject.TYPE_DOUBLE]},
         // The user did something that should close the island.
         'request-close': {},
         // `hasNews` changed.
@@ -82,7 +84,7 @@ export const Page = GObject.registerClass({
         return null;
     }
 
-    /** How `tint` colours the island: 'wash' or 'glow' (see `Island.setTint`). */
+    /** How `tint` colours the island: 'wash', 'glow' or 'siri' (see `Island.setTint`). */
     get tintStyle() {
         return 'wash';
     }

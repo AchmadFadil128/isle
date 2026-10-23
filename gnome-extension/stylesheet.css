@@ -874,18 +874,8 @@
 /* Files tab. The shelf helper's window draws this tab when installed; its
  * style.css mirrors these sizes and colours so the two look the same. */
 
-/* Lit as one rounded area while a file is on its way. The border is always
- * there, so lighting it moves nothing. */
-.isle-shelf-files {
-  border-radius: 16px;
-  border: 1px solid transparent;
-  transition-duration: 160ms;
-}
-
-.isle-shelf-files:drop {
-  border-color: rgba(10, 132, 255, 0.45);
-  background-color: rgba(10, 132, 255, 0.07);
-}
+/* While a file is on its way, a dashed outline (drawn in files.js) marks it as one rounded area. */
+.isle-shelf-files { border-radius: 16px; }
 
 .isle-shelf-tiles { spacing: 6px; }
 
@@ -905,11 +895,7 @@
 .isle-shelf-preview.thumbnail { background-color: #2c2c2e; background-size: cover; }
 
 /* Where a dragged file will land. */
-.isle-shelf-slot {
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background-color: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.8);
-}
+.isle-shelf-slot { color: rgba(255, 255, 255, 0.8); }
 
 .isle-shelf-copied { border-radius: 12px; background-color: rgba(0, 0, 0, 0.6); }
 

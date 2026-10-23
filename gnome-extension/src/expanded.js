@@ -58,6 +58,8 @@ export const ExpandedView = GObject.registerClass({
         'width-changed': {},
         // The current page's tint colour changed; see `tint`.
         'tint-changed': {},
+        // The current page's 'siri' tint moved: time (s), level (0..1).
+        'tint-motion': {param_types: [GObject.TYPE_DOUBLE, GObject.TYPE_DOUBLE]},
         // The mic button: open the voice assistant.
         'voice-requested': {},
         // The gear by the clock: Isle's settings.
@@ -103,6 +105,10 @@ export const ExpandedView = GObject.registerClass({
             page.connect('tint-changed', () => {
                 if (page === this.page)
                     this.emit('tint-changed');
+            });
+            page.connect('tint-motion', (_page, time, level) => {
+                if (page === this.page)
+                    this.emit('tint-motion', time, level);
             });
             page.connect('news-changed', () => this._syncTabs());
             page.connect('availability-changed', () => this._onAvailabilityChanged(page));

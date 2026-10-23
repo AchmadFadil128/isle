@@ -7,6 +7,7 @@ import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
+import {DropLight} from '../dropLight.js';
 import {Thumbnails} from '../thumbnails.js';
 import {icon, iconButton, label, pillButton, setEnabled} from '../widgets.js';
 import {ClipsView} from './clips.js';
@@ -27,8 +28,12 @@ const FILTERS = [
 const CONFIRM_MS = 3000;
 /** Crossfade between tabs. */
 const TAB_FADE_MS = 150;
-/** How long the island glows after a file lands on the shelf. */
-const GLOW_MS = 2200;
+/** How long the hint says a file was added. */
+const ADDED_MS = 2200;
+/** The flare waits this long for a new file's colour, then lights in the shelf's own. */
+const COLOR_WAIT_MS = 400;
+/** A dragged file's colour comes from its preview, read within this long or not at all. */
+const COLOR_LATE_MS = 1500;
 
 export const ShelfPage = GObject.registerClass({
     Signals: {
@@ -51,12 +56,24 @@ export const ShelfPage = GObject.registerClass({
         this._copied = [];
         /** Views that changed while the page was closed, redrawn on opening. */
         this._stale = new Set();
-        /** A file is being dragged towards the island. */
+        /** A file is being dragged towards the island, and over the drop zone. */
         this._dropping = false;
+        this._dropOver = false;
         /** The files on the shelf last time it changed, to tell new ones. */
         this._shelved = null;
-        /** The colour the island glows in after a file landed, or null. */
-        this._glow = null;
+        /** A file just landed: the hint says so. */
+        this._added = false;
+        this._light = new DropLight(this);
+        this._light.connect('changed', () => {
+            this.emit('tint-changed');
+            // The zone's light takes the same colours; kept as it fades out.
+            if (this._light.colors)
+                this._files.glowColors = this._light.colors;
+        });
+        this._light.connect('frame', (_light, time, level) => {
+            this.emit('tint-motion', time, level);
+            this._files.light = level;
+        });
 
         this._clips = new ClipsView(daemon);
         this._clips.connect('activated', (_view, item, paste) => this._onActivated(item, paste));
@@ -80,12 +97,16 @@ export const ShelfPage = GObject.registerClass({
         this.watch(['shelf'], () => {
             this._noticeNewFiles();
             this._refresh('files');
+            // Full or not any more, mid-drag.
+            if (this._dropping)
+                this._light.approach(this._dropOver, this._full);
         });
         this._settingsChanged = settings.connect('changed::clipboard-history', () => this._refresh('clips'));
         this.connect('destroy', () => {
             this._destroyed = true;
             settings.disconnect(this._settingsChanged);
             this._thumbnails.destroy();
+            this._light.destroy();
         });
         this._updateClips();
         this._updateFilesHint();
@@ -221,9 +242,9 @@ export const ShelfPage = GObject.registerClass({
         }
         this._clipboardControls.visible = name === 'clipboard';
         this._filesHint.visible = name === 'files';
-        if (name !== 'files' && this._glow) {
-            this.cancel('glow');
-            this._setGlow(null);
+        if (name !== 'files') {
+            this._light.off();
+            this._setAdded(false);
         }
         // Files are dragged with the pointer, which apps (the drag-and-drop
         // helper included) only get while the island lets go of the keyboard.
@@ -252,11 +273,11 @@ export const ShelfPage = GObject.registerClass({
     }
 
     get tint() {
-        return this._glow;
+        return this._light.colors;
     }
 
     get tintStyle() {
-        return 'glow';
+        return 'siri';
     }
 
     // Updates
@@ -281,7 +302,51 @@ export const ShelfPage = GObject.registerClass({
     set dropping(dropping) {
         this._dropping = dropping;
         this._files.dropping = dropping;
+        if (!dropping) {
+            this._dropOver = this._files.dropOver = false;
+            // The next drag brings its own colours; a drop under way keeps its light.
+            this._dragged = null;
+            this._light.fileColors = null;
+            if (!['landing', 'landed'].includes(this._light.state))
+                this._light.off();
+        }
         this._updateFilesHint();
+    }
+
+
+    /** The file is right over the drop zone. */
+    set dropOver(over) {
+        this._dropOver = over && this._dropping;
+        this._files.dropOver = this._dropOver;
+        this._updateFilesHint();
+        if (this._dropping)
+            this._light.approach(this._dropOver, this._full);
+    }
+
+    /** The files dragged over the drop zone: the light takes their colours (at most three). */
+    async showDragged(uris) {
+        const token = this._dragged = {};
+        // A preview slow to read keeps none from the light: it does without that file's colour.
+        const late = new Promise(resolve => {
+            this.later('dragged-colors', COLOR_LATE_MS, () => resolve(null));
+        });
+        const shown = await Promise.all(uris.slice(0, 3).map(uri => Promise.race([this._thumbnails.get(uri), late])));
+        if (this._destroyed || token !== this._dragged)
+            return;
+        this._light.fileColors = shown.filter(Boolean).map(file => file.color);
+    }
+
+    /** The drag ended; `onShelf` if it was let go over the drop zone. Returns whether a full shelf turned it away. */
+    endDrop(onShelf) {
+        const refused = onShelf && this._full;
+        if (onShelf && !refused)
+            this._light.release();
+        this.dropping = false;
+        return refused;
+    }
+
+    get _full() {
+        return (this.daemon.state.shelf ?? []).length >= SHELF_CAPACITY;
     }
 
     /** Says what the Files tab is for, and when it is full. */
@@ -289,24 +354,27 @@ export const ShelfPage = GObject.registerClass({
         const count = (this.daemon.state.shelf ?? []).length;
         const full = count >= SHELF_CAPACITY;
         let text;
-        if (this._dropping)
-            text = full ? 'Full · remove a file first' : 'Drop to keep it on the shelf';
-        else if (this._glow)
+        // An empty shelf's drop zone says it all itself.
+        if (count === 0 && !this._added)
+            text = '';
+        else if (this._dropping && full)
+            text = 'Full · remove a file first';
+        else if (this._dropping)
+            text = this._dropOver ? 'Release to add it' : 'Drop to keep it on the shelf';
+        else if (this._added)
             text = 'Added · click to copy, or drag it into any app';
         else if (full)
             text = 'Full · remove a file to add another';
-        else if (count === 0)
-            text = 'Drop files here, then drag them into any app';
         else
             text = `${count} of ${SHELF_CAPACITY} · click to copy, or drag into any app`;
         this._filesHint.text = text;
-        if (this._dropping || this._glow)
+        if (this._dropping || this._added)
             this._filesHint.add_style_class_name('active');
         else
             this._filesHint.remove_style_class_name('active');
     }
 
-    /** Glows the island in the colour of a file that just landed, while Files is shown. */
+    /** Flares the light in the colour of a file that just landed, while Files is shown. */
     async _noticeNewFiles() {
         const items = this.daemon.state.shelf;
         if (!items) {
@@ -317,21 +385,25 @@ export const ShelfPage = GObject.registerClass({
         const uris = items.map(item => item.uri);
         const known = this._shelved;
         this._shelved = uris;
-        // Newest first: the first new one is the latest.
-        const landed = known && uris.find(uri => !known.includes(uri));
+        // Newest first: the first new one is the latest; one dropped again moves to the front.
+        const moved = known && uris.length === known.length && uris[0] !== known[0] ? uris[0] : null;
+        const landed = known && (uris.find(uri => !known.includes(uri)) ?? moved);
         if (!landed || !this.active || this._tab !== 'files')
             return;
-        const shown = await this._thumbnails.get(landed);
-        if (!shown || this._destroyed || !this.active || this._tab !== 'files')
+        const shown = await Promise.race([this._thumbnails.get(landed),
+            new Promise(resolve => {
+                this.later('flare-color', COLOR_WAIT_MS, resolve);
+            })]);
+        if (this._destroyed || !this.active || this._tab !== 'files')
             return;
-        this._setGlow(shown.color);
-        this.later('glow', GLOW_MS, () => this._setGlow(null));
+        this._light.land(shown?.color);
+        this._setAdded(true);
+        this.later('added', ADDED_MS, () => this._setAdded(false));
     }
 
-    _setGlow(color) {
-        this._glow = color;
+    _setAdded(added) {
+        this._added = added;
         this._updateFilesHint();
-        this.emit('tint-changed');
     }
 
     /** While the screen is shared or recorded, the clipboard history stays out of sight. */
@@ -439,7 +511,8 @@ export const ShelfPage = GObject.registerClass({
     }
 
     onDeactivate() {
-        this._glow = null;
+        this._light.off();
+        this._added = false;
         this._updateFilesHint();
         // Skipping any removed or cleared since.
         const items = this.daemon.state.clipboard ?? [];

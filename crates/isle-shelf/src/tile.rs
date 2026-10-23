@@ -28,8 +28,8 @@ const REMOVE_SIZE: i32 = 18;
 const FRAME_HEIGHT: i32 = PREVIEW_SIZE + 6;
 /// Thumbnails are cut at twice their size, sharp on HiDPI screens too.
 const THUMBNAIL_PIXELS: i32 = PREVIEW_SIZE * 2;
-/// A new file's tile fades in for this long (see style.css).
-const FRESH_FOR: Duration = Duration::from_millis(400);
+/// A new file's tile pops in for this long (see style.css).
+const FRESH_FOR: Duration = Duration::from_millis(600);
 /// How long "Copied" shows on the tile.
 const COPIED_FOR: Duration = Duration::from_millis(1100);
 
