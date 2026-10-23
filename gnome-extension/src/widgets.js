@@ -332,16 +332,23 @@ class Bars extends St.BoxLayout {
         this._maxHeight = height;
         this._playing = false;
         this._bars = [];
+        /** Each bar's bounce: its scale goes `from` → `to` over `duration` ms from `start` (-1: the next frame). */
+        this._bounces = [];
         for (let i = 0; i < count; i++) {
             // Full height, scaled about its middle: a scale moves below a pixel and lays nothing out again.
             const bar = new St.Widget({style_class: 'isle-bar', y_align: Clutter.ActorAlign.CENTER, height});
             bar.set_pivot_point(0.5, 0.5);
             bar.scale_y = this._rest(i);
             // A bar's bounce pauses off screen. Each bar is watched itself: the box maps a moment before them.
-            bar.connect('notify::mapped', () => this._bounce(bar));
+            bar.connect('notify::mapped', () => this._bounce(i));
             this._bars.push(bar);
+            this._bounces.push({on: false, from: 0, to: 0, start: -1, duration: 0});
             this.add_child(bar);
         }
+        // One clock moves every bar: an ease per bounce made garbage many times a second.
+        this._clock = new Clutter.Timeline({actor: this, duration: 1000, repeat_count: -1});
+        this._clock.connect('new-frame', () => this._step());
+        this._now = 0;
         this.connect('destroy', () => this._onDestroy());
     }
 
@@ -362,10 +369,12 @@ class Bars extends St.BoxLayout {
         if (playing === this._playing)
             return;
         this._playing = playing;
+        if (!playing)
+            this._stop();
         this._bars.forEach((bar, index) => {
             bar.remove_all_transitions();
             if (playing)
-                this._bounce(bar);
+                this._bounce(index);
             else if (this.mapped)
                 bar.ease({scale_y: this._rest(index), duration: 200});
             else
@@ -373,24 +382,57 @@ class Bars extends St.BoxLayout {
         });
     }
 
-    _bounce(bar) {
-        // Off screen or with animations off, ease() reports finished at once, so going on would loop
-        // without end (as when a player drops its title between songs). With animations off the bars rest.
-        if (!this._playing || !bar.mapped || !St.Settings.get().enable_animations)
-            return;
-        bar.ease({
-            scale_y: 0.25 + Math.random() * 0.75,
-            duration: 180 + Math.random() * 220,
-            mode: Clutter.AnimationMode.EASE_IN_OUT_SINE,
-            onStopped: finished => {
-                if (finished)
-                    this._bounce(bar);
-            },
-        });
+    /** Starts bar `index` on a new bounce from where it is, or stops it. */
+    _bounce(index) {
+        const bounce = this._bounces[index];
+        const bar = this._bars[index];
+        const settings = St.Settings.get();
+        // With animations off the bars rest where they are.
+        bounce.on = this._playing && bar.mapped && settings.enable_animations;
+        if (bounce.on) {
+            bounce.from = bar.scale_y;
+            bounce.to = 0.25 + Math.random() * 0.75;
+            bounce.start = -1;
+            // Slowed down as ease() is.
+            bounce.duration = (180 + Math.random() * 220) * settings.slow_down_factor;
+            if (!this._clock.is_playing()) {
+                this._now = 0;
+                this._clock.start();
+            }
+        } else if (!this._bounces.some(other => other.on)) {
+            this._clock.stop();
+        }
+    }
+
+    _step() {
+        this._now += this._clock.get_delta();
+        for (let i = 0; i < this._bounces.length; i++) {
+            const bounce = this._bounces[i];
+            if (!bounce.on)
+                continue;
+            // As an ease, it starts the frame after it is made.
+            if (bounce.start < 0)
+                bounce.start = this._now;
+            const t = (this._now - bounce.start) / bounce.duration;
+            if (t >= 1) {
+                this._bars[i].scale_y = bounce.to;
+                this._bounce(i);
+            } else {
+                // EASE_IN_OUT_SINE, as Clutter has it.
+                this._bars[i].scale_y = bounce.from + (bounce.to - bounce.from) * -(Math.cos(Math.PI * t) - 1) / 2;
+            }
+        }
+    }
+
+    _stop() {
+        for (const bounce of this._bounces)
+            bounce.on = false;
+        this._clock.stop();
     }
 
     _onDestroy() {
         this._playing = false;
+        this._stop();
     }
 });
 
