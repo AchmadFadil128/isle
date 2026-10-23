@@ -800,7 +800,7 @@ export class Controller {
         }
         if (this._island.hovered) {
             this._cancel('collapse');
-            if (!this._expandWanted && this._settings.get_string('open-on') === 'hover')
+            if (!this._expandWanted && this._settings.get_string('open-on') === 'hover' && !this._alertHasButtons)
                 this._expandOnRest();
         } else {
             this._cancel('expand');
@@ -814,10 +814,17 @@ export class Controller {
         }
     }
 
+    /** An alert with buttons (Join, Allow…) is on show: the pointer goes there to press one, not to open the island. */
+    get _alertHasButtons() {
+        return this._presentation === 'peek' && Boolean(this._alert?.action || this._alert?.actions?.length);
+    }
+
     // Opens once the pointer rests on the island, so passing over it along the top bar opens nothing.
     _expandOnRest() {
         const [x, y] = global.get_pointer();
         this._later('expand', this._settings.get_int('hover-delay'), () => {
+            if (this._alertHasButtons)
+                return;
             const [nowX, nowY] = global.get_pointer();
             // The assistant still at work: its progress, rather than the pages (as a click does).
             if (Math.hypot(nowX - x, nowY - y) <= REST_DISTANCE_PX && this._voiceWorking)
