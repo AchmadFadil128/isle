@@ -530,8 +530,12 @@ export const VoiceView = GObject.registerClass({
     /** "Started a new chat · Undo", for UNDO_MS after +. */
     showUndo(shown) {
         this._undo.visible = shown;
-        if (shown)
+        if (shown) {
+            // The old exchange went with its conversation.
+            this._exchange = {heard: '', reply: ''};
+            this._heard.text = '';
             this.closeChat();
+        }
         this.emit('size-changed');
     }
 

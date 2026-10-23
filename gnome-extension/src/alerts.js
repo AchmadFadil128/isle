@@ -397,11 +397,14 @@ const ASKING_GLOW = [[1, 0.62, 0.04], [1, 0.42, 0.25], [1, 0.8, 0.3]];
 const DONE_GLOW = [[0.19, 0.82, 0.35], [0.35, 0.88, 0.75], [0.7, 0.94, 0.35]];
 
 /** What a tool call is about, in a line: a command as it is, else the tool and what it works on. */
+// What it asks to do, on one line: a shell command as it is, else the tool and what it touches
+// (isled sends that as a line; see agents/hook.rs `request`).
 function toolLine(tool, input) {
-    if (input?.command)
-        return String(input.command).split('\n')[0];
-    const target = input?.file_path ?? input?.path ?? input?.url ?? input?.pattern ?? '';
-    return [tool, target].filter(Boolean).join(' ');
+    const line = String(typeof input === 'string' ? input
+        : input?.command ?? input?.file_path ?? input?.path ?? input?.url ?? input?.pattern ?? '').split('\n')[0];
+    if (/^(bash|shell|exec_command|local_shell)$/i.test(tool ?? '') && line)
+        return line;
+    return [tool, line].filter(Boolean).join(' ');
 }
 
 /**
