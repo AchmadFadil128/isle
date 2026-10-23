@@ -132,6 +132,23 @@ impl ShelfWindow {
 
     /// Shows the window over the given area of the screen (logical pixels).
     pub fn show_at(&self, x: i32, y: i32, width: i32, height: i32) {
+        self.show_over((x, y, width, height), (x, y, width, height));
+    }
+
+    /// Shows the window over `window`, with the files in `area` inside it; the rest is see-through
+    /// and still takes drops.
+    pub fn show_over(&self, window: (i32, i32, i32, i32), area: (i32, i32, i32, i32)) {
+        let (x, y, width, height) = window;
+        let (ax, ay, awidth, aheight) = area;
+        let stack = &self.0.stack;
+        stack.set_margin_start(ax - x);
+        stack.set_margin_top(ay - y);
+        stack.set_margin_end(x + width - (ax + awidth));
+        stack.set_margin_bottom(y + height - (ay + aheight));
+        self.place_window(x, y, width, height);
+    }
+
+    fn place_window(&self, x: i32, y: i32, width: i32, height: i32) {
         if let Some(quit) = self.0.idle_quit.take() {
             quit.remove();
         }

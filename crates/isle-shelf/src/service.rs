@@ -16,6 +16,18 @@ const INTERFACE: &str = r#"
       <arg name="width" type="i" direction="in"/>
       <arg name="height" type="i" direction="in"/>
     </method>
+    <!-- While a file is dragged in, the window covers the whole island (x…height), so a drop lands
+         anywhere on it; the files stay where the island's tab is (ax…aheight). -->
+    <method name="ShowOver">
+      <arg name="x" type="i" direction="in"/>
+      <arg name="y" type="i" direction="in"/>
+      <arg name="width" type="i" direction="in"/>
+      <arg name="height" type="i" direction="in"/>
+      <arg name="ax" type="i" direction="in"/>
+      <arg name="ay" type="i" direction="in"/>
+      <arg name="awidth" type="i" direction="in"/>
+      <arg name="aheight" type="i" direction="in"/>
+    </method>
     <method name="Hide"/>
     <!-- A file is being dragged towards the island: show where it will
          land before the pointer gets to the window. -->
@@ -55,6 +67,23 @@ pub fn register(connection: &gio::DBusConnection, window: ShelfWindow) -> Result
                 _ => {
                     invocation.return_error(gio::DBusError::InvalidArgs, "expected a positive size")
                 }
+            },
+            "ShowOver" => match params.get::<(i32, i32, i32, i32, i32, i32, i32, i32)>() {
+                Some((x, y, width, height, ax, ay, awidth, aheight))
+                    if awidth > 0
+                        && aheight > 0
+                        && ax >= x
+                        && ay >= y
+                        && ax + awidth <= x + width
+                        && ay + aheight <= y + height =>
+                {
+                    window.show_over((x, y, width, height), (ax, ay, awidth, aheight));
+                    invocation.return_value(None);
+                }
+                _ => invocation.return_error(
+                    gio::DBusError::InvalidArgs,
+                    "expected an area inside the window",
+                ),
             },
             "Hide" => {
                 window.hide();
