@@ -221,9 +221,11 @@ export class Controller {
             this._island.addView(view);
         Main.layoutManager.addChrome(this._island, {trackFullscreen: true});
         // A second activity beside the closed island.
-        this._bubble = new IslandBubble(this._daemon);
+        this._bubble = new IslandBubble(this._daemon, this._call);
         // Hidden with the island under a fullscreen window (see `_syncBubble`), not by the layout manager.
         Main.layoutManager.addChrome(this._bubble);
+        // Behind the island, so it splits out from under its edge.
+        this._bubble.get_parent().set_child_below_sibling(this._bubble, this._island);
         this._updateGeometry();
         this._render();
     }

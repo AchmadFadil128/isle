@@ -362,7 +362,7 @@ export function meeting(event, link, join) {
         duration: REMINDER_DURATION,
         // Its time only runs while someone is there to see it, as a reminder's.
         sticky: true,
-        action: link ? {label: 'Join', callback: join} : null,
+        action: link ? {label: 'Join', callback: join, primary: true} : null,
     };
 }
 
@@ -373,7 +373,9 @@ export function agent(event, show) {
     const name = AGENT_NAMES[event.provider] ?? 'Your AI';
     const waiting = event.kind === 'permission' || event.kind === 'waiting';
     const title = {permission: `${name} needs your OK`, waiting: `${name} is waiting for you`}[event.kind] ?? `${name} is done`;
-    const detail = event.message?.trim();
+    // Said once: the title already says it needs an OK; the tool it asks for, as a question.
+    const tool = /permission to use (.+?)\.?$/i.exec(event.message ?? '')?.[1];
+    const detail = {permission: tool ? `Allow ${tool}?` : '', waiting: ''}[event.kind] ?? event.message?.trim();
     return {
         // One per session: a newer word from the same one replaces it.
         key: `agent:${event.provider}:${event.session || event.project}`,

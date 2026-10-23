@@ -220,7 +220,8 @@ class PeekView extends St.Widget {
         if (alert.level === undefined || alert.level === null || alert.action)
             this._levelKey = null;
         if (alert.action) {
-            this._actionButton = pillButton(alert.action.label, 'isle-pill-small', () => {
+            // The one thing to do now (Join) in the accent colour, as macOS's default button.
+            this._actionButton = pillButton(alert.action.label, alert.action.primary ? 'isle-pill-small isle-pill-accent' : 'isle-pill-small', () => {
                 alert.action.callback();
                 onDone?.();
             });
