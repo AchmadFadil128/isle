@@ -11,6 +11,7 @@ mod clipboard;
 mod clock;
 mod http;
 mod media;
+mod meeting;
 mod pomodoro;
 mod reminders;
 mod shelf;

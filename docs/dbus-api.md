@@ -72,7 +72,20 @@ from GNOME Shell, not from here.)
 |---|---|---|
 | `Add(s date, s text) → t id` | | Adds an event on `date` (`YYYY-MM-DD`) from a line of text, taking its time from it: `Dinner 8:00 pm`, `Standup 9:00-9:15`, `Gym at 7pm`; without a time it lasts all day. A date that does not exist, or no title left, is refused with `InvalidArgs`. |
 | `Remove(t id)` | | |
+| `MeetingLink(s source_uid, s event_uid) → s` | | The meeting link of a desktop calendar's event (the first two lines of the id GNOME Shell's calendar server gives it), or `""`. |
 | `Events` | `s` | `[{id, title, date, start, end}]` by day and time; `start` and `end` are `HH:MM` or null (all day; no end given). Events over 400 days old are forgotten. |
+
+`MeetingLink` reads the event from Evolution Data Server
+(`org.gnome.evolution.dataserver.Calendar8`, else `Calendar7`:
+`CalendarFactory.OpenCalendar`, then `Calendar.Open`, `GetObject(uid, "")` and
+`Close`) and looks in its `X-GOOGLE-CONFERENCE`, `URL`, `LOCATION` and
+`DESCRIPTION`, in that order, for the first `https://` link to Google Meet
+(`meet.google.com`), Zoom (`zoom.us` or `*.zoom.us`, `/j/`, `/my/` or `/w/`),
+Microsoft Teams (`teams.microsoft.com/l/meetup-join/` or `/meet/`,
+`teams.live.com`) or Webex (`*.webex.com`). Answers are kept for six hours (at
+most 256 events). Without EDS (not installed, masked or not answering within
+five seconds) it is `""`; empty or over-long ids are refused with
+`InvalidArgs`.
 
 ## io.github.zickrian.isle.Shelf1
 

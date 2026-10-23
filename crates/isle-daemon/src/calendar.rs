@@ -5,11 +5,16 @@ use zbus::object_server::SignalEmitter;
 use zbus::{fdo, interface};
 
 use crate::clock::today;
+use crate::meeting::MeetingLinks;
 use crate::store::Store;
+
+/// Longest calendar or event id `MeetingLink` takes.
+const MAX_UID: usize = 1024;
 
 pub struct CalendarService {
     calendar: Calendar,
     store: Store<Calendar>,
+    links: MeetingLinks,
 }
 
 impl CalendarService {
@@ -19,7 +24,11 @@ impl CalendarService {
         if calendar.forget_old(&today()) {
             store.save(&calendar);
         }
-        Self { calendar, store }
+        Self {
+            calendar,
+            store,
+            links: MeetingLinks::default(),
+        }
     }
 
     pub fn calendar(&self) -> &Calendar {
@@ -62,6 +71,23 @@ impl CalendarService {
             return Err(fdo::Error::InvalidArgs(format!("no event with id {id}")));
         }
         Ok(self.changed(&emitter).await?)
+    }
+
+    /// The meeting link (Meet, Zoom, Teams, Webex) of a desktop calendar's event, or "".
+    /// Calls here wait for a lookup in Evolution Data Server, at most a few seconds.
+    async fn meeting_link(
+        &self,
+        source_uid: &str,
+        event_uid: &str,
+        #[zbus(connection)] connection: &zbus::Connection,
+    ) -> fdo::Result<String> {
+        let fits = |uid: &str| !uid.is_empty() && uid.len() <= MAX_UID;
+        if !fits(source_uid) || !fits(event_uid) {
+            return Err(fdo::Error::InvalidArgs(
+                "a calendar and an event id are needed".into(),
+            ));
+        }
+        Ok(self.links.get(connection, source_uid, event_uid).await)
     }
 
     /// JSON array of `Event`, by day and start time.
