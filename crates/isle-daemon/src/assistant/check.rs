@@ -199,7 +199,8 @@ fn split(command: &str) -> Result<Vec<String>, String> {
     Ok(words)
 }
 
-/// Where a program for a check is looked for: the system's folders and the user's own.
+/// Where a program for a check is looked for: the system's folders, then where the user's own programs
+/// are (as the AI CLIs are looked for: npm, nvm, Homebrew…).
 fn find(program: &str) -> Option<PathBuf> {
     let home = dirs::home_dir().unwrap_or_default();
     [
@@ -211,7 +212,7 @@ fn find(program: &str) -> Option<PathBuf> {
     ]
     .iter()
     .map(PathBuf::from)
-    .chain([home.join(".local/bin")])
+    .chain(super::install_dirs(&home))
     .map(|dir| dir.join(program))
     .find(|path| path.is_file())
 }
@@ -247,6 +248,10 @@ pub async fn run(command: &str) -> String {
 
 async fn output(program: &Path, args: &[String]) -> anyhow::Result<(i32, String)> {
     let mut command = Command::new(program);
+    // A Node program (npm, codex) finds the Node installed beside it.
+    if let Some(path) = super::child::path_for(program) {
+        command.env("PATH", path);
+    }
     command
         .args(args)
         .env("LANG", "C.UTF-8")

@@ -811,14 +811,26 @@ function clip(text) {
 
 // Terminals to sign in with, most likely first; the CLI's own sign-in runs there (a browser, then a
 // code pasted back into it), so Isle never handles the code.
-const TERMINALS = [['gnome-terminal', '--'], ['kgx', '--'], ['ptyxis', '--'], ['x-terminal-emulator', '-e']];
+// Terminals, the desktop's chosen one first, each with what comes before the command it runs.
+const TERMINALS = [
+    ['xdg-terminal-exec'], ['gnome-terminal', '--'], ['kgx', '--'], ['ptyxis', '--'], ['konsole', '-e'],
+    ['xfce4-terminal', '-x'], ['mate-terminal', '-x'], ['terminator', '-x'], ['kitty'], ['alacritty', '-e'],
+    ['ghostty', '-e'], ['wezterm', 'start', '--'], ['foot'], ['x-terminal-emulator', '-e'],
+];
 
-/** Opens a terminal to sign in to `provider` ("agy", "claude", "codex"); false without a terminal or it. */
-export function openSignIn(provider) {
+/**
+ * Opens a terminal to sign in to `provider` ("agy", "claude", "codex"), with its CLI where isled found it
+ * (`found`: nvm, Homebrew…); false without a terminal or it.
+ */
+export function openSignIn(provider, found = '') {
     const [name, ...args] = SIGN_IN[provider] ?? SIGN_IN.agy;
-    const program = GLib.find_program_in_path(name) ??
+    const program = (GLib.path_get_basename(found ?? '') === name && found) || GLib.find_program_in_path(name) ||
         GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', name]);
-    return GLib.file_test(program, GLib.FileTest.IS_EXECUTABLE) && inTerminal([program, ...args]);
+    if (!GLib.file_test(program, GLib.FileTest.IS_EXECUTABLE))
+        return false;
+    // Its own folder first, so a CLI run by Node finds the Node installed beside it.
+    const path = `${GLib.path_get_dirname(program)}:${GLib.getenv('PATH') ?? '/usr/bin:/bin'}`;
+    return inTerminal(['env', `PATH=${path}`, program, ...args]);
 }
 
 /** Opens a terminal that downloads the speech `model` (isle-setup-voice) and stays open to show how it went. */
@@ -836,6 +848,11 @@ const SET_UP = '"$@" && printf "\\nIsle: done. Press Super+I and speak.\\n" || '
 /** How each AI CLI signs in, run in a terminal (`agy` and `claude` ask on start). */
 const SIGN_IN = {agy: ['agy'], claude: ['claude'], codex: ['codex', 'login']};
 
+/** What to do when no terminal could be opened to sign in. */
+export function signInHint(provider) {
+    return `Run “${(SIGN_IN[provider] ?? SIGN_IN.agy).join(' ')}” in a terminal to sign in, then ask again.`;
+}
+
 /** The AI picked in Settings and the model picked for each, as isled reads them. */
 export function aiSettings(settings) {
     return {
@@ -848,12 +865,12 @@ export function aiSettings(settings) {
 
 /** Runs `argv` in a new terminal window; false when no terminal could be opened. */
 function inTerminal(argv) {
-    for (const [program, separator] of TERMINALS) {
+    for (const [program, ...before] of TERMINALS) {
         const terminal = GLib.find_program_in_path(program);
         if (!terminal)
             continue;
         try {
-            GLib.spawn_async(null, [terminal, separator, ...argv], null, GLib.SpawnFlags.DEFAULT, null);
+            GLib.spawn_async(null, [terminal, ...before, ...argv], null, GLib.SpawnFlags.DEFAULT, null);
             return true;
         } catch (e) {
             console.warn(`Isle: could not open ${program}: ${e.message}`);

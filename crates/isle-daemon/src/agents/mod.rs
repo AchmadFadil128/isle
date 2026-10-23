@@ -34,6 +34,8 @@ const MIN_GAP: Duration = Duration::from_millis(300);
 /// A permission waits this long for an answer on the island; then the AI asks in its own terminal
 /// (its hook may wait ten minutes: this ends first).
 const ANSWER_WITHIN: Duration = Duration::from_secs(9 * 60 + 30);
+/// Asks waiting at once, at most; more ask in their own terminals (a flood is never shown).
+const MAX_WAITING: usize = 8;
 /// While a permission waits, how often isled checks the hook asking is still there (the user may have
 /// answered in the terminal, and the AI let its hook go).
 const STILL_ASKING: Duration = Duration::from_secs(2);
@@ -346,10 +348,16 @@ impl AgentsService {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         request.id = format!("{}-{number}", request.provider);
         let (answer, answered) = tokio::sync::oneshot::channel();
-        self.waiting
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(request.id.clone(), answer);
+        {
+            let mut waiting = self
+                .waiting
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if waiting.len() >= MAX_WAITING {
+                return Ok(String::new());
+            }
+            waiting.insert(request.id.clone(), answer);
+        }
         let shown = serde_json::to_string(&request).unwrap_or_default();
         Self::asking(&emitter, &shown).await?;
         let asker = header.sender().map(|name| name.to_owned());
@@ -458,14 +466,13 @@ async fn watch_configs(
         .map(Ai::config)
         .chain([codex::hooks_path()])
         .collect();
-    // Where their programs land when installed (npm, the installers): a new one is found at once.
+    // Where their programs land when installed (npm, nvm, volta, bun, pnpm, the installers), as the
+    // assistant looks for them: a new one is found at once. A new Node under nvm is watched in turn.
     let home = dirs::home_dir().unwrap_or_default();
-    for dir in [
-        home.join(".local/bin"),
-        home.join(".npm-global/bin"),
-        "/usr/local/bin".into(),
-        "/usr/bin".into(),
-    ] {
+    for dir in crate::assistant::install_dirs(&home)
+        .into_iter()
+        .chain([PathBuf::from("/usr/bin")])
+    {
         watches
             .add(
                 &dir,
@@ -473,6 +480,12 @@ async fn watch_configs(
             )
             .ok();
     }
+    let nodes = watches
+        .add(
+            home.join(".nvm/versions/node"),
+            WatchMask::CREATE | WatchMask::MOVED_TO,
+        )
+        .ok();
     let mut watched = false;
     for file in &files {
         let Some(dir) = file.parent() else { continue };
@@ -516,7 +529,8 @@ async fn watch_configs(
                 let event = event.context("inotify stopped")??;
                 let gone = EventMask::DELETE_SELF | EventMask::MOVE_SELF | EventMask::IGNORED | EventMask::Q_OVERFLOW;
                 let named = event.name.as_deref().is_some_and(|name| names.contains(&name));
-                if event.mask.intersects(gone) || (named && event.mask.contains(EventMask::ISDIR)) {
+                let new_node = nodes.as_ref() == Some(&event.wd);
+                if event.mask.intersects(gone) || new_node || (named && event.mask.contains(EventMask::ISDIR)) {
                     again = true;
                 } else if !named {
                     continue;

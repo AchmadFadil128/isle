@@ -54,9 +54,13 @@ impl Claude {
                 "--include-partial-messages",
             ])
             .args(["--tools", TOOLS, "--allowedTools", TOOLS])
-            // None of the user's settings, hooks, CLAUDE.md or MCP servers: only its sign-in.
+            // None of the user's settings, hooks, CLAUDE.md or MCP servers: only its sign-in, and how they
+            // sign in (an API key helper, Bedrock or Vertex in their settings' `env`).
             .args(["--setting-sources", "", "--strict-mcp-config"])
             .args(["--system-prompt", instructions, "--json-schema", SCHEMA]);
+        if let Some(sign_in) = sign_in_settings() {
+            command.args(["--settings", &sign_in]);
+        }
         if !model.is_empty() {
             command.args(["--model", model]);
         }
@@ -212,6 +216,59 @@ fn parse_result(event: &Value) -> anyhow::Result<Answer> {
     ))
 }
 
+/// `$CLAUDE_CONFIG_DIR`, else `~/.claude`: where Claude Code keeps its sign-in, settings and chats.
+pub fn config_dir() -> PathBuf {
+    std::env::var_os("CLAUDE_CONFIG_DIR")
+        .filter(|dir| !dir.is_empty())
+        .map_or_else(
+            || dirs::home_dir().unwrap_or_default().join(".claude"),
+            PathBuf::from,
+        )
+}
+
+/// The parts of the user's settings.json that say how they sign in, as `--settings` JSON, if any.
+fn sign_in_settings() -> Option<String> {
+    let text = std::fs::read_to_string(config_dir().join("settings.json")).ok()?;
+    let settings: Value = serde_json::from_str(&text).ok()?;
+    let kept: serde_json::Map<String, Value> = SIGN_IN_KEYS
+        .iter()
+        .filter_map(|key| Some(((*key).to_owned(), settings.get(*key)?.clone())))
+        .collect();
+    (!kept.is_empty()).then(|| Value::Object(kept).to_string())
+}
+
+const SIGN_IN_KEYS: &[&str] = &[
+    "env",
+    "apiKeyHelper",
+    "awsAuthRefresh",
+    "awsCredentialExport",
+    "forceLoginMethod",
+];
+
+/// Whether Claude Code has a way to sign in: its own sign-in, an API key, or a cloud it is set to use.
+pub fn signed_in() -> bool {
+    let dir = config_dir();
+    let env_says = [
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+    ]
+    .iter()
+    .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()));
+    let settings_say = sign_in_settings().is_some_and(|json| {
+        [
+            "apiKeyHelper",
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "CLAUDE_CODE_USE_",
+        ]
+        .iter()
+        .any(|key| json.contains(key))
+    });
+    dir.join(".credentials.json").exists() || env_says || settings_say
+}
+
 /// Where Claude Code keeps the conversations it had in Isle's workspace (and only those).
 fn store() -> Option<PathBuf> {
     let workspace = crate::store::data_dir().join("assistant");
@@ -221,7 +278,7 @@ fn store() -> Option<PathBuf> {
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect();
-    Some(dirs::home_dir()?.join(".claude/projects").join(name))
+    Some(config_dir().join("projects").join(name))
 }
 
 /// Deletes Isle's Claude conversation `id` now.

@@ -173,6 +173,11 @@ impl Agy {
         command
             .current_dir(workspace)
             .env("HOME", home())
+            // Its own home only: folders the session moved elsewhere would lead it out of it.
+            .env_remove("XDG_CONFIG_HOME")
+            .env_remove("XDG_DATA_HOME")
+            .env_remove("XDG_STATE_HOME")
+            .env_remove("XDG_CACHE_HOME")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());

@@ -262,7 +262,13 @@ fn installed_already(answer: &Answer) -> bool {
         "already installed",
         "is installed",
         "already there",
+        "already on your",
+        "already have",
         "sudah terpasang",
+        "udah terpasang",
+        "udah ada",
+        "udah keinstal",
+        "sudah keinstal",
         "sudah ter-install",
         "sudah terinstal",
         "sudah ada",
@@ -326,6 +332,14 @@ fn tomorrow() -> String {
     (chrono::Local::now().date_naive() + chrono::Days::new(1))
         .format("%Y-%m-%d")
         .to_string()
+}
+
+/// "Tomorrow" as people mean it: past midnight and before 4, the day after they wake may be today.
+fn means_tomorrow(date: &str) -> bool {
+    let now = chrono::Local::now();
+    date == tomorrow()
+        || (chrono::Timelike::hour(&now) < 4
+            && date == now.date_naive().format("%Y-%m-%d").to_string())
 }
 
 fn cases() -> Vec<Case> {
@@ -672,7 +686,7 @@ fn cases() -> Vec<Case> {
             &["besok jam 9 pagi ada meeting sama klien tolong catat"],
             |a| {
                 let event = action(last(a), "add_event")?;
-                ensure(text(event, "date") == tomorrow(), "wrong date")?;
+                ensure(means_tomorrow(&text(event, "date")), "wrong date")?;
                 ensure(text(event, "text").contains('9'), "time missing")
             },
         ),
@@ -859,10 +873,16 @@ fn cases() -> Vec<Case> {
         case(
             &["tulisin email ke bos bilang aku izin sakit hari ini"],
             |a| {
-                ensure(
-                    text(action(last(a), "write")?, "text").len() > 60,
-                    "email too short",
-                )
+                // Typed where the cursor is, or a mail opened with it written.
+                let written = match action(last(a), "write") {
+                    Ok(write) => text(write, "text"),
+                    Err(why) => actions(last(a), "open_url")
+                        .into_iter()
+                        .map(|open| text(open, "url"))
+                        .find(|url| url.starts_with("mailto:") || url.contains("mail.google.com"))
+                        .ok_or(why)?,
+                };
+                ensure(written.len() > 60, "email too short")
             },
         ),
         Case {

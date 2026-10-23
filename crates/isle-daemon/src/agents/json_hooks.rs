@@ -88,9 +88,21 @@ fn hooks_of<'a>(settings: &'a Value, event: &str) -> impl Iterator<Item = &'a Va
 
 fn has_hooks(settings: &Value, spec: &Spec) -> bool {
     spec.events.iter().all(|(event, timeout)| {
-        hooks_of(settings, event)
-            .any(|hook| is_ours(hook, spec) && hook["timeout"].as_u64() == *timeout)
+        hooks_of(settings, event).any(|hook| {
+            is_ours(hook, spec)
+                && hook["timeout"].as_u64() == *timeout
+                && runs_something(hook["command"].as_str().unwrap_or_default())
+        })
     })
+}
+
+/// Whether the isled a hook runs is still there (not moved by a reinstall): else it is put in again.
+fn runs_something(command: &str) -> bool {
+    let program = match command.strip_prefix('\'') {
+        Some(quoted) => quoted.split('\'').next().unwrap_or_default(),
+        None => command.split_whitespace().next().unwrap_or_default(),
+    };
+    Path::new(program).is_file()
 }
 
 /// Whether anything changed.

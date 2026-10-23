@@ -78,22 +78,22 @@ export function runnable(action, {home, cache = `${home}/.cache`, uid, gid}) {
         /^--setenv=(DEBIAN_FRONTEND|LANG)=[\w.-]*$/,
     ];
     return argv.slice(1, end).every(option => allowed.some(rule => rule.test(option)) ||
-        pathAllowed(option, root, home) || (!root && option === `--working-directory=${home}`) ||
+        pathAllowed(option, root) || (!root && option === `--working-directory=${home}`) ||
         (!root && /^--property=Standard(Output|Error)=append:/.test(option) &&
             logPath.test(option.replace(/^--property=Standard(Output|Error)=append:/, ''))));
 }
 
 // The PATH a command gets (tasks.rs `path`): the system's folders, and for the user's own commands
-// their folders in home first; as root, nothing the user can write.
+// the folders of their programs first (home, nvm, Homebrew…); as root, nothing the user can write.
 const SYSTEM_PATH = ['/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin', '/snap/bin'];
 
-function pathAllowed(option, root, home) {
+function pathAllowed(option, root) {
     if (!option.startsWith('--setenv=PATH='))
         return false;
     const dirs = option.slice('--setenv=PATH='.length).split(':');
     const own = dirs.slice(0, dirs.length - SYSTEM_PATH.length);
     return dirs.slice(own.length).join(':') === SYSTEM_PATH.join(':') && (root ? !own.length
-        : own.every(dir => dir.startsWith(`${home}/.`) && !dir.includes('..') && !dir.includes('\n')));
+        : own.every(dir => dir.startsWith('/') && !dir.split('/').includes('..') && !dir.includes('\n')));
 }
 
 /** Whether `argv` only stops one of Isle's commands. */

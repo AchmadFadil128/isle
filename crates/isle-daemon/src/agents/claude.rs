@@ -69,7 +69,8 @@ mod tests {
     use crate::agents::file::tests::scratch;
     use crate::agents::json_hooks::{add_hooks, remove_hooks};
 
-    const COMMAND: &str = "/usr/bin/isled --agent-hook claude";
+    // A program that is there, as an installed isled would be (a hook to a missing one counts as out).
+    const COMMAND: &str = "/bin/sh --agent-hook claude";
 
     #[test]
     fn hooks_go_in_beside_the_users_own() {
@@ -145,8 +146,14 @@ mod tests {
     fn a_missing_file_is_made_and_emptied_again() {
         let dir = scratch("claude-new");
         let path = dir.join("sub/settings.json");
-        install(&path, "'/home/a b/isled' --agent-hook claude").unwrap();
+        // An isled in a folder with a space, quoted in the hook; once it is gone, the hook counts as out.
+        let isled = dir.join("my bin/isled");
+        fs::create_dir_all(isled.parent().unwrap()).unwrap();
+        fs::write(&isled, "").unwrap();
+        install(&path, &command(&isled.to_string_lossy(), "claude")).unwrap();
         assert!(hooked(&path));
+        fs::remove_file(&isled).unwrap();
+        assert!(!hooked(&path));
         assert!(!file::sibling(&path, ".isle-backup").exists());
         assert!(remove(&path).unwrap());
         assert_eq!(fs::read_to_string(&path).unwrap(), "{}\n");
@@ -211,7 +218,10 @@ mod tests {
 
     #[test]
     fn odd_paths_are_quoted() {
-        assert_eq!(command("/usr/bin/isled", "claude"), COMMAND);
+        assert_eq!(
+            command("/usr/bin/isled", "claude"),
+            "/usr/bin/isled --agent-hook claude"
+        );
         assert_eq!(
             command("/home/a b/it's/isled", "claude"),
             r"'/home/a b/it'\''s/isled' --agent-hook claude"

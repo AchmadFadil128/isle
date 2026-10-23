@@ -40,9 +40,11 @@ use zbus::object_server::{InterfaceRef, SignalEmitter};
 use zbus::{Connection, fdo, interface};
 
 pub use self::agenda::Sources;
-pub use self::brain::Provider;
 use self::brain::{Brain, Failure};
+pub use self::brain::{Provider, install_dirs};
 use self::chat::{Chat, Item, Keep};
+pub use self::claude::config_dir as claude_config_dir;
+pub use self::codex::user_home as codex_home;
 use self::mic::Mic;
 use self::whisper::Whisper;
 use crate::store::{Store, data_dir};
@@ -120,6 +122,8 @@ struct State {
     /// Signing in to the AI would fix the error; `provider` is the one in use ("agy", "claude", "codex").
     sign_in: bool,
     provider: String,
+    /// With `sign_in`, where `provider`'s CLI is, as isled found it (nvm, Homebrew…), to sign in with.
+    program: String,
     /// Setting up speech recognition would fix the error (isle-setup-voice, with `model`).
     set_up: bool,
     model: String,
@@ -414,9 +418,30 @@ struct Session {
     turns: u32,
     /// Whether the island shows the assistant; closed, a request is answered in the background.
     open: bool,
+    /// A model the AI said it cannot use (not on the user's plan, renamed): its own default instead.
+    refused_model: Option<(Provider, String)>,
 }
 
 impl Session {
+    /// The model picked in Settings for `provider`, unless it refused it ("" for its own default).
+    fn model(&self, provider: Provider) -> String {
+        let context = &self.context;
+        let picked = match provider {
+            Provider::Agy => &context.agy_model,
+            Provider::Claude => &context.claude_model,
+            Provider::Codex => &context.codex_model,
+        };
+        let refused = self
+            .refused_model
+            .as_ref()
+            .is_some_and(|(by, model)| *by == provider && model == picked);
+        if refused {
+            String::new()
+        } else {
+            picked.clone()
+        }
+    }
+
     /// The island closed: the speech model quits; the AI stays up a while (see `KEEP_WARM`), and the
     /// conversation is kept, to be resumed.
     fn end(&mut self) {
@@ -1079,6 +1104,10 @@ async fn turn(
     let provider = session.provider.map_or("", Provider::id);
     if let Err(failure) = started {
         publish(iface, |state| state.provider = provider.into()).await;
+        let failure = match session.provider {
+            Some(picked) => model_refused(session, picked, failure),
+            None => failure,
+        };
         return fail(iface, failure).await;
     }
     publish(iface, |state| {
@@ -1174,7 +1203,7 @@ async fn turn(
             if failure.error == brain::UNKNOWN {
                 session.conversation = None;
             }
-            fail(iface, failure).await
+            fail(iface, model_refused(session, provider, failure)).await
         }
         Ok(Err(_)) => {
             session.brain = None;
@@ -1186,6 +1215,18 @@ async fn turn(
             Some(command)
         }
     }
+}
+
+/// A model the AI refused is not asked for again: its own default answers the next request.
+fn model_refused(session: &mut Session, provider: Provider, mut failure: Failure) -> Failure {
+    let model = session.model(provider);
+    if failure.error.ends_with("can’t use that model") && !model.is_empty() {
+        session.refused_model = Some((provider, model));
+        failure.hint =
+            "Ask again: it answers with its own default model now, or pick another in Settings."
+                .into();
+    }
+    failure
 }
 
 /// Starts the AI picked in Settings unless it runs, resuming the conversation it had with it.
@@ -1207,13 +1248,7 @@ async fn start_brain(session: &mut Session) -> Result<(), Failure> {
         return Ok(());
     }
     let workspace = data_dir().join("assistant");
-    let context = &session.context;
-    let model = match provider {
-        Provider::Agy => &context.agy_model,
-        Provider::Claude => &context.claude_model,
-        Provider::Codex => &context.codex_model,
-    }
-    .clone();
+    let model = session.model(provider);
     let brain = Brain::start(
         provider,
         &model,
@@ -1431,6 +1466,11 @@ async fn fail(
         state.error = failure.error;
         state.hint = failure.hint;
         state.sign_in = failure.sign_in;
+        state.program = Provider::from_id(&state.provider)
+            .filter(|_| failure.sign_in)
+            .and_then(Provider::program)
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
         state.set_up = failure.set_up;
         state.model = failure.model;
         state.heard_nothing = heard_nothing;
@@ -1515,6 +1555,20 @@ fn or<'a>(value: &'a str, fallback: &'a str) -> &'a str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_refused_model_gives_way_to_the_default() {
+        let mut session = Session::default();
+        session.context.codex_model = "gpt-9".into();
+        assert_eq!(session.model(Provider::Codex), "gpt-9");
+        let failure = brain::explain(Provider::Codex, "The model `gpt-9` does not exist");
+        let failure = model_refused(&mut session, Provider::Codex, failure);
+        assert!(failure.hint.starts_with("Ask again"));
+        assert_eq!(session.model(Provider::Codex), "");
+        // Another model picked in Settings is tried.
+        session.context.codex_model = "gpt-8".into();
+        assert_eq!(session.model(Provider::Codex), "gpt-8");
+    }
 
     #[test]
     fn only_the_first_request_explains_the_job() {

@@ -141,7 +141,8 @@ export default class IslePreferences extends ExtensionPreferences {
         const provider = choiceRow(settings, 'voice-provider', 'AI', installed.length
             ? 'Answers with your own sign-in; Isle runs its actions'
             : 'Install Claude Code, Codex or Antigravity (agy), and sign in', [
-            ['auto', installed.length ? `Automatic (${installed[0].name})` : 'None installed'],
+            ['auto', installed.length === 1 ? `Automatic (${installed[0].name})`
+                : installed.length ? 'Automatic (the one you are signed in to)' : 'None installed'],
             ...installed.map(({id, name}) => [id, name]),
         ]);
         const model = new Adw.ComboRow({title: 'Model'});
@@ -636,18 +637,8 @@ function switchRow(settings, key, title, subtitle) {
     return row;
 }
 
-/** The AI CLIs the voice assistant can ask, in the order "Automatic" tries them (as isled does). */
+/** The AI CLIs the voice assistant can ask, in the order "Automatic" tries them, signed-in ones first (as isled does). */
 const AI_PROVIDERS = [
-    {
-        id: 'agy', name: 'Antigravity', command: 'agy', modelKey: 'voice-agy-model',
-        about: 'What agy answers with',
-        models: () => [
-            ['gemini-3.8-flash-low', 'Gemini Flash (fastest)'],
-            ['gemini-3.8-flash-medium', 'Gemini Flash (medium)'],
-            ['gemini-3.8-flash-high', 'Gemini Flash (high)'],
-            ['claude-sonnet-4-6', 'Claude Sonnet'],
-        ],
-    },
     {
         id: 'claude', name: 'Claude Code', command: 'claude', modelKey: 'voice-claude-model',
         about: 'What Claude answers with',
@@ -663,13 +654,33 @@ const AI_PROVIDERS = [
         about: 'What Codex answers with, with little reasoning, to be quick',
         models: () => [['', 'Codex\'s default'], ...codexModels()],
     },
+    {
+        id: 'agy', name: 'Antigravity', command: 'agy', modelKey: 'voice-agy-model',
+        about: 'What agy answers with',
+        models: () => [
+            ['gemini-3.8-flash-low', 'Gemini Flash (fastest)'],
+            ['gemini-3.8-flash-medium', 'Gemini Flash (medium)'],
+            ['gemini-3.8-flash-high', 'Gemini Flash (high)'],
+            ['claude-sonnet-4-6', 'Claude Sonnet'],
+        ],
+    },
 ];
 
 /** `command` on the PATH or where installers and Node version managers put it, as isled looks; else null. */
+// The same places isled looks in (brain.rs `install_dirs`), for an AI installed with npm, nvm, Homebrew…
 function findProgram(command) {
     const home = GLib.get_home_dir();
-    const dirs = ['.local/bin', '.npm-global/bin', '.bun/bin', '.volta/bin', '.local/share/pnpm',
-        '.local/share/fnm/aliases/default/bin'].map(dir => GLib.build_filenamev([home, dir]));
+    const env = (name, fallback) => GLib.getenv(name) || fallback;
+    const dirs = [
+        GLib.build_filenamev([home, '.local/bin']), GLib.build_filenamev([home, '.npm-global/bin']),
+        GLib.build_filenamev([env('BUN_INSTALL', `${home}/.bun`), 'bin']),
+        GLib.build_filenamev([env('VOLTA_HOME', `${home}/.volta`), 'bin']),
+        env('PNPM_HOME', `${home}/.local/share/pnpm`),
+        ...['.local/share/fnm/aliases/default/bin', '.fnm/aliases/default/bin', '.claude/local',
+            '.local/share/mise/shims', '.asdf/shims', '.yarn/bin', '.linuxbrew/bin', '.nix-profile/bin']
+            .map(dir => GLib.build_filenamev([home, dir])),
+        '/home/linuxbrew/.linuxbrew/bin', '/run/current-system/sw/bin',
+    ];
     return GLib.find_program_in_path(command) ?? [...dirs, ...nvmBins(home), '/usr/local/bin']
         .map(dir => GLib.build_filenamev([dir, command]))
         .find(path => GLib.file_test(path, GLib.FileTest.IS_EXECUTABLE)) ?? null;
@@ -677,7 +688,10 @@ function findProgram(command) {
 
 /** nvm's Nodes' bin folders, newest first. */
 function nvmBins(home) {
-    const root = GLib.build_filenamev([home, '.nvm', 'versions', 'node']);
+    const xdg = GLib.build_filenamev([GLib.get_user_config_dir(), 'nvm']);
+    const dir = GLib.getenv('NVM_DIR') ||
+        (GLib.file_test(xdg, GLib.FileTest.IS_DIR) ? xdg : GLib.build_filenamev([home, '.nvm']));
+    const root = GLib.build_filenamev([dir, 'versions', 'node']);
     const versions = [];
     try {
         const children = Gio.File.new_for_path(root).enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);

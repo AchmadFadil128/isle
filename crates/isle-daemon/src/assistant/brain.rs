@@ -19,8 +19,9 @@ pub enum Provider {
     Codex,
 }
 
-/// Tried in this order when the user picked "auto": the one Isle began with first.
-const AUTO: [Provider; 3] = [Provider::Agy, Provider::Claude, Provider::Codex];
+/// Tried in this order when the user picked "auto", signed-in ones first. agy comes last: its terms bar
+/// third-party tools, so it answers only when it is all there is, or picked.
+const AUTO: [Provider; 3] = [Provider::Claude, Provider::Codex, Provider::Agy];
 
 impl Provider {
     pub fn id(self) -> &'static str {
@@ -66,11 +67,11 @@ impl Provider {
         let home = dirs::home_dir().unwrap_or_default();
         match self {
             Provider::Agy => home.join(agy::LOGIN).exists(),
-            Provider::Claude => std::env::var_os("CLAUDE_CONFIG_DIR")
-                .map_or_else(|| home.join(".claude"), PathBuf::from)
-                .join(".credentials.json")
-                .exists(),
-            Provider::Codex => home.join(".codex/auth.json").exists(),
+            Provider::Claude => super::claude::signed_in(),
+            Provider::Codex => {
+                super::codex::user_auth().exists()
+                    || std::env::var_os("OPENAI_API_KEY").is_some_and(|key| !key.is_empty())
+            }
         }
     }
 
@@ -98,19 +99,38 @@ impl Provider {
         AUTO
     }
 
-    /// `wanted` ("agy", "claude", "codex" or "auto"), if installed; else the first installed for "auto".
+    /// `wanted` ("agy", "claude", "codex" or "auto"), if installed; for "auto", the first installed and
+    /// signed in, else the first installed (which then asks to sign in).
     pub fn pick(wanted: &str) -> Option<Provider> {
         let installed = |p: &Provider| p.program().is_some();
         match AUTO.into_iter().find(|p| p.id() == wanted) {
             Some(provider) => installed(&provider).then_some(provider),
-            None => AUTO.into_iter().find(installed),
+            None => AUTO
+                .into_iter()
+                .find(|p| installed(p) && p.signed_in())
+                .or_else(|| AUTO.into_iter().find(installed)),
         }
     }
 }
 
 /// Where installers and Node version managers put CLIs, beyond the PATH: the newest of nvm's Nodes first.
-fn install_dirs(home: &Path) -> Vec<PathBuf> {
-    let mut nvm: Vec<PathBuf> = std::fs::read_dir(home.join(".nvm/versions/node"))
+pub fn install_dirs(home: &Path) -> Vec<PathBuf> {
+    dirs_in(home, |name| {
+        std::env::var_os(name)
+            .filter(|dir| !dir.is_empty())
+            .map(PathBuf::from)
+    })
+}
+
+/// `install_dirs`, with `env_dir` for the variables that move them (NVM_DIR…).
+fn dirs_in(home: &Path, env_dir: impl Fn(&str) -> Option<PathBuf>) -> Vec<PathBuf> {
+    let nvm_dir = env_dir("NVM_DIR").unwrap_or_else(|| {
+        // nvm's installer puts it under XDG_CONFIG_HOME when that is set.
+        let xdg = env_dir("XDG_CONFIG_HOME").map(|dir| dir.join("nvm"));
+        xdg.filter(|dir| dir.is_dir())
+            .unwrap_or_else(|| home.join(".nvm"))
+    });
+    let mut nvm: Vec<PathBuf> = std::fs::read_dir(nvm_dir.join("versions/node"))
         .into_iter()
         .flatten()
         .flatten()
@@ -129,15 +149,51 @@ fn install_dirs(home: &Path) -> Vec<PathBuf> {
     [
         home.join(".local/bin"),
         home.join(".npm-global/bin"),
-        home.join(".bun/bin"),
-        home.join(".volta/bin"),
-        home.join(".local/share/pnpm"),
+        env_dir("BUN_INSTALL")
+            .map_or_else(|| home.join(".bun"), PathBuf::from)
+            .join("bin"),
+        env_dir("VOLTA_HOME")
+            .map_or_else(|| home.join(".volta"), PathBuf::from)
+            .join("bin"),
+        env_dir("PNPM_HOME").unwrap_or_else(|| home.join(".local/share/pnpm")),
         home.join(".local/share/fnm/aliases/default/bin"),
+        home.join(".fnm/aliases/default/bin"),
+        // Claude Code's own older install, mise and asdf, yarn, Homebrew on Linux, Nix.
+        home.join(".claude/local"),
+        home.join(".local/share/mise/shims"),
+        home.join(".asdf/shims"),
+        home.join(".yarn/bin"),
+        PathBuf::from("/home/linuxbrew/.linuxbrew/bin"),
+        home.join(".linuxbrew/bin"),
+        home.join(".nix-profile/bin"),
+        PathBuf::from("/run/current-system/sw/bin"),
     ]
     .into_iter()
+    .chain(npm_prefix(home, env_dir("NPM_CONFIG_PREFIX")))
     .chain(nvm)
     .chain([PathBuf::from("/usr/local/bin")])
     .collect()
+}
+
+/// The `bin` of the global npm folder set in `~/.npmrc` (`prefix=~/.npm-packages`), if any.
+fn npm_prefix(home: &Path, from_env: Option<PathBuf>) -> Option<PathBuf> {
+    let set = from_env.or_else(|| {
+        let npmrc = std::fs::read_to_string(home.join(".npmrc")).ok()?;
+        npmrc.lines().find_map(|line| {
+            let value = line
+                .trim()
+                .strip_prefix("prefix")?
+                .trim_start()
+                .strip_prefix('=')?
+                .trim();
+            let value = value.trim_matches('"');
+            Some(match value.strip_prefix("~/") {
+                Some(rest) => home.join(rest),
+                None => PathBuf::from(value.replace("${HOME}", &home.to_string_lossy())),
+            })
+        })
+    })?;
+    set.is_absolute().then(|| set.join("bin"))
 }
 
 pub enum Brain {
@@ -269,11 +325,59 @@ pub fn explain(provider: Provider, error: &str) -> Failure {
             }
         })
     };
-    if says(&["could not start", "no such file"]) {
+    // Its script found no Node to run on (`#!/usr/bin/env node`).
+    if says(&[
+        "env: 'node'",
+        "env: node",
+        "node: not found",
+        "node: no such file",
+    ]) {
+        return Failure::from((
+            &*format!("{name} needs Node.js"),
+            "Install Node.js 18 or newer, or reinstall it with its own installer.",
+        ));
+    }
+    if says(&["could not start"]) {
         return Failure::from((
             &*format!("{name} isn’t installed"),
             "Install it, or pick another in Settings.",
         ));
+    }
+    // Older than the options and calls Isle uses.
+    if says(&[
+        "unknown option",
+        "unrecognized option",
+        "unexpected argument",
+        "unknown flag",
+        "unknown method",
+        "method not found",
+        "unknown variant",
+    ]) {
+        return Failure::from((
+            &*format!("Update {name}"),
+            "This version is too old for Isle; update it, then ask again.",
+        ));
+    }
+    if error.contains("model")
+        && says(&[
+            "not found",
+            "does not exist",
+            "not exist",
+            "invalid",
+            "not supported",
+            "unsupported",
+            "unknown",
+            "no access",
+            "does not have access",
+        ])
+    {
+        return Failure {
+            error: format!("{name} can’t use that model"),
+            hint: "Pick another model in Settings → Assistant.".into(),
+            sign_in: false,
+            set_up: false,
+            model: String::new(),
+        };
     }
     if says(&[
         "log in",
@@ -294,7 +398,7 @@ pub fn explain(provider: Provider, error: &str) -> Failure {
     ]) {
         return Failure {
             error: format!("Sign in to {name}"),
-            hint: "Sign in, then press Super+I again.".into(),
+            hint: "Sign in, then ask again.".into(),
             sign_in: true,
             set_up: false,
             model: String::new(),
@@ -367,6 +471,27 @@ mod tests {
             .error,
             "Antigravity isn’t installed"
         );
+        // Installed, but with no Node to run it: not "isn't installed".
+        assert_eq!(
+            explain(
+                Provider::Claude,
+                "exit 127: /usr/bin/env: 'node': No such file or directory"
+            )
+            .error,
+            "Claude Code needs Node.js"
+        );
+        assert_eq!(
+            explain(Provider::Claude, "error: unknown option '--json-schema'").error,
+            "Update Claude Code"
+        );
+        assert_eq!(
+            explain(
+                Provider::Codex,
+                "The model `gpt-9` does not exist or you do not have access to it."
+            )
+            .error,
+            "Codex can’t use that model"
+        );
         let signed_out = explain(Provider::Claude, "Invalid API key · Please run /login");
         assert!(signed_out.sign_in && signed_out.error == "Sign in to Claude Code");
         assert!(
@@ -411,7 +536,13 @@ mod tests {
             std::fs::create_dir_all(home.join(".nvm/versions/node").join(version).join("bin"))
                 .unwrap();
         }
-        let dirs = install_dirs(&home);
+        std::fs::write(
+            home.join(".npmrc"),
+            "fund=false\nprefix = ~/.npm-packages\n",
+        )
+        .unwrap();
+        let dirs = dirs_in(&home, |_| None);
+        assert!(dirs.contains(&home.join(".npm-packages/bin")));
         let nvm: Vec<_> = dirs
             .iter()
             .filter(|d| d.starts_with(home.join(".nvm")))

@@ -10,6 +10,7 @@ mod caller;
 mod clipboard;
 mod clock;
 mod http;
+mod login_env;
 mod media;
 mod meeting;
 mod pomodoro;
@@ -93,6 +94,8 @@ async fn main() -> anyhow::Result<()> {
         Some(other) => bail!("unknown option {other}; see isled --help"),
     }
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // Before anything reads the environment or starts a thread.
+    login_env::import();
     let session = connection::Builder::session()?
         .build()
         .await

@@ -39,7 +39,7 @@ import {TasksPage} from './pages/tasks.js';
 import {TimerPage} from './pages/timer.js';
 import {UsagePage} from './pages/usage.js';
 import {ReminderWatcher} from './reminders.js';
-import {GREETING, InstalledApps, UNDO_MS, VoiceView, stopUnit, actionTypes, aiSettings, openSetUp, openSignIn, runActions, stopPending, voiceContext} from './voice.js';
+import {GREETING, InstalledApps, UNDO_MS, VoiceView, stopUnit, actionTypes, aiSettings, openSetUp, openSignIn, runActions, signInHint, stopPending, voiceContext} from './voice.js';
 import {TextWriter} from './writer.js';
 
 /** While the pointer rests before the island opens (Settings: hover-delay), it moves at most this far. */
@@ -465,8 +465,11 @@ export class Controller {
         });
         // An AI's CLI signs in from a terminal; the island gets out of its way.
         this._voice.connect('sign-in', () => {
-            if (openSignIn(this._daemon.state.assistant?.provider))
+            const state = this._daemon.state.assistant ?? {};
+            if (openSignIn(state.provider, state.program))
                 this.collapse();
+            else
+                this._voice.setState({...state, hint: signInHint(state.provider)});
         });
         this._voice.connect('set-up', () => {
             if (openSetUp(this._daemon.state.assistant?.model))

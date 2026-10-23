@@ -100,9 +100,7 @@ impl Codex {
     ) -> anyhow::Result<Self> {
         std::fs::create_dir_all(workspace)?;
         std::fs::create_dir_all(home())?;
-        if let Some(user) = dirs::home_dir() {
-            link_sign_in(&user.join(".codex"), &home());
-        }
+        link_sign_in(&user_home(), &home());
         std::fs::write(home().join("config.toml"), CONFIG)
             .context("could not write Codex's settings")?;
         // With no model picked, the one the user's own Codex uses.
@@ -174,9 +172,7 @@ impl Codex {
         self.stderr.lock().unwrap().clear();
         let answer = self.turn(prompt, activity, draft).await;
         // A token it renewed meanwhile goes back to the user's own Codex.
-        if let Some(user) = dirs::home_dir() {
-            link_sign_in(&user.join(".codex"), &home());
-        }
+        link_sign_in(&user_home(), &home());
         answer.map_err(|err| self.explained(err))
     }
 
@@ -415,10 +411,33 @@ fn strict(schema: &str) -> anyhow::Result<String> {
     Ok(value.to_string())
 }
 
-/// The model in the user's own ~/.codex/config.toml, so Isle uses the same one unless told otherwise:
-/// its top-level `model`, not a profile's.
+/// The user's own Codex home: `$CODEX_HOME`, else `~/.codex`.
+pub fn user_home() -> PathBuf {
+    std::env::var_os("CODEX_HOME")
+        .filter(|dir| !dir.is_empty())
+        .map_or_else(
+            || dirs::home_dir().unwrap_or_default().join(".codex"),
+            PathBuf::from,
+        )
+}
+
+/// Where the user's own Codex keeps its sign-in.
+pub fn user_auth() -> PathBuf {
+    user_home().join("auth.json")
+}
+
+/// The model in the user's own config.toml, so Isle uses the same one unless told otherwise: its
+/// top-level `model`, not a profile's. None with a provider of their own (Azure, Ollama…), whose models
+/// OpenAI's service, which Isle's Codex uses, would not know.
 fn user_model() -> Option<String> {
-    let config = std::fs::read_to_string(dirs::home_dir()?.join(".codex/config.toml")).ok()?;
+    let config = std::fs::read_to_string(user_home().join("config.toml")).ok()?;
+    if config
+        .lines()
+        .take_while(|line| !line.trim_start().starts_with('['))
+        .any(|line| line.trim_start().starts_with("model_provider"))
+    {
+        return None;
+    }
     top_level_model(&config)
 }
 
@@ -463,7 +482,11 @@ fn delete_thread(id: &str) -> anyhow::Result<()> {
     let program = super::brain::Provider::Codex
         .program()
         .context("codex is not installed")?;
-    let mut child = std::process::Command::new(program)
+    let mut command = std::process::Command::new(&program);
+    if let Some(path) = super::child::path_for(&program) {
+        command.env("PATH", path);
+    }
+    let mut child = command
         .arg("app-server")
         .env("CODEX_HOME", home())
         .stdin(Stdio::piped())

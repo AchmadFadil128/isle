@@ -183,19 +183,15 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
             publish(&iface, Usage::default()).await;
             continue;
         }
-        let home = dirs::home_dir().unwrap_or_default();
         let mut providers = Vec::new();
-        if config.claude && home.join(CLAUDE_SIGN_IN).exists() {
+        if config.claude && claude_sign_in().exists() {
             let due = |every| asked_claude.is_none_or(|at: Instant| at.elapsed() >= every);
             // Opening the page asks sooner, but never while Claude's server is given time after failing.
             if (forced && !server_failing && due(OFFLINE_RETRIES[0].min(CLAUDE_AT_MOST)))
                 || (!paused && due(claude_wait))
             {
                 asked_claude = Some(Instant::now());
-                let at = home.clone();
-                let fresh = tokio::task::spawn_blocking(move || read_claude(&at))
-                    .await
-                    .ok();
+                let fresh = tokio::task::spawn_blocking(read_claude).await.ok();
                 failures = if matches!(fresh, Some(Ok(_))) {
                     0
                 } else {
@@ -212,7 +208,7 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
                     }),
                     (Some(Err(why)), None) => Some(Provider {
                         note: why.note().into(),
-                        ..claude_shell(&home)
+                        ..claude_shell()
                     }),
                     (None, last) => last,
                 };
@@ -224,9 +220,8 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
         if config.codex {
             // Reading logs is file work: done on a blocking thread, as Claude's request is.
             let mut reader = std::mem::take(&mut codex);
-            let at = home.clone();
             if let Ok((back, read)) = tokio::task::spawn_blocking(move || {
-                let read = reader.read(&at);
+                let read = reader.read();
                 (reader, read)
             })
             .await
@@ -254,7 +249,7 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
             claude_wait.saturating_sub(asked_claude.map_or(Duration::ZERO, |at| at.elapsed()))
         });
         next = Some(next_wait(
-            config.codex && codex_signed_in(&home),
+            config.codex && codex_signed_in(),
             claude_due_in,
             next_reset(&providers, now_ms()),
         ));
@@ -311,8 +306,8 @@ fn wait_after(outcome: Option<Result<(), &ClaudeError>>, failures: usize) -> Dur
 }
 
 /// Whether Codex is signed in, so its logs may yet bring limits worth a look each minute.
-fn codex_signed_in(home: &Path) -> bool {
-    home.join(".codex/auth.json").exists()
+fn codex_signed_in() -> bool {
+    crate::assistant::codex_home().join("auth.json").exists()
 }
 
 async fn publish(iface: &InterfaceRef<UsageService>, usage: Usage) {
@@ -403,10 +398,12 @@ impl ClaudeError {
 }
 
 /// Where Claude Code keeps its sign-in.
-const CLAUDE_SIGN_IN: &str = ".claude/.credentials.json";
+fn claude_sign_in() -> std::path::PathBuf {
+    crate::assistant::claude_config_dir().join(".credentials.json")
+}
 
-fn claude_shell(home: &Path) -> Provider {
-    let plan = std::fs::read_to_string(home.join(CLAUDE_SIGN_IN))
+fn claude_shell() -> Provider {
+    let plan = std::fs::read_to_string(claude_sign_in())
         .ok()
         .and_then(|text| serde_json::from_str::<Value>(&text).ok())
         .map(|sign_in| {
@@ -426,9 +423,8 @@ fn claude_shell(home: &Path) -> Provider {
 }
 
 /// Claude's limits now, with Claude Code's sign-in (read, never refreshed: that is Claude Code's to do).
-fn read_claude(home: &Path) -> Result<Provider, ClaudeError> {
-    let text =
-        std::fs::read_to_string(home.join(CLAUDE_SIGN_IN)).map_err(|_| ClaudeError::SignIn)?;
+fn read_claude() -> Result<Provider, ClaudeError> {
+    let text = std::fs::read_to_string(claude_sign_in()).map_err(|_| ClaudeError::SignIn)?;
     let sign_in: Value = serde_json::from_str(&text).map_err(|_| ClaudeError::SignIn)?;
     let oauth = &sign_in["claudeAiOauth"];
     let token = oauth["accessToken"].as_str().ok_or(ClaudeError::SignIn)?;
@@ -457,7 +453,7 @@ fn read_claude(home: &Path) -> Result<Provider, ClaudeError> {
     Ok(Provider {
         windows: claude_windows(&response),
         updated_ms: now_ms(),
-        ..claude_shell(home)
+        ..claude_shell()
     })
 }
 
@@ -510,11 +506,11 @@ struct CodexReader {
 
 impl CodexReader {
     /// `None` without Codex, or before it saw any limits. Both the user's Codex and Isle's are looked at.
-    fn read(&mut self, home: &Path) -> Option<Provider> {
+    fn read(&mut self) -> Option<Provider> {
         // Each folder's newest, so a long history of the user's own never hides Isle's fresh ones.
         let mut files = Vec::new();
         for sessions in [
-            home.join(".codex/sessions"),
+            crate::assistant::codex_home().join("sessions"),
             crate::store::data_dir().join("codex/sessions"),
         ] {
             let mut newest = Vec::new();

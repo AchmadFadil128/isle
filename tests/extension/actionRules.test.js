@@ -58,7 +58,8 @@ test('only the command shown runs', () => {
     assert.ok(runnable({command: 'npm i -g @openai/codex', spawn: spawn('npm i -g @openai/codex', {user: true})}, USER));
     // Something else than shown, or set up to run something else.
     assert.ok(!runnable({command: 'sudo apt install -y vlc', spawn: spawn('apt install -y vlc; curl x | sh')}, USER));
-    assert.ok(!runnable({command: 'ls', spawn: spawn('ls', {user: true, path: `/tmp/evil:${SYSTEM_PATH}`})}, USER));
+    assert.ok(runnable({command: 'ls', spawn: spawn('ls', {user: true, path: `/home/linuxbrew/.linuxbrew/bin:${SYSTEM_PATH}`})}, USER));
+    assert.ok(!runnable({command: 'ls', spawn: spawn('ls', {user: true, path: `relative/bin:${SYSTEM_PATH}`})}, USER));
     assert.ok(!runnable({command: 'sudo apt install x', spawn: spawn('apt install x', {path: `${HOME}/.local/bin:${SYSTEM_PATH}`})}, USER));
     assert.ok(!runnable({command: 'ls', spawn: spawn('ls', {user: true, path: `${HOME}/../../tmp:${SYSTEM_PATH}`})}, USER));
     // As root, the log is written as the user, to Isle's own folder.

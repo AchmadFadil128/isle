@@ -120,24 +120,28 @@ impl Task {
 }
 
 /// The PATH a command gets: the system's, and for the user's own commands where their programs live
-/// (npm, pipx, cargo…); never as root, so a program the user can write cannot stand in for `apt`.
+/// (npm, nvm, pipx, cargo, Homebrew…); never as root, so a program the user can write cannot stand in
+/// for `apt`.
 fn path(scope: Scope) -> String {
     let home = dirs::home_dir().unwrap_or_default();
-    let own = if scope == Scope::User { USER_PATH } else { &[] };
-    own.iter()
-        .map(|dir| home.join(dir).display().to_string())
-        .chain(SYSTEM_PATH.iter().map(|dir| (*dir).to_owned()))
-        .collect::<Vec<_>>()
-        .join(":")
+    let mut dirs: Vec<String> = Vec::new();
+    if scope == Scope::User {
+        let own = USER_PATH.iter().map(|dir| home.join(dir));
+        for dir in own.chain(super::install_dirs(&home)) {
+            let dir = dir.display().to_string();
+            if Path::new(&dir).is_dir()
+                && !dirs.contains(&dir)
+                && !SYSTEM_PATH.contains(&dir.as_str())
+            {
+                dirs.push(dir);
+            }
+        }
+    }
+    dirs.extend(SYSTEM_PATH.iter().map(|dir| (*dir).to_owned()));
+    dirs.join(":")
 }
 
-const USER_PATH: &[&str] = &[
-    ".local/bin",
-    ".npm-global/bin",
-    ".cargo/bin",
-    ".bun/bin",
-    ".volta/bin",
-];
+const USER_PATH: &[&str] = &[".local/bin", ".npm-global/bin", ".cargo/bin"];
 const SYSTEM_PATH: &[&str] = &[
     "/usr/local/sbin",
     "/usr/local/bin",
@@ -624,7 +628,14 @@ mod tests {
                 "=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
             )
         );
-        assert!(paths(&user).contains("/.local/bin:"));
+        // The user's own folders that are there come first (none, maybe, where the tests run).
+        assert!(
+            paths(&user).ends_with(
+                ":/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+            ) || paths(&user).ends_with(
+                "=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+            )
+        );
     }
 
     #[tokio::test]

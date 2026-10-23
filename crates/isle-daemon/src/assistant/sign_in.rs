@@ -19,7 +19,14 @@ pub fn share(real: &Path, linked: &Path) {
             real.display()
         );
     }
-    if !real.exists() || fs::read_link(linked).is_ok_and(|target| target == real) {
+    // The user signed out (or never signed in): so is Isle's copy, never the other way round.
+    if !real.exists() {
+        if fs::symlink_metadata(linked).is_ok() {
+            fs::remove_file(linked).ok();
+        }
+        return;
+    }
+    if fs::read_link(linked).is_ok_and(|target| target == real) {
         return;
     }
     let relinked = linked
@@ -48,8 +55,7 @@ fn renewed(real: &Path, linked: &Path) -> bool {
         fs::metadata(real).and_then(|m| m.modified()),
     ) {
         (Ok(own), Ok(user)) => own > user,
-        // The user's is gone: theirs again from Isle's.
-        (Ok(_), Err(_)) => true,
+        // The user's is gone: they signed out, which Isle's copy must not undo.
         _ => false,
     }
 }
@@ -108,6 +114,12 @@ mod tests {
         share(&real, &linked);
         assert_eq!(fs::read_to_string(&real).unwrap(), "token 2");
         assert_eq!(fs::read_link(&linked).unwrap(), real);
+        // Signed out (`codex logout`): Isle's copy goes too, and nothing comes back.
+        fs::remove_file(&linked).unwrap();
+        fs::write(&linked, "token 3").unwrap();
+        fs::remove_file(&real).unwrap();
+        share(&real, &linked);
+        assert!(!real.exists() && fs::symlink_metadata(&linked).is_err());
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -21,12 +21,23 @@ pub struct Group(Child);
 /// a CLI that starts with `#!/usr/bin/env node` finds the Node installed beside it (nvm, volta…).
 pub fn spawn(command: &mut Command) -> std::io::Result<Group> {
     let program = std::path::PathBuf::from(command.as_std().get_program());
-    if let Some(dir) = program.parent().filter(|dir| !dir.as_os_str().is_empty()) {
-        let path = std::env::var_os("PATH").unwrap_or_default();
-        let dirs = std::iter::once(dir.to_path_buf()).chain(std::env::split_paths(&path));
-        if let Ok(joined) = std::env::join_paths(dirs) {
-            command.env("PATH", joined);
+    let path = path_for(&program);
+    // It never gains privileges (no setuid sudo or pkexec), unless it runs from a snap, whose launcher
+    // needs them.
+    if !from_snap(&program, path.as_deref()) {
+        // SAFETY: prctl is async-signal-safe and only reads its integer arguments.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0 {
+                    Ok(())
+                } else {
+                    Err(std::io::Error::last_os_error())
+                }
+            });
         }
+    }
+    if let Some(path) = path {
+        command.env("PATH", path);
     }
     let child = command.process_group(0).kill_on_drop(true).spawn()?;
     if let Some(pid) = child.id() {
@@ -34,6 +45,32 @@ pub fn spawn(command: &mut Command) -> std::io::Result<Group> {
         unsafe { libc::setpriority(libc::PRIO_PGRP, pid, NICENESS) };
     }
     Ok(Group(child))
+}
+
+/// Whether `program`, or the Node it would run on, is a snap's.
+fn from_snap(program: &std::path::Path, path: Option<&std::ffi::OsStr>) -> bool {
+    let snap = |path: &std::path::Path| {
+        std::fs::canonicalize(path)
+            .is_ok_and(|real| real.starts_with("/snap") || real.ends_with("usr/bin/snap"))
+    };
+    let path = path.map_or_else(
+        || std::env::var_os("PATH").unwrap_or_default(),
+        std::ffi::OsStr::to_os_string,
+    );
+    let node = std::env::split_paths(&path)
+        .map(|dir| dir.join("node"))
+        .find(|node| node.is_file());
+    snap(program)
+        || program.starts_with("/snap")
+        || node.is_some_and(|node| node.starts_with("/snap") || snap(&node))
+}
+
+/// The PATH for `program`: its own folder first, then isled's.
+pub fn path_for(program: &std::path::Path) -> Option<std::ffi::OsString> {
+    let dir = program.parent().filter(|dir| !dir.as_os_str().is_empty())?;
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let dirs = std::iter::once(dir.to_path_buf()).chain(std::env::split_paths(&path));
+    std::env::join_paths(dirs).ok()
 }
 
 impl Drop for Group {
