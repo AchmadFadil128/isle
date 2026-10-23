@@ -933,6 +933,9 @@ export const Slider = GObject.registerClass({
         this.add_child(this._fill);
         this.add_child(this._knob);
         this._value = 0;
+        /** The fill's width last laid out, in whole pixels, and the width it was out of. */
+        this._filled = null;
+        this._width = 0;
         this._grab = null;
         this.connect('notify::hover', () => this._syncKnob());
         // Gone mid-drag (the screen locked): the pointer is let go.
@@ -956,7 +959,9 @@ export const Slider = GObject.registerClass({
         if (this._grab)
             return;
         this._value = Math.min(1, Math.max(0, value || 0));
-        this.queue_relayout();
+        // Laid out again only when the fill moves a pixel, not on each tick of a playing song.
+        if (Math.round(this._width * this._value) !== this._filled)
+            this.queue_relayout();
     }
 
     _syncKnob() {
@@ -968,8 +973,10 @@ export const Slider = GObject.registerClass({
         const [width, height] = [box.get_width(), box.get_height()];
         const trackHeight = 4;
         const y = Math.round((height - trackHeight) / 2);
+        this._width = width;
+        this._filled = Math.round(width * this._value);
         allocateAt(this._track, 0, y, width, trackHeight);
-        allocateAt(this._fill, 0, y, Math.round(width * this._value), trackHeight);
+        allocateAt(this._fill, 0, y, this._filled, trackHeight);
         const knob = 12;
         allocateAt(this._knob, Math.round(width * this._value - knob / 2), Math.round((height - knob) / 2), knob, knob);
     }
