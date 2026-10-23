@@ -49,7 +49,7 @@ export const CompactView = GObject.registerClass({
         this._row = row;
         this.add_child(row);
 
-        this._left = new St.Bin({style_class: 'isle-compact-slot', y_align: Clutter.ActorAlign.CENTER});
+        this._left = new St.Bin({style_class: 'isle-compact-slot', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
         this._ring = new Ring({size: 20, lineWidth: 3});
         this._art = new Art({size: 24, radius: 6});
         this._dot = new St.Widget({style_class: 'isle-unseen-dot', y_align: Clutter.ActorAlign.CENTER});
@@ -73,7 +73,7 @@ export const CompactView = GObject.registerClass({
         center.add_child(this._elapsed);
         center.add_child(this._callTime);
 
-        this._right = new St.Bin({style_class: 'isle-compact-slot', y_align: Clutter.ActorAlign.CENTER});
+        this._right = new St.Bin({style_class: 'isle-compact-slot', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
         this._bars = new Bars({height: 16});
         // A second activity on the right: the timer's ring and time left, or a call's phone and length.
         this._secondRing = new Ring({size: 15, lineWidth: 2.5, trackOpacity: 0.2});
@@ -84,6 +84,11 @@ export const CompactView = GObject.registerClass({
         this._secondExtra = 0;
 
         this._privacyDots = new PrivacyDots();
+        // Each side's sign keeps to its edge, so all sit as far in from the island's ends. The slots are
+        // told not to expand, or their children's x_expand (which the alignment needs) would widen them.
+        const align = (actors, x_align) => actors.forEach(actor => actor.set({x_align, x_expand: true}));
+        align([this._ring, this._art, this._dot, this._moon, this._recordingDot, this._phone], Clutter.ActorAlign.START);
+        align([this._bars, this._micOff, this._serviceDown, this._assistant, this._secondTimer, this._secondCall], Clutter.ActorAlign.END);
 
         // As wide as the privacy dots at the far right, so the clock stays centred.
         this._privacyBalance = new St.Widget({visible: false});

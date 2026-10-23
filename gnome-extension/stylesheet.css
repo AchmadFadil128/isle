@@ -273,7 +273,8 @@
 
 /* ── Expanded: frame ──────────────────────────────────── */
 
-.isle-header { padding: 0 20px; }
+/* The tabs' icons (inside their pills) and the settings icon line up with the pages' 28px edges. */
+.isle-header { padding: 0 24px 0 18px; }
 .isle-header-clock { spacing: 8px; }
 
 /* Tabs to the pages: icons, with the open page's name in a lit pill. */
