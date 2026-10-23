@@ -244,9 +244,9 @@
         <choice value="idle-2h"/>
         <choice value="day"/>
       </choices>
-      <default>'idle-30m'</default>
+      <default>'day'</default>
       <summary>How long the assistant keeps a conversation</summary>
-      <description>After 30 minutes or 2 hours without a word, or at midnight, it starts a new one and deletes the old.</description>
+      <description>Until midnight (never more than a day), or after 30 minutes or 2 hours without a word: then it starts a new one and deletes the old, here and in the AI's own history.</description>
     </key>
     <key name="voice-use-selection" type="b">
       <default>false</default>

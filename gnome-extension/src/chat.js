@@ -5,6 +5,7 @@
 
 import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
+import Cogl from 'gi://Cogl';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
@@ -35,6 +36,66 @@ const STATUS = {
 };
 
 const label = (text, styleClass, params = {}) => new St.Label({text, style_class: styleClass, ...params});
+
+/** How long (ms) "Copied" shows in place of the conversation's title. */
+const COPIED_MS = 1200;
+/** A selection's colours: macOS's blue under white text. GNOME 47 moved colours from Clutter to Cogl. */
+const Color = Clutter.Color ?? Cogl.Color;
+const SELECTION = Color.from_string('#0a84ffb3')[1];
+const SELECTED_TEXT = Color.from_string('#ffffff')[1];
+/** A selection is copied once it has been still this long (ms) with the button up. */
+const SELECT_SETTLE_MS = 150;
+
+/** Puts `text` on the clipboard, and in the primary selection (the middle click) too. */
+function copy(text) {
+    const clipboard = St.Clipboard.get_default();
+    clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
+    clipboard.set_text(St.ClipboardType.PRIMARY, text);
+}
+
+// Text that can be selected, as in a terminal: once a selection settles (the button up), it is copied, and
+// `copied` says so. Watched through the selection itself: GNOME 49+ gives text no button events of its own.
+function copyable(actor, copied) {
+    const text = actor.clutter_text;
+    text.set({selectable: true, reactive: true});
+    text.set_selection_color(SELECTION);
+    text.set_selected_text_color(SELECTED_TEXT);
+    let timer = 0;
+    let last = '';
+    const settle = () => {
+        timer = 0;
+        const [,, mods] = global.get_pointer();
+        if (mods & Clutter.ModifierType.BUTTON1_MASK) {
+            timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SELECT_SETTLE_MS, settle);
+            return GLib.SOURCE_REMOVE;
+        }
+        const selected = text.get_selection();
+        if (selected && selected !== last) {
+            copy(selected);
+            copied();
+        }
+        last = selected ?? '';
+        return GLib.SOURCE_REMOVE;
+    };
+    for (const property of ['notify::selection-bound', 'notify::cursor-position']) {
+        text.connect(property, () => {
+            if (!timer)
+                timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SELECT_SETTLE_MS, settle);
+        });
+    }
+    text.connect('destroy', () => timer && GLib.source_remove(timer));
+}
+
+// A command as one press: a click copies all of it, as a terminal's copy button would.
+function copyButton(child, command, copied) {
+    const button = new St.Button({child, style_class: 'isle-copy-button', x_expand: true, can_focus: true,
+        accessible_name: 'Copy the command'});
+    button.connect('clicked', () => {
+        copy(command());
+        copied();
+    });
+    return button;
+}
 
 /** m:ss for an elapsed time in seconds. */
 export const elapsed = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
@@ -197,7 +258,7 @@ export const CommandCard = GObject.registerClass({
         const line = new St.BoxLayout({style_class: 'isle-card-line'});
         this._command = label('', 'isle-card-command', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         this._command.clutter_text.set({use_markup: true, line_wrap_mode: Pango.WrapMode.WORD_CHAR});
-        line.add_child(this._command);
+        line.add_child(copyButton(this._command, () => this._commandText, () => this._flashCopied()));
         this._status = new St.BoxLayout({style_class: 'isle-card-status', y_align: Clutter.ActorAlign.CENTER});
         this._statusIcon = new St.Icon({icon_size: 11, y_align: Clutter.ActorAlign.CENTER});
         this._statusText = label('', 'isle-card-status-text', {y_align: Clutter.ActorAlign.CENTER});
@@ -223,7 +284,11 @@ export const CommandCard = GObject.registerClass({
             this._foot.add_child(button);
         this.add_child(this._foot);
         this._state = null;
-        this.connect('destroy', () => (this._destroyed = true));
+        this.connect('destroy', () => {
+            this._destroyed = true;
+            if (this._copiedTimer)
+                GLib.source_remove(this._copiedTimer);
+        });
     }
 
     /**
@@ -241,6 +306,7 @@ export const CommandCard = GObject.registerClass({
         this._subtitle.text = waiting ? card.detail ?? '' : running ? `Running · ${elapsed(card.seconds ?? 0)}` : '';
         this._subtitle.visible = Boolean(this._subtitle.text);
         this._command.clutter_text.set_markup(shellMarkup(card.command));
+        this._commandText = card.command;
         // Waiting, the whole command shows; once on its way, a line of it is enough.
         this._command.clutter_text.line_wrap = waiting;
         this._command.clutter_text.ellipsize = waiting ? Pango.EllipsizeMode.NONE : Pango.EllipsizeMode.END;
@@ -293,6 +359,32 @@ export const CommandCard = GObject.registerClass({
         return this._state;
     }
 
+    // "Copied" for a moment where the card says how it is going: under the title, or at the line's end.
+    _flashCopied() {
+        const label = this._head.visible ? this._subtitle : this._statusText;
+        const shown = label.text;
+        const wasVisible = label.visible;
+        if (this._copiedTimer)
+            GLib.source_remove(this._copiedTimer);
+        else
+            this._beforeCopied = {label, shown, wasVisible};
+        label.text = 'Copied';
+        label.visible = true;
+        label.add_style_class_name('isle-card-copied');
+        if (label === this._statusText)
+            this._status.visible = true;
+        this._copiedTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, COPIED_MS, () => {
+            this._copiedTimer = 0;
+            const before = this._beforeCopied;
+            before.label.text = before.shown;
+            before.label.visible = before.wasVisible;
+            before.label.remove_style_class_name('isle-card-copied');
+            if (before.label === this._statusText)
+                this._status.visible = !['waiting', 'running'].includes(this._state);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
     /** Moves the running sweep on, with the assistant's clock. */
     tick(time) {
         if (this._sweep.visible)
@@ -340,8 +432,15 @@ export const ChatView = GObject.registerClass({
             y_expand: true,
         });
         this._scroll.set_child(this._list);
+        // GNOME 49+ pans a scroll view by dragging, which would take every press from the text: dragging here
+        // selects, to copy. The wheel and the touchpad still scroll it.
+        for (const action of this._scroll.get_actions?.() ?? []) {
+            if (Clutter.PanGesture && action instanceof Clutter.PanGesture)
+                this._scroll.remove_action(action);
+        }
         this.add_child(this._scroll);
         this._items = [];
+        this.connect('destroy', () => this._copiedTimer && GLib.source_remove(this._copiedTimer));
         // New messages come in at the bottom, and it keeps there.
         this._scroll.vadjustment.connect('notify::upper', adjustment => {
             adjustment.value = adjustment.upper - adjustment.page_size;
@@ -388,11 +487,8 @@ export const ChatView = GObject.registerClass({
     _row(item, withFace) {
         if (item.role === 'user') {
             const bubble = new Bubble({style_class: 'isle-chat-user', x_align: Clutter.ActorAlign.END}, BUBBLE_MAX);
-            if (item.spoken) {
-                bubble.add_child(new St.Icon({gicon: icon('isle-mic-symbolic'), icon_size: 11, style_class: 'isle-chat-spoken',
-                    y_align: Clutter.ActorAlign.START}));
-            }
             const text = label(item.text, 'isle-chat-user-text', {x_expand: true});
+            copyable(text, () => this._copied());
             wrapLines(text);
             bubble.add_child(text);
             return bubble;
@@ -404,7 +500,7 @@ export const ChatView = GObject.registerClass({
             const command = label('', 'isle-chat-command-text', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
             command.clutter_text.set_markup(shellMarkup(item.command));
             command.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-            row.add_child(command);
+            row.add_child(copyButton(command, () => item.command, () => this._copied()));
             if (text) {
                 const status = new St.BoxLayout({style_class: `isle-card-status isle-chat-command-status ${styleClass}`});
                 status.add_child(new St.Icon({gicon: icon(iconName), icon_size: 10, y_align: Clutter.ActorAlign.CENTER}));
@@ -419,10 +515,25 @@ export const ChatView = GObject.registerClass({
         face.y_align = Clutter.ActorAlign.START;
         row.add_child(face);
         const text = label('', 'isle-chat-reply', {x_expand: true});
+        copyable(text, () => this._copied());
         text.clutter_text.set({line_wrap: true, line_wrap_mode: Pango.WrapMode.WORD_CHAR, ellipsize: Pango.EllipsizeMode.NONE});
         text.clutter_text.set_markup(answerMarkup(item.text));
         row.add_child(text);
         return row;
+    }
+
+    // "Copied", in the title's place for a moment.
+    _copied() {
+        this._title.text = 'Copied';
+        this._title.add_style_class_name('isle-chat-copied');
+        if (this._copiedTimer)
+            GLib.source_remove(this._copiedTimer);
+        this._copiedTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, COPIED_MS, () => {
+            this._copiedTimer = 0;
+            this._title.text = 'Conversation';
+            this._title.remove_style_class_name('isle-chat-copied');
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     /** The height it would like at `width`, header and all, for the island to fit (never more than `max`). */

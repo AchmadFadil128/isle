@@ -283,6 +283,8 @@
 .isle-card-terminal { padding: 8px 11px; spacing: 4px; border-radius: 10px; background-color: rgba(255, 255, 255, 0.07); }
 .isle-card-ended .isle-card-terminal { padding: 5px 10px; background-color: rgba(255, 255, 255, 0.05); }
 .isle-card-line { spacing: 10px; }
+.isle-copy-button { padding: 0; border-radius: 4px; }
+.isle-copy-button:hover .isle-card-command, .isle-copy-button:hover .isle-chat-command-text { color: #ffffff; }
 .isle-card-command { font-family: monospace; font-size: 12px; }
 .isle-card-output { font-family: monospace; font-size: 11px; color: rgba(255, 255, 255, 0.42); }
 .isle-card-output-failed { color: #ff6961; }
@@ -314,13 +316,13 @@
 .isle-chat { padding: 10px 16px 0 16px; spacing: 8px; }
 .isle-chat-header { spacing: 6px; }
 .isle-chat-title { font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.45); }
+.isle-chat-copied, .isle-card-copied { color: #30d158; }
 .isle-chat-new { padding: 5px; color: rgba(255, 255, 255, 0.75); background-color: rgba(255, 255, 255, 0.08); }
 .isle-chat-new:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.16); }
 .isle-chat-list { spacing: 10px; padding-top: 6px; padding-bottom: 4px; }
 .isle-chat-scroll { -st-vfade-offset: 28px; }
 .isle-chat-user { padding: 6px 12px; spacing: 5px; border-radius: 15px; background-color: rgba(255, 255, 255, 0.12); }
 .isle-chat-user-text { font-size: 13px; }
-.isle-chat-spoken { color: rgba(255, 255, 255, 0.5); margin-top: 3px; }
 .isle-chat-reply { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
 .isle-chat-reply-row { spacing: 8px; }
 .isle-chat-time { font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, 0.35); font-feature-settings: "tnum"; }

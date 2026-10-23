@@ -203,10 +203,10 @@ export default class IslePreferences extends ExtensionPreferences {
             ['id', 'Indonesian'],
             ['en', 'English'],
         ]));
-        options.push(choiceRow(settings, 'voice-keep-chat', 'Keep the conversation', 'Then it starts a new one and deletes the old', [
-            ['idle-30m', 'For 30 minutes without a word'],
-            ['idle-2h', 'For 2 hours without a word'],
+        options.push(choiceRow(settings, 'voice-keep-chat', 'Keep the conversation', 'Never more than a day; then it is deleted, with the AI\'s copy', [
             ['day', 'Until midnight'],
+            ['idle-2h', '2 hours without a word'],
+            ['idle-30m', '30 minutes without a word'],
         ]));
         const clearChat = new Adw.ActionRow({title: 'Clear the conversation now', subtitle: 'Deletes it here and the AI\'s copy of it',
             activatable: true});

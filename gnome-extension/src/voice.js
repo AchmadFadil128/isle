@@ -451,6 +451,7 @@ export const VoiceView = GObject.registerClass({
     setHistory(items) {
         this._history = items;
         this._chat.setItems(items);
+        this._syncIdeas();
         if (!items.length && this.chatOpen)
             this.closeChat();
         this._syncEarlier();
