@@ -396,9 +396,9 @@ GNOME 46 (version 1.0.0):
 
 | On disk | Size |
 |---|---|
-| Programs (`isled` 6.4 MB, `isle-shelf` 0.7 MB) | 7.1 MB |
+| Programs (`isled` 6.8 MB, `isle-shelf` 0.7 MB) | 7.5 MB |
 | Speech recognition (`isle-whisper` 29 MB, most of it GPU code; the `small` model 265 MB), only once set up | 294 MB |
-| Extension | 0.7 MB |
+| Extension | 0.8 MB |
 | Inter typeface | 0.9 MB |
 | Cache (`~/.cache/isle`) | about 100 KB per song's cover and 6 KB per lyrics |
 
