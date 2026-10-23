@@ -56,6 +56,12 @@ const MOVE_CHECK_MS = 250;
 const STILL_OUTSIDE_MS = 30000;
 /** Grace period before closing when the pointer leaves. */
 const COLLAPSE_DELAY_MS = 300;
+/** An alert the pointer rested on stays this long once it leaves, to finish reading. */
+const ALERT_LEAVE_MS = 1500;
+/** Touchpad travel over an alert that puts it away (up) or opens the island (down); a wheel's click is one. */
+const ALERT_SWIPE = 1.5;
+/** A pause this long between scroll events starts a new swipe. */
+const SWIPE_GAP_MS = 180;
 /** A page picked by hand is kept for this long before smart defaults resume. */
 const PAGE_MEMORY_MS = 5 * 60 * 1000;
 /** An alert's width is checked again this soon after it shows. */
@@ -131,6 +137,8 @@ export class Controller {
         this._tintStyle = null;
         this._voiceOpen = false;
         this._voiceBound = false;
+        /** The touchpad swipe over an alert under way: {dy, at, done} (see `_onAlertScroll`). */
+        this._swipe = null;
         /** Whether the alert and voice views were laid out ahead since the theme last changed (see `_warmUp`). */
         this._viewsWarm = false;
         /** Counts `_listen` calls, so only the latest sends its request. */
@@ -301,6 +309,7 @@ export class Controller {
         // A new theme or text size restyles every view: laid out ahead again at the next warm-up.
         island.connect('style-changed', () => (this._viewsWarm = false));
         island.connect('button-release-event', (_actor, event) => this._onClick(event));
+        island.connect('scroll-event', (_actor, event) => this._onAlertScroll(event));
         island.connect('geometry-changed', () => this._shelfHelper.sync());
 
         // A file dragged towards the island opens the shelf to drop it on.
@@ -642,6 +651,14 @@ export class Controller {
                 this._scheduleVoiceClose(Math.min(this._voiceCloseMs, VOICE_LEAVE_MS));
             return;
         }
+        // An alert waits while the pointer is on it, as a notification does on macOS; not the volume's.
+        if (this._alert && !this._alert.transient && this._presentation === 'peek') {
+            if (this._island.hovered)
+                this._cancel('alert');
+            else
+                this._later('alert', Math.min(ALERT_LEAVE_MS, this._alert.duration ?? ALERT_LEAVE_MS),
+                    () => this._dismissAlert(true));
+        }
         if (this._island.hovered) {
             this._cancel('collapse');
             if (!this._expandWanted && this._settings.get_string('open-on') === 'hover')
@@ -690,6 +707,70 @@ export class Controller {
         this.collapse();
     }
 
+    /** What a click on the closed island does: an alert's own action, or else the island opens. */
+    _openFromClosed() {
+        // Clicking a notification opens it, like GNOME's banner did.
+        if (!this._expandWanted && this._alert?.onActivate) {
+            this._alert.onActivate();
+            this._dismissAlert(true);
+            return Clutter.EVENT_STOP;
+        }
+        // isled down: why the island can do little, and how to fix it, rather than the pages.
+        if (!this._expandWanted && this._compact.serviceDown) {
+            this._post(Alerts.serviceDown(() => this._daemon.start()));
+            return Clutter.EVENT_STOP;
+        }
+        // The assistant still at work: its progress, rather than the pages.
+        if (!this._expandWanted && this._voiceWorking) {
+            this._reopenVoice();
+            return Clutter.EVENT_STOP;
+        }
+        if (!this._expandWanted) {
+            this.expand();
+            return Clutter.EVENT_STOP;
+        }
+        return Clutter.EVENT_PROPAGATE;
+    }
+
+    /** Over an alert, a swipe up puts it away and a swipe down opens it, as on a phone. */
+    _onAlertScroll(event) {
+        if (this._presentation !== 'peek' || !this._alert || this._expandWanted)
+            return Clutter.EVENT_PROPAGATE;
+        let step;
+        switch (event.get_scroll_direction()) {
+        case Clutter.ScrollDirection.UP:
+            step = -1;
+            break;
+        case Clutter.ScrollDirection.DOWN:
+            step = 1;
+            break;
+        case Clutter.ScrollDirection.SMOOTH: {
+            const now = GLib.get_monotonic_time() / 1000;
+            if (now - (this._swipe?.at ?? 0) > SWIPE_GAP_MS)
+                this._swipe = {dy: 0, done: false};
+            this._swipe.at = now;
+            this._swipe.dy += event.get_scroll_delta()[1];
+            if (this._swipe.done || Math.abs(this._swipe.dy) < ALERT_SWIPE)
+                return Clutter.EVENT_STOP;
+            // Once a swipe, however far it goes.
+            this._swipe.done = true;
+            step = Math.sign(this._swipe.dy);
+            break;
+        }
+        default:
+            return Clutter.EVENT_PROPAGATE;
+        }
+        // The click-style copies of a smooth scroll count once, as the smooth one.
+        if (event.get_flags() & Clutter.EventFlags.POINTER_EMULATED)
+            return Clutter.EVENT_STOP;
+        // Content scrolls down with fingers moving up (and a wheel turned down): the alert goes up and away.
+        if (step > 0)
+            this._dismissAlert(true);
+        else
+            this._openFromClosed();
+        return Clutter.EVENT_STOP;
+    }
+
     _onClick(event) {
         // A click puts an answer away; the face and the Sign in button take their own clicks.
         if (this._voiceOpen) {
@@ -700,27 +781,7 @@ export class Controller {
         }
         switch (event.get_button()) {
         case Clutter.BUTTON_PRIMARY:
-            // Clicking a notification opens it, like GNOME's banner did.
-            if (!this._expandWanted && this._alert?.onActivate) {
-                this._alert.onActivate();
-                this._dismissAlert(true);
-                return Clutter.EVENT_STOP;
-            }
-            // isled down: why the island can do little, and how to fix it, rather than the pages.
-            if (!this._expandWanted && this._compact.serviceDown) {
-                this._post(Alerts.serviceDown(() => this._daemon.start()));
-                return Clutter.EVENT_STOP;
-            }
-            // The assistant still at work: its progress, rather than the pages.
-            if (!this._expandWanted && this._voiceWorking) {
-                this._reopenVoice();
-                return Clutter.EVENT_STOP;
-            }
-            if (!this._expandWanted) {
-                this.expand();
-                return Clutter.EVENT_STOP;
-            }
-            return Clutter.EVENT_PROPAGATE;
+            return this._openFromClosed();
         case Clutter.BUTTON_MIDDLE:
             this._daemon.call('media', 'PlayPause');
             return Clutter.EVENT_STOP;
@@ -936,7 +997,8 @@ export class Controller {
         const alert = this._alert;
         if (!alert)
             return;
-        if (alert.sticky && this._compact.idle) {
+        // Not while someone reads it (see `_onHoverChanged`), nor while no one is there for a sticky one.
+        if ((this._island.hovered && !alert.transient) || (alert.sticky && this._compact.idle)) {
             this._cancel('alert');
             return;
         }

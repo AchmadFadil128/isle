@@ -32,7 +32,9 @@ const GLOW_SCALE = 2;
 const FADE_OUT = 160;
 const FADE_IN = 320;
 /** The incoming view waits for the shape to make room before appearing. */
-const FADE_IN_DELAY = 200;
+const FADE_IN_DELAY = 120;
+/** How far the views scale as the shape grows or shrinks: they travel with it, as on the iPhone. */
+const VIEW_SCALE = 0.06;
 /** Below this shoulder size (px) the corners may climb into the top bar, so the island rounds smoothly. */
 const SHOULDER_FADE = 4;
 
@@ -191,11 +193,13 @@ export const Island = GObject.registerClass({
         const [viewLeft, viewTop] = this._view.get_transformed_position();
         const [left, top] = actor.get_transformed_position();
         const [actorWidth, actorHeight] = actor.get_transformed_size();
+        // As it will be: the view may still be scaling in (see `_showView`).
+        const scale = this._view.scale_x || 1;
         return {
-            x: Math.round(viewX + left - viewLeft),
-            y: Math.round(this._monitor.y + top - viewTop),
-            width: Math.round(actorWidth),
-            height: Math.round(actorHeight),
+            x: Math.round(viewX + (left - viewLeft) / scale),
+            y: Math.round(this._monitor.y + (top - viewTop) / scale),
+            width: Math.round(actorWidth / scale),
+            height: Math.round(actorHeight / scale),
         };
     }
 
@@ -210,6 +214,8 @@ export const Island = GObject.registerClass({
 
     /** Animates to `size` ({width, height, radius, shoulder}) and shows `view`, already sized to fit. */
     morph(size, view) {
+        // Content travels with the shape: out with it as it grows, in from it as it shrinks.
+        const growing = size.height + size.width > this._height.target + this._width.target;
         this._width.setTarget(size.width);
         this._height.setTarget(size.height);
         this._radius.setTarget(size.radius);
@@ -226,7 +232,7 @@ export const Island = GObject.registerClass({
             // Already its size (an alert updating in place): no frame to run.
             this._driver.start();
         }
-        this._showView(view);
+        this._showView(view, growing);
     }
 
     /**
@@ -300,20 +306,27 @@ export const Island = GObject.registerClass({
         view.set_position(x, 0);
     }
 
-    _showView(view) {
+    _showView(view, growing = true) {
         if (view === this._view)
             return;
 
         const previous = this._view;
+        // Smaller (or larger) as the island takes or gives room; never sideways, it hangs from the top.
+        const away = growing ? 1 + VIEW_SCALE : 1 - VIEW_SCALE;
         if (previous) {
             previous.remove_all_transitions();
+            previous.set_pivot_point(0.5, 0);
             previous.ease({
                 opacity: 0,
+                scale_x: away,
+                scale_y: away,
                 duration: FADE_OUT,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onStopped: finished => {
-                    if (finished)
-                        previous.hide();
+                    if (!finished)
+                        return;
+                    previous.hide();
+                    previous.set_scale(1, 1);
                 },
             });
         }
@@ -323,15 +336,17 @@ export const Island = GObject.registerClass({
         const returning = view.visible && view.opacity > 0;
         view.remove_all_transitions();
         view.translation_x = view.translation_y = 0;
+        view.set_pivot_point(0.5, 0);
         view.show();
-        if (!returning)
+        if (!returning) {
+            const from = growing ? 1 - VIEW_SCALE : 1 + VIEW_SCALE;
             view.opacity = 0;
-        view.ease({
-            opacity: 255,
-            delay: previous && !returning ? FADE_IN_DELAY : 0,
-            duration: FADE_IN,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-        });
+            view.set_scale(from, from);
+        }
+        const delay = previous && !returning ? FADE_IN_DELAY : 0;
+        view.ease({opacity: 255, delay, duration: FADE_IN, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        // Settles as the shape does, and ends at exactly 1: text is only sharp unscaled.
+        view.ease({scale_x: 1, scale_y: 1, delay, duration: FADE_IN + 80, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
     }
 
     _sync() {
