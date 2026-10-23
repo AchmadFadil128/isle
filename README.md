@@ -321,7 +321,7 @@ only. Nothing leaves the computer.
 ## Resource usage
 
 Isle is built to run all day unnoticed. Measured on Ubuntu 24.04 with
-GNOME 46 (version 0.8.1):
+GNOME 46 (version 0.9.0):
 
 | Part | Memory | CPU when idle |
 |---|---|---|
@@ -332,9 +332,9 @@ GNOME 46 (version 0.8.1):
 
 | On disk | Size |
 |---|---|
-| Programs (`isled` 6.1 MB, `isle-shelf` 0.7 MB) | 6.8 MB |
+| Programs (`isled` 6.4 MB, `isle-shelf` 0.7 MB) | 7.1 MB |
 | Speech recognition (`isle-whisper` 29 MB, most of it GPU code; the `small` model 265 MB), only once set up | 294 MB |
-| Extension | 0.5 MB |
+| Extension | 0.7 MB |
 | Inter typeface | 0.9 MB |
 | Cache (`~/.cache/isle`) | about 100 KB per song's cover and 6 KB per lyrics |
 
