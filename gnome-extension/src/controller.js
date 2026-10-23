@@ -39,7 +39,7 @@ import {TasksPage} from './pages/tasks.js';
 import {TimerPage} from './pages/timer.js';
 import {UsagePage} from './pages/usage.js';
 import {ReminderWatcher} from './reminders.js';
-import {GREETING, InstalledApps, UNDO_MS, VoiceView, actionTypes, aiSettings, openSetUp, openSignIn, runActions, stopPending, voiceContext} from './voice.js';
+import {GREETING, InstalledApps, UNDO_MS, VoiceView, stopUnit, actionTypes, aiSettings, openSetUp, openSignIn, runActions, stopPending, voiceContext} from './voice.js';
 import {TextWriter} from './writer.js';
 
 /** While the pointer rests before the island opens (Settings: hover-delay), it moves at most this far. */
@@ -115,8 +115,8 @@ const VOICE_LEAVE_MS = 1200;
 /** Where in its flow, and how bright, the still glow of an alert that asks is drawn. */
 const ALERT_GLOW_TIME = 2.2;
 const ALERT_GLOW_LEVEL = 0.3;
-/** The conversation shows this many messages at most. */
-const CHAT_SHOWN = 50;
+/** A command the AI wants run waits this long (ms) for Run or Deny, as isled does (see agent.rs). */
+const APPROVAL_MS = 10 * 60 * 1000;
 /** In the conversation, the field comes back this soon (ms) after an answer. */
 const CHAT_TYPE_AGAIN_MS = 250;
 const VOICE_WORKING = ['transcribing', 'thinking', 'acting'];
@@ -125,7 +125,7 @@ const VOICE_WORKING = ['transcribing', 'thinking', 'acting'];
 // by hand lately. Notifications count only when some arrived unseen (others were shown as alerts).
 const DEFAULT_PAGE_ORDER = ['call', 'notifications', 'music', 'focus'];
 /** The AI agents Isle can hear from (see `Agents1` in the daemon). */
-const AGENT_PROVIDERS = ['claude', 'codex', 'agy'];
+const AGENT_PROVIDERS = ['claude', 'codex'];
 
 export class Controller {
     constructor(extension) {
@@ -405,6 +405,8 @@ export class Controller {
                 this._onNowPlaying();
             else if (key === 'assistant')
                 this._onAssistant();
+            else if (key === 'chat')
+                this._onHistory();
         });
         daemon.connect('voice-level', (_daemon, level) => this._voice.setLevel(level));
         daemon.connect('assistant-lost', () => this._onAssistantLost());
@@ -425,6 +427,12 @@ export class Controller {
                 this._syncAgents(true);
         });
         daemon.connect('agent-event', (_daemon, event) => this._onAgentEvent(event));
+        daemon.connect('agent-asking', (_daemon, request) => this._onAgentAsking(request));
+        daemon.connect('agent-withdrawn', (_daemon, id) => this._withdrawAlert(`agent-ask:${id}`));
+        // A command that ended while nobody watched (isled restarted, or the user was logged out).
+        daemon.connect('assistant-notice', (_daemon, text, ok) =>
+            this._post(Alerts.assistant(ok ? {phase: 'reply', reply: text} : {phase: 'error', error: text},
+                () => this._openVoice({typing: true}))));
         this._expanded.pageNamed('calendar').connect('event-soon', (_page, json) => this._onEventSoon(JSON.parse(json)));
         daemon.connect('changed', (_daemon, key) => {
             if (key === 'updates')
@@ -445,6 +453,8 @@ export class Controller {
         });
         this._voice.connect('new-chat', () => this._newChat());
         this._voice.connect('undo-new-chat', () => this._undoNewChat());
+        this._voice.connect('card-decided', (_view, run) => this._deciding?.done(run));
+        this._voice.connect('card-stop', () => stopUnit(this._daemon.state.assistant?.card?.stop));
         this._voice.connect('stop', () => {
             this._daemon.call('assistant', 'Cancel');
             this.collapse();
@@ -607,7 +617,8 @@ export class Controller {
         const window = this._agentWindow(event.project);
         if (window && window === global.display.focus_window)
             return;
-        this._post(Alerts.agent(event, window ? () => Main.activateWindow(window) : null));
+        const show = window ? () => Main.activateWindow(window) : null;
+        this._post(event.kind === 'done' ? Alerts.agentDone(event, this._botLook, show) : Alerts.agent(event, show));
     }
 
     /** The window (a terminal, VS Code) whose title names `project`, the latest used first. */
@@ -1167,6 +1178,9 @@ export class Controller {
 
     _dismissAlert(showNext) {
         this._cancel('alert');
+        // Put away without an answer, it says so (an agent then asks in its terminal).
+        if (this._alert && !this._alert.answered)
+            this._alert.onDismissed?.();
         this._alert = null;
         if (showNext)
             this._nextAlert();
@@ -1355,9 +1369,21 @@ export class Controller {
             return;
         }
         this._startTyping('');
-        if (this._chatItems?.length && !this._chatStale(Date.now())) {
-            this._voice.setHistory([...this._chatItems]);
+        this._warm();
+        if (this._history.length) {
+            this._voice.setHistory(this._history);
             this._voice.openChat();
+        }
+    }
+
+    /** The AI starts as the field opens, ready by the time the request is typed (see `Warm` in isled). */
+    async _warm() {
+        try {
+            const json = await voiceContext(this._settings, this._notifications,
+                {apps: this._installedApps.names, selectedIn: this._selectedIn});
+            this._daemon.call('assistant', 'Warm', json);
+        } catch (e) {
+            console.warn(`Isle: could not get the AI ready: ${e.message}`);
         }
     }
 
@@ -1378,12 +1404,9 @@ export class Controller {
     /** Asks a typed request, with what the island knows, as `_listen` does for a spoken one. */
     async _ask(text) {
         this._askedTyped = true;
-        // In the conversation, what was sent shows at once, as in Messages.
-        if (this._voice.chatOpen) {
-            this._sent = {role: 'user', text, spoken: false, at: Date.now()};
-            this._chatItems.push(this._sent);
-            this._voice.setHistory([...this._chatItems]);
-        }
+        // In the conversation, what was sent shows at once, as in Messages; isled's own copy replaces it.
+        if (this._voice.chatOpen)
+            this._voice.setHistory([...this._history, {role: 'user', text, at: Date.now()}]);
         const request = ++this._listenRequest;
         this._voice.setState({phase: 'thinking', heard: text});
         this._render();
@@ -1511,7 +1534,6 @@ export class Controller {
             this._setKeyboard(false);
         if (state.phase === 'reply' && state.turn !== this._voiceTurn) {
             this._voiceTurn = state.turn;
-            this._noteExchange(state);
             runActions(state.actions, this._voiceActions());
             // In the conversation the answer is already in the list: the field is ready for the next word.
             if (this._voice.chatOpen && !state.listen) {
@@ -1541,7 +1563,6 @@ export class Controller {
             return;
         if (state.phase === 'reply' && state.turn !== this._voiceTurn) {
             this._voiceTurn = state.turn;
-            this._noteExchange(state);
             runActions(state.actions, this._voiceActions());
         } else if (state.phase !== 'error') {
             return;
@@ -1551,62 +1572,86 @@ export class Controller {
         this._post(Alerts.assistant(state, () => this._reopenVoice()));
     }
 
-    // The conversation so far, kept here until isled keeps it (see docs/product-spec.md): what was said
-    // and answered, started over after the time set in Settings without a word.
-    _noteExchange(state) {
-        const now = Date.now();
-        if (this._chatStale(now))
-            this._chatItems = [];
-        this._chatAt = now;
-        // Shown already when sent from the conversation.
-        const sent = this._sent && this._chatItems.includes(this._sent) && this._sent.text === state.heard;
-        this._sent = null;
-        if (state.heard && !sent)
-            this._chatItems.push({role: 'user', text: state.heard, spoken: !this._askedTyped, at: now});
-        // The command it ran (or was told not to) goes in as one line; in the conversation the card makes way.
-        const card = this._voice.endedCard;
-        if (card)
-            this._chatItems.push({role: 'command', command: card.command, status: card.status, at: now});
-        if (state.reply)
-            this._chatItems.push({role: 'assistant', text: state.reply, at: now});
-        if (card && this._voice.chatOpen)
-            this._voice.showCard(null);
-        this._chatItems = this._chatItems.slice(-CHAT_SHOWN);
-        this._voice.setHistory([...this._chatItems]);
+    /** The conversation, as isled keeps it (see chat.rs). */
+    get _history() {
+        return Array.isArray(this._daemon.state.chat) ? this._daemon.state.chat : [];
     }
 
-    /** Shows the command card (see CommandCard); one waiting takes the keys, for Enter and Esc. */
-    _showCard(card) {
-        this._voice.showCard(card);
-        if (card?.status === 'waiting' && this._voiceOpen)
-            this._setKeyboard(true);
+    _onHistory() {
+        this._voice.setHistory(this._history);
+        if (this._openWhenBack) {
+            this._openWhenBack = false;
+            this._voice.openChat();
+        }
     }
 
-    /** Whether the conversation has gone quiet longer than Settings keep it. */
-    _chatStale(now) {
-        const keep = {'idle-30m': 30, 'idle-2h': 120}[this._settings.get_string('voice-keep-chat')];
-        return keep ? now - (this._chatAt ?? 0) > keep * 60000
-            : new Date(this._chatAt ?? 0).toDateString() !== new Date(now).toDateString();
-    }
-
-    // +: the conversation goes, though Undo brings it back for a moment.
+    // +: isled starts a new conversation; Undo brings the old one back for a moment, then it is deleted.
     _newChat() {
-        this._chatUndo = this._chatItems ?? [];
-        this._chatItems = [];
-        this._voice.setHistory([]);
+        this._daemon.call('assistant', 'NewChat');
         this._voice.showUndo(true);
-        this._later('chat-undo', UNDO_MS, () => {
-            this._chatUndo = null;
-            this._voice.showUndo(false);
-        });
+        this._later('chat-undo', UNDO_MS, () => this._voice.showUndo(false));
     }
 
     _undoNewChat() {
         this._cancel('chat-undo');
-        this._chatItems = this._chatUndo ?? [];
-        this._chatUndo = null;
-        this._voice.setHistory([...this._chatItems]);
-        this._voice.openChat();
+        this._openWhenBack = true;
+        this._daemon.call('assistant', 'UndoNewChat');
+    }
+
+    // A command the AI wants run waits for Run or Deny: on its card while the island shows the assistant,
+    // else in an alert; unanswered, it is denied after APPROVAL_MS. Resolves true for Run.
+    _decide(action) {
+        return new Promise(resolve => {
+            const entry = {
+                id: action.id,
+                action,
+                done: run => {
+                    if (this._deciding !== entry)
+                        return;
+                    this._deciding = null;
+                    this._cancel('decide');
+                    this._withdrawAlert(`task-ask:${action.id}`);
+                    resolve(run);
+                },
+            };
+            this._deciding?.done(false);
+            this._deciding = entry;
+            this._later('decide', APPROVAL_MS, () => entry.done(false));
+            if (this._voiceOpen)
+                this._setKeyboard(true);
+            else
+                this._askInAlert(action);
+        });
+    }
+
+    _askInAlert(action) {
+        this._post(Alerts.taskAsks(action, this._botLook, run => this._deciding?.done(run)));
+    }
+
+    /** Takes the alert with `key` away, shown or waiting its turn. */
+    _withdrawAlert(key) {
+        this._queue = this._queue.filter(alert => alert.key !== key);
+        if (this._alert?.key === key) {
+            this._alert.answered = true;
+            this._dismissAlert(true);
+        }
+    }
+
+    // Claude Code or Codex asks a permission: an alert to answer it, unless the user would not see it
+    // (its window in front, Do Not Disturb, alerts off); then it asks in its own terminal.
+    _onAgentAsking(request) {
+        const pass = () => this._daemon.call('agents', 'Resolve', request.id, '');
+        if (!this._settings.get_boolean(`agent-alerts-${request.provider}`) || this._notifications.dnd ||
+            !this._island.visible)
+            return pass();
+        const window = this._agentWindow(request.project);
+        if (window && window === global.display.focus_window)
+            return pass();
+        const alert = Alerts.agentAsks(request, this._botLook,
+            answer => this._daemon.call('agents', 'Resolve', request.id, answer));
+        // Put away unanswered: the terminal asks instead.
+        alert.onDismissed = pass;
+        return this._post(alert);
     }
 
     /** An answer or an error is on show, no longer listening or thinking. */
@@ -1649,6 +1694,7 @@ export class Controller {
             notifications: this._notifications,
             target: this._voiceTarget,
             writer: this._writer,
+            decide: action => this._decide(action),
             // The answer shows for a moment, then the page.
             showNotifications: () => this._later('voice-page', 1200, () => this.expand('notifications')),
             // Closed first, so the island is not in a screenshot or over the lock screen.
@@ -1671,6 +1717,9 @@ export class Controller {
         this._cancel('voice-listen');
         this._cancel('voice-page');
         this._voiceOpen = false;
+        // A command still waiting for Run or Deny is asked in an alert now.
+        if (this._deciding)
+            this._askInAlert(this._deciding.action);
         // Still at work: it carries on, and its answer comes as an alert.
         this._voiceInBackground = VOICE_WORKING.includes(this._daemon.state.assistant?.phase);
         this._syncAssistantBusy();

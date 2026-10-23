@@ -37,6 +37,7 @@ export function describeActions(actions = []) {
         cancel_reminder: 'Cancelling the reminder…',
         focus: 'Starting the focus timer…',
         terminal: 'Opening a terminal…',
+        run: 'Waiting for you to run it…',
         notifications: 'Opening your notifications…',
         screenshot: 'Taking a screenshot…',
         lock: 'Locking the screen…',
@@ -44,6 +45,65 @@ export function describeActions(actions = []) {
     }[first.type] ?? 'Working on it…';
     return actions.length > 1 ? `${what.replace(/…$/, '')} and ${actions.length - 1} more…` : what;
 }
+
+/** What isled's runner wraps each command in (see tasks.rs); a command to start must use exactly this. */
+export const RUN_WRAPPER = '( eval "$1" ); printf \'\\n[isle-exit %d]\\n\' "$?"';
+/** As root: the same, its output written to the log by the user ($2, $3) rather than root. */
+export const ROOT_WRAPPER = `{ ${RUN_WRAPPER}; } 2>&1 | chroot --userspec="$2:$3" / tee -a -- "$4" >/dev/null`;
+
+/**
+ * Whether `action` (a command the AI wants run, as isled hands it over) starts what its card shows and no
+ * more: `systemd-run` with Isle's own options, its log in Isle's cache, and the shown command last. Isle
+ * starts nothing else, even if something posed as isled on the bus. `user`: {home, cache, uid, gid}.
+ */
+export function runnable(action, {home, cache = `${home}/.cache`, uid, gid}) {
+    const argv = action?.spawn;
+    if (!Array.isArray(argv) || argv[0] !== 'systemd-run' || typeof action.command !== 'string')
+        return false;
+    const end = argv.indexOf('--');
+    const root = !argv.slice(0, end).includes('--user');
+    const logPath = new RegExp(`^${literal(`${cache}/isle/runs/`)}run-[\\w-]+\\.log$`);
+    if (end < 0 || argv.length !== end + (root ? 9 : 6))
+        return false;
+    const [bash, flag, wrapper, name, command, ...rest] = argv.slice(end + 1);
+    const shown = root ? action.command.replace(/^sudo /, '') : action.command;
+    if (bash !== 'bash' || flag !== '-c' || wrapper !== (root ? ROOT_WRAPPER : RUN_WRAPPER) || name !== 'isle' ||
+        command !== shown)
+        return false;
+    // As root, the output reaches the log through the user, never a file root opens in their home.
+    if (root && (rest[0] !== String(uid) || rest[1] !== String(gid) || !logPath.test(rest[2])))
+        return false;
+    const allowed = [
+        /^--user$/, /^--unit=isle-run-[\w-]+$/, /^--collect$/, /^--quiet$/, /^--property=RuntimeMaxSec=\d+$/,
+        /^--setenv=(DEBIAN_FRONTEND|LANG)=[\w.-]*$/,
+    ];
+    return argv.slice(1, end).every(option => allowed.some(rule => rule.test(option)) ||
+        pathAllowed(option, root, home) || (!root && option === `--working-directory=${home}`) ||
+        (!root && /^--property=Standard(Output|Error)=append:/.test(option) &&
+            logPath.test(option.replace(/^--property=Standard(Output|Error)=append:/, ''))));
+}
+
+// The PATH a command gets (tasks.rs `path`): the system's folders, and for the user's own commands
+// their folders in home first; as root, nothing the user can write.
+const SYSTEM_PATH = ['/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin', '/snap/bin'];
+
+function pathAllowed(option, root, home) {
+    if (!option.startsWith('--setenv=PATH='))
+        return false;
+    const dirs = option.slice('--setenv=PATH='.length).split(':');
+    const own = dirs.slice(0, dirs.length - SYSTEM_PATH.length);
+    return dirs.slice(own.length).join(':') === SYSTEM_PATH.join(':') && (root ? !own.length
+        : own.every(dir => dir.startsWith(`${home}/.`) && !dir.includes('..') && !dir.includes('\n')));
+}
+
+/** Whether `argv` only stops one of Isle's commands. */
+export function stoppable(argv) {
+    return Array.isArray(argv) && argv[0] === 'systemctl' &&
+        (argv.length === 3 || (argv.length === 4 && argv[1] === '--user')) &&
+        argv.at(-2) === 'stop' && /^isle-run-[\w-]+$/.test(argv.at(-1));
+}
+
+const literal = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Parts of the screen's work area, as [x, y, width, height] shares of it: where one window goes...
 export const TILES = {

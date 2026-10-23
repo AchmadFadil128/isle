@@ -1011,7 +1011,9 @@ async fn run(case: &Case) -> Result<Vec<Answer>, String> {
                             arg.as_str()?
                                 .strip_prefix("--property=StandardOutput=append:")
                                 .map(str::to_owned)
-                        });
+                        })
+                        // As root, the log is the last argument (see tasks.rs ROOT_WRAPPER).
+                        .or_else(|| run["spawn"].as_array()?.last()?.as_str().map(str::to_owned));
                     if let Some(log) = log {
                         std::fs::write(log, "Done.\n[isle-exit 0]\n").ok();
                     }

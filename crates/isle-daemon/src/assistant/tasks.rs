@@ -29,6 +29,10 @@ const EXIT_MARK: &str = "[isle-exit ";
 /// Runs the command (in a subshell, so an `exit` in it ends only that), then says how it ended; a
 /// command stopped or cut short says nothing.
 const WRAPPER: &str = "( eval \"$1\" ); printf '\\n[isle-exit %d]\\n' \"$?\"";
+/// As root, the same, its output written by the user ($2, $3) rather than root, so the log in their home
+/// can never be made to point root at a file of the system.
+const ROOT_WRAPPER: &str = "{ ( eval \"$1\" ); printf '\\n[isle-exit %d]\\n' \"$?\"; } 2>&1 | \
+    chroot --userspec=\"$2:$3\" / tee -a -- \"$4\" >/dev/null";
 
 /// Who runs it: the user, or root (the system, after GNOME's password dialog).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,26 +70,41 @@ impl Task {
             format!("--unit={}", self.unit()),
             "--collect".into(),
             "--quiet".into(),
-            format!("--property=StandardOutput=append:{log}"),
-            format!("--property=StandardError=append:{log}"),
+        ]);
+        if self.scope == Scope::User {
+            argv.extend([
+                format!("--property=StandardOutput=append:{log}"),
+                format!("--property=StandardError=append:{log}"),
+            ]);
+        }
+        argv.extend([
             format!("--property=RuntimeMaxSec={}", MAX_RUN.as_secs()),
             "--setenv=DEBIAN_FRONTEND=noninteractive".into(),
             "--setenv=LANG=C.UTF-8".into(),
-            format!("--setenv=PATH={}", path()),
+            format!("--setenv=PATH={}", path(self.scope)),
         ]);
         if self.scope == Scope::User
             && let Some(home) = dirs::home_dir()
         {
             argv.push(format!("--working-directory={}", home.display()));
         }
+        let wrapper = match self.scope {
+            Scope::User => WRAPPER,
+            Scope::System => ROOT_WRAPPER,
+        };
         argv.extend([
             "--".into(),
             "bash".into(),
             "-c".into(),
-            WRAPPER.into(),
+            wrapper.into(),
             "isle".into(),
         ]);
         argv.push(self.command.clone());
+        if self.scope == Scope::System {
+            // SAFETY: getuid and getgid cannot fail.
+            let (uid, gid) = unsafe { (libc::getuid(), libc::getgid()) };
+            argv.extend([uid.to_string(), gid.to_string(), log.to_string()]);
+        }
         argv
     }
 
@@ -100,34 +119,34 @@ impl Task {
     }
 }
 
-/// The PATH a command gets: the system's, and where the user's own programs live (npm, pipx, cargo…).
-fn path() -> String {
+/// The PATH a command gets: the system's, and for the user's own commands where their programs live
+/// (npm, pipx, cargo…); never as root, so a program the user can write cannot stand in for `apt`.
+fn path(scope: Scope) -> String {
     let home = dirs::home_dir().unwrap_or_default();
-    let user = [
-        ".local/bin",
-        ".npm-global/bin",
-        ".cargo/bin",
-        ".bun/bin",
-        ".volta/bin",
-    ]
-    .iter()
-    .map(|dir| home.join(dir).display().to_string());
-    user.chain(
-        [
-            "/usr/local/sbin",
-            "/usr/local/bin",
-            "/usr/sbin",
-            "/usr/bin",
-            "/sbin",
-            "/bin",
-            "/snap/bin",
-        ]
-        .iter()
-        .map(|dir| (*dir).to_owned()),
-    )
-    .collect::<Vec<_>>()
-    .join(":")
+    let own = if scope == Scope::User { USER_PATH } else { &[] };
+    own.iter()
+        .map(|dir| home.join(dir).display().to_string())
+        .chain(SYSTEM_PATH.iter().map(|dir| (*dir).to_owned()))
+        .collect::<Vec<_>>()
+        .join(":")
 }
+
+const USER_PATH: &[&str] = &[
+    ".local/bin",
+    ".npm-global/bin",
+    ".cargo/bin",
+    ".bun/bin",
+    ".volta/bin",
+];
+const SYSTEM_PATH: &[&str] = &[
+    "/usr/local/sbin",
+    "/usr/local/bin",
+    "/usr/sbin",
+    "/usr/bin",
+    "/sbin",
+    "/bin",
+    "/snap/bin",
+];
 
 /// How a command ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -152,7 +171,7 @@ fn logs() -> PathBuf {
     crate::store::cache_dir().join("runs")
 }
 
-/// A new task for `command`, its log made ready (private to the user; root may still append to it).
+/// A new task for `command`, its log made ready (private to the user, who alone writes to it).
 pub fn prepare(command: &str, why: &str, scope: Scope) -> std::io::Result<Task> {
     // The time, and a count: two in the same millisecond still differ.
     static COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -536,6 +555,18 @@ mod tests {
     }
 
     #[test]
+    fn wraps_commands_as_the_extension_expects() {
+        // actionRules.js checks a command starts with exactly these.
+        let rules = include_str!("../../../../gnome-extension/src/actionRules.js");
+        let js = WRAPPER.replace('\\', "\\\\").replace('\'', "\\'");
+        assert!(rules.contains(&format!("RUN_WRAPPER = '{js}';")), "{js}");
+        let tail = ROOT_WRAPPER
+            .strip_prefix(&format!("{{ {WRAPPER}; }}"))
+            .unwrap();
+        assert!(rules.contains(&format!("ROOT_WRAPPER = `{{ ${{RUN_WRAPPER}}; }}{tail}`;")));
+    }
+
+    #[test]
     fn starts_and_stops_through_systemd() {
         let task = Task {
             id: "abc".into(),
@@ -551,6 +582,28 @@ mod tests {
             !argv.contains(&"--user".to_owned())
                 && argv.contains(&"--unit=isle-run-abc".to_owned())
         );
+        // Root opens no file of the user's: its output goes to them through `tee`, run as them.
+        assert!(!argv.iter().any(|arg| arg.contains("append:")));
+        let (uid, gid) = unsafe { (libc::getuid(), libc::getgid()) };
+        assert_eq!(
+            &argv[argv.len() - 8..],
+            [
+                "bash",
+                "-c",
+                ROOT_WRAPPER,
+                "isle",
+                "apt install -y vlc",
+                &uid.to_string(),
+                &gid.to_string(),
+                "/run/user/1000/isle/run-abc.log"
+            ]
+        );
+        assert_eq!(task.stop(), ["systemctl", "stop", "isle-run-abc"]);
+        let user = Task {
+            scope: Scope::User,
+            ..task.clone()
+        };
+        let argv = user.spawn();
         assert!(argv.contains(
             &"--property=StandardOutput=append:/run/user/1000/isle/run-abc.log".to_owned()
         ));
@@ -558,12 +611,20 @@ mod tests {
             &argv[argv.len() - 5..],
             ["bash", "-c", WRAPPER, "isle", "apt install -y vlc"]
         );
-        assert_eq!(task.stop(), ["systemctl", "stop", "isle-run-abc"]);
-        let user = Task {
-            scope: Scope::User,
-            ..task
+        assert!(argv.contains(&"--user".to_owned()) && user.stop()[1] == "--user");
+        // Root never looks in the user's folders for its programs.
+        let paths = |task: &Task| {
+            task.spawn()
+                .into_iter()
+                .find(|arg| arg.starts_with("--setenv=PATH="))
+                .unwrap()
         };
-        assert!(user.spawn().contains(&"--user".to_owned()) && user.stop()[1] == "--user");
+        assert!(
+            paths(&task).ends_with(
+                "=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+            )
+        );
+        assert!(paths(&user).contains("/.local/bin:"));
     }
 
     #[tokio::test]

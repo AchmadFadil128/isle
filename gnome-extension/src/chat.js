@@ -39,6 +39,10 @@ const label = (text, styleClass, params = {}) => new St.Label({text, style_class
 
 /** How long (ms) "Copied" shows in place of the conversation's title. */
 const COPIED_MS = 1200;
+// A package manager stopped halfway can leave the system half changed, so its Stop asks for a second press
+// within this long.
+const STOP_ARMED_MS = 4000;
+const INSTALLER = /(^|[\s;&|(])(apt|apt-get|aptitude|dpkg|dnf|yum|rpm|pacman|zypper|flatpak|snap)\s/;
 /** A selection's colours: macOS's blue under white text. GNOME 47 moved colours from Clutter to Cogl. */
 const Color = Clutter.Color ?? Cogl.Color;
 const SELECTION = Color.from_string('#0a84ffb3')[1];
@@ -212,16 +216,26 @@ export function shellMarkup(command) {
     return `${span(SHELL.prompt, '$')} ${words.join('')}`;
 }
 
+/** What to know about a command, in its colour: an icon and a few words. */
+function riskRow(risk, iconName, text) {
+    const row = new St.BoxLayout({style_class: `isle-card-risk isle-card-risk-${risk}`});
+    row.add_child(new St.Icon({gicon: icon(iconName), icon_size: 11, y_align: Clutter.ActorAlign.CENTER}));
+    row.add_child(label(text, 'isle-card-risk-text', {y_align: Clutter.ActorAlign.CENTER}));
+    return row;
+}
+
 /** A label with a key's name in a small box after it: Run ⏎. */
 function keyButton(text, key, styleClass, onClick) {
     const box = new St.BoxLayout({style_class: 'isle-card-button-box'});
-    box.add_child(label(text, 'isle-card-button-label', {y_align: Clutter.ActorAlign.CENTER}));
+    const name = label(text, 'isle-card-button-label', {y_align: Clutter.ActorAlign.CENTER});
+    box.add_child(name);
     const cap = label(key ?? '', 'isle-card-key', {y_align: Clutter.ActorAlign.CENTER, visible: Boolean(key)});
     box.add_child(cap);
     const button = new St.Button({child: box, style_class: `isle-pill isle-pill-small isle-card-button ${styleClass}${key ? '' : ' isle-card-button-plain'}`,
         can_focus: true, y_align: Clutter.ActorAlign.CENTER});
     button.connect('clicked', () => onClick());
     button.cap = cap;
+    button.label_actor = name;
     return button;
 }
 
@@ -278,7 +292,7 @@ export const CommandCard = GObject.registerClass({
         this._foot = new St.BoxLayout({style_class: 'isle-card-foot'});
         this._risks = new St.BoxLayout({style_class: 'isle-card-risks', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         this._foot.add_child(this._risks);
-        this._stopButton = keyButton('Stop', null, 'isle-card-ghost', () => this.emit('stop'));
+        this._stopButton = keyButton('Stop', null, 'isle-card-ghost', () => this._stop());
         this._deny = keyButton('Deny', 'esc', 'isle-card-ghost', () => this.decide(false));
         this._run = keyButton('Run', '↩', 'isle-card-run', () => this.decide(true));
         for (const button of [this._stopButton, this._deny, this._run])
@@ -289,6 +303,7 @@ export const CommandCard = GObject.registerClass({
             this._destroyed = true;
             if (this._copiedTimer)
                 GLib.source_remove(this._copiedTimer);
+            this._disarmStop();
         });
     }
 
@@ -313,16 +328,15 @@ export const CommandCard = GObject.registerClass({
         this._command.clutter_text.ellipsize = waiting ? Pango.EllipsizeMode.NONE : Pango.EllipsizeMode.END;
 
         this._risks.destroy_all_children();
-        if (waiting) {
+        if (!running)
+            this._disarmStop();
+        if (running && this._stopArmed) {
+            this._risks.add_child(riskRow('removes', 'isle-warning-symbolic', 'May leave it half installed'));
+        } else if (waiting) {
             // One is enough beside the buttons: the most telling (see RISKS), removing before the web before a password.
             const risk = Object.keys(RISKS).find(key => card.risks?.includes(key));
-            if (risk) {
-                const [iconName, text] = RISKS[risk];
-                const row = new St.BoxLayout({style_class: `isle-card-risk isle-card-risk-${risk}`});
-                row.add_child(new St.Icon({gicon: icon(iconName), icon_size: 11, y_align: Clutter.ActorAlign.CENTER}));
-                row.add_child(label(text, 'isle-card-risk-text', {y_align: Clutter.ActorAlign.CENTER}));
-                this._risks.add_child(row);
-            }
+            if (risk)
+                this._risks.add_child(riskRow(risk, ...RISKS[risk]));
         }
 
         // Its last two lines as they print; on failure, the line that says why, in red.
@@ -358,6 +372,37 @@ export const CommandCard = GObject.registerClass({
 
     get status() {
         return this._state;
+    }
+
+    // Stop; for a package manager, a second press within STOP_ARMED_MS, with a line on why.
+    _stop() {
+        if (this._stopArmed || !INSTALLER.test(` ${this._commandText ?? ''}`)) {
+            this._disarmStop();
+            this.emit('stop');
+            return;
+        }
+        this._stopArmed = GLib.timeout_add(GLib.PRIORITY_DEFAULT, STOP_ARMED_MS, () => {
+            this._stopArmed = 0;
+            this._showStop(false);
+            return GLib.SOURCE_REMOVE;
+        });
+        this._showStop(true);
+    }
+
+    _disarmStop() {
+        if (this._stopArmed)
+            GLib.source_remove(this._stopArmed);
+        this._stopArmed = 0;
+        this._showStop(false);
+    }
+
+    _showStop(armed) {
+        if (this._destroyed)
+            return;
+        this._stopButton.label_actor.text = armed ? 'Stop anyway' : 'Stop';
+        this._risks.destroy_all_children();
+        if (armed)
+            this._risks.add_child(riskRow('removes', 'isle-warning-symbolic', 'May leave it half installed'));
     }
 
     // "Copied" for a moment where the card says how it is going: under the title, or at the line's end.

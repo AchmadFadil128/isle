@@ -118,13 +118,6 @@ export default class IslePreferences extends ExtensionPreferences {
             });
             for (const {provider, title, subtitle} of agents) {
                 agentGroup.add(switchRow(settings, `agent-alerts-${provider}`, title, subtitle));
-                // agy may run commands without asking; this makes it ask on the island.
-                if (provider === 'agy') {
-                    const ask = switchRow(settings, 'agent-ask-agy', 'Ask before agy runs a command',
-                        'Each command agy wants to run waits for Allow on the island');
-                    settings.bind('agent-alerts-agy', ask, 'sensitive', Gio.SettingsBindFlags.GET);
-                    agentGroup.add(ask);
-                }
             }
             page.add(agentGroup);
         }
@@ -634,7 +627,6 @@ function agentsFound() {
     return [
         {provider: 'claude', title: 'Claude Code', subtitle: 'Allow, deny or always allow, and when it is done'},
         {provider: 'codex', title: 'Codex', subtitle: 'Allow or deny, and when it is done · trust the hook once in /hooks'},
-        {provider: 'agy', title: 'Antigravity', subtitle: 'When agy is done'},
     ].filter(({provider}) => agents[provider]?.found);
 }
 

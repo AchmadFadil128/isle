@@ -710,12 +710,18 @@ mod tests {
                         if !run {
                             return json!({"type": "run", "ok": false, "detail": "denied"});
                         }
-                        let log = a["spawn"].as_array().unwrap().iter().find_map(|arg| {
-                            arg.as_str()
-                                .unwrap()
-                                .strip_prefix("--property=StandardOutput=append:")
-                                .map(str::to_owned)
-                        });
+                        let log = a["spawn"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .find_map(|arg| {
+                                arg.as_str()
+                                    .unwrap()
+                                    .strip_prefix("--property=StandardOutput=append:")
+                                    .map(str::to_owned)
+                            })
+                            // As root, the log is the last argument (see tasks.rs ROOT_WRAPPER).
+                            .or_else(|| a["spawn"].as_array()?.last()?.as_str().map(str::to_owned));
                         std::fs::write(
                             log.unwrap(),
                             format!("Setting up vlc ...\n[isle-exit {exit}]\n"),

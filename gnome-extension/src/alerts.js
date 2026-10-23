@@ -366,8 +366,8 @@ export function meeting(event, link, join) {
     };
 }
 
-const AGENT_NAMES = {claude: 'Claude', codex: 'Codex', agy: 'Antigravity'};
-const AGENT_APPS = {claude: 'Claude Code', codex: 'Codex', agy: 'Antigravity'};
+const AGENT_NAMES = {claude: 'Claude', codex: 'Codex'};
+const AGENT_APPS = {claude: 'Claude Code', codex: 'Codex'};
 
 /** An AI agent needs the user, or is done ({provider, kind, project, message}); `show` brings its window up. */
 export function agent(event, show) {

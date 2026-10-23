@@ -176,6 +176,7 @@ class PeekView extends St.Widget {
         const hasRing = alert.ring !== undefined && alert.ring !== null;
 
         this._asks = Boolean(alert.actions?.length);
+        this._shown = alert;
         // One that asks reads from the left, like a dialog; the others sit centred.
         this._row.x_align = this._asks || alert.code ? Clutter.ActorAlign.FILL : Clutter.ActorAlign.CENTER;
         this._row.style_class = this._asks || alert.code ? 'isle-peek-row isle-peek-row-asks' : 'isle-peek-row';
@@ -306,6 +307,9 @@ class PeekView extends St.Widget {
     _answer(action, onDone) {
         if (this._answerTimer)
             return;
+        // Answered: putting it away after says nothing more (see `onDismissed`).
+        if (this._shown)
+            this._shown.answered = true;
         action.callback();
         if (!action.answer) {
             onDone?.();

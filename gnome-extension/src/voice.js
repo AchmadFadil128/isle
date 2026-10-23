@@ -14,7 +14,7 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-import {describeActions, failed, outcomeOf, slotsFor, TILES} from './actionRules.js';
+import {describeActions, failed, outcomeOf, runnable, slotsFor, stoppable, TILES} from './actionRules.js';
 import {Bot} from './bot.js';
 import {ChatView, CommandCard, elapsed} from './chat.js';
 import {isTerminal} from './clipboard.js';
@@ -60,6 +60,17 @@ const SELECTION_TIMEOUT_MS = 500;
 /** How many notifications the AI may read, newest first, and how much of each body. */
 const MAX_NOTIFICATIONS = 10;
 const MAX_NOTIFICATION_BODY = 300;
+
+// Who GNOME Shell runs as, to check a command started as root writes its log as them (see `runnable`).
+let user = null;
+function shellUser() {
+    if (!user) {
+        const status = new TextDecoder().decode(GLib.file_get_contents('/proc/self/status')[1]);
+        const id = key => status.match(new RegExp(`^${key}:\\s+(\\d+)`, 'm'))?.[1];
+        user = {home: GLib.get_home_dir(), cache: GLib.get_user_cache_dir(), uid: id('Uid'), gid: id('Gid')};
+    }
+    return user;
+}
 
 /** An app just opened gets this long (ms) to show its window before the next step goes on without it. */
 const WINDOW_WAIT_MS = 5000;
@@ -359,8 +370,9 @@ export const VoiceView = GObject.registerClass({
             // The first time it opens it greets you, as Siri does.
             listening: [this.followUp ?? '', this.greeting ?? 'Listening…', !this.greeting],
             transcribing: [this.followUp ?? '', 'One moment…', true],
-            // An agent's step as it happens ("Searching ~/Downloads for “ttd”…"), else thinking.
-            thinking: [heard, step || 'Thinking…', true],
+            // Its answer as it writes it; else an agent's step as it happens ("Searching ~/Downloads for
+            // “ttd”…"), else thinking.
+            thinking: [heard, state.draft || step || 'Thinking…', !state.draft],
             acting: [heard, step, true],
             reply: [heard, clip(state.reply ?? ''), false],
             error: [heard, state.error || 'Something went wrong', false],
@@ -398,6 +410,18 @@ export const VoiceView = GObject.registerClass({
         const notHeard = state.phase === 'error' && NOT_HEARD.test(state.error ?? '');
         const form = searching ? 'searching' : notHeard ? 'confused' : {transcribing: 'thinking'}[state.phase] ?? state.phase;
         this._face.setForm(this._cardForm() ?? form);
+        this._syncCard(state.card);
+    }
+
+    // The command card as isled has it. Once over, it stays until the next request; in an open
+    // conversation it is a line of the list instead (see ChatView).
+    _syncCard(card) {
+        const live = card && ['waiting', 'running'].includes(card.status);
+        const asking = ['listening', 'transcribing'].includes(this._phase);
+        if (card && (live || (!this.chatOpen && !asking)))
+            this.showCard(card);
+        else if (this._card.visible)
+            this.showCard(null);
     }
 
     /** The form the command card asks for: looking at its buttons, watching it run, glad it worked. */
@@ -850,6 +874,45 @@ function typeInTerminal(command) {
 /** The greeting it opens with; it understands any language spoken back. */
 export const GREETING = 'How can I help?';
 
+/** Starts `argv` (systemd-run; for root, GNOME's password dialog shows first): whether it started. */
+function startUnit(argv) {
+    return new Promise(resolve => {
+        let process;
+        try {
+            process = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_PIPE);
+        } catch (e) {
+            resolve(failed(`not started: ${e.message}`));
+            return;
+        }
+        process.communicate_utf8_async(null, null, (_process, result) => {
+            try {
+                const [, , stderr] = process.communicate_utf8_finish(result);
+                if (process.get_successful()) {
+                    resolve({ok: true, detail: 'started'});
+                    return;
+                }
+                // The password dialog dismissed is the usual way it ends here.
+                const why = (stderr ?? '').trim().split('\n').at(-1) || `exit ${process.get_exit_status()}`;
+                resolve(failed(/dismissed|not authorized|access denied/i.test(why)
+                    ? `not started: the password was not given (${why})` : `not started: ${why}`));
+            } catch (e) {
+                resolve(failed(`not started: ${e.message}`));
+            }
+        });
+    });
+}
+
+/** Stops one of Isle's commands (Stop on its card). */
+export function stopUnit(argv) {
+    if (!stoppable(argv))
+        return;
+    try {
+        Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+    } catch (e) {
+        console.warn(`Isle: could not stop the command: ${e.message}`);
+    }
+}
+
 // What isled passes on to the AI: the apps, the models, the selected text (not from apps kept out of the
 // clipboard history) and, when allowed, the latest of `notifications` (a NotificationCenter).
 export async function voiceContext(settings, notifications, {apps = [], selectedIn = null} = {}) {
@@ -864,6 +927,7 @@ export async function voiceContext(settings, notifications, {apps = [], selected
         ...aiSettings(settings),
         whisper_model: settings.get_string('voice-speech-model'),
         language: settings.get_string('voice-language'),
+        keep_chat: settings.get_string('voice-keep-chat'),
         selection: await selection,
         // null: not allowed to read them; []: allowed, but there are none.
         notifications: settings.get_boolean('voice-read-notifications') ? recentNotifications(notifications) : null,
@@ -1034,6 +1098,15 @@ const ACTIONS = {
         .set_boolean('night-light-enabled', on !== false),
     settings: ({panel}) => /^[a-z-]+$/.test(panel ?? '') && spawn(['gnome-control-center', panel]),
     terminal: ({command}) => typeof command === 'string' && typeInTerminal(command),
+    // A command the AI wants run: the user says Run or Deny (the card, or an alert while the island is
+    // closed); run, it starts as a systemd unit of its own, which isled follows to its end.
+    run: async (action, {decide}) => {
+        if (!runnable(action, shellUser()))
+            return failed('Isle refused to start it: it was not the command shown');
+        if (!await decide(action))
+            return failed('denied');
+        return startUnit(action.spawn);
+    },
     screenshot: (_action, {closeThen}) => closeThen(() => Main.screenshotUI.open()),
     lock: (_action, {closeThen}) => closeThen(() => Main.screenShield?.lock(true)),
     // Closed first, so the keys go back to the window the user asked from.

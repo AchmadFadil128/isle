@@ -105,23 +105,13 @@
     </key>
     <key name="agent-alerts-codex" type="b">
       <default>true</default>
-      <summary>Alerts from Codex</summary>
-      <description>When on, Isle sets Codex's notify program so it hears when Codex is done; off removes it.</description>
-    </key>
-    <key name="agent-alerts-agy" type="b">
-      <default>true</default>
-      <summary>Alerts from Antigravity</summary>
-      <description>When on, Isle adds a hook to agy's settings so it hears when agy is done; off removes it.</description>
+      <summary>Answer Codex from the island</summary>
+      <description>When on, Isle adds hooks to Codex's hooks.json so it hears when Codex needs you or is done; off removes them.</description>
     </key>
     <key name="agents-announced" type="as">
       <default>[]</default>
       <summary>AI agents already told they are connected</summary>
       <description>Isle says once, the first time, that it connected to each agent.</description>
-    </key>
-    <key name="agent-ask-agy" type="b">
-      <default>false</default>
-      <summary>Ask on the island before agy runs a command</summary>
-      <description>agy may be set to run commands without asking; with this on, each command waits for Allow on the island.</description>
     </key>
     <key name="gnome-banners" type="b">
       <default>false</default>

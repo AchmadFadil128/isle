@@ -113,21 +113,30 @@ const INTERFACES = {
     agents: {
         xml: node('Agents1', `
             <method name="SetHooked"><arg name="provider" type="s" direction="in"/><arg name="on" type="b" direction="in"/></method>
+            <method name="Resolve"><arg name="id" type="s" direction="in"/><arg name="decision" type="s" direction="in"/></method>
             <signal name="Event"><arg name="event" type="s"/></signal>
+            <signal name="Asking"><arg name="request" type="s"/></signal>
+            <signal name="Withdrawn"><arg name="id" type="s"/></signal>
             <property name="Agents" type="s" access="read"/>`),
         properties: {Agents: 'agents'},
     },
     assistant: {
         xml: node('Assistant1', `
+            <method name="Warm"><arg name="context" type="s" direction="in"/></method>
             <method name="Listen"><arg name="context" type="s" direction="in"/></method>
             <method name="Ask"><arg name="text" type="s" direction="in"/><arg name="context" type="s" direction="in"/></method>
             <method name="Stop"/>
             <method name="End"/>
             <method name="Results"><arg name="step" type="t" direction="in"/><arg name="results" type="s" direction="in"/></method>
             <method name="Cancel"/>
+            <method name="NewChat"/>
+            <method name="UndoNewChat"/>
+            <method name="ClearChat"/>
             <signal name="Level"><arg name="level" type="d"/></signal>
-            <property name="State" type="s" access="read"/>`),
-        properties: {State: 'assistant'},
+            <signal name="Notice"><arg name="text" type="s"/><arg name="ok" type="b"/></signal>
+            <property name="State" type="s" access="read"/>
+            <property name="History" type="s" access="read"/>`),
+        properties: {State: 'assistant', History: 'chat'},
     },
 };
 
@@ -135,6 +144,9 @@ const INTERFACES = {
 // `system-event` (event): see `SystemEvent` in the daemon; `voice-level` (level): the mic, 0..1;
 // `usage-alert` (provider, window, percent, resets_at_ms): an AI plan limit nears its end;
 // `agent-event` (event): Claude Code or Codex needs the user or is done ({provider, kind, project, message});
+// `agent-asking` (request): one asks a permission, to answer with Agents1.Resolve ({id, provider, tool, input…});
+// `agent-withdrawn` (id): that permission needs no answer any more;
+// `assistant-notice` (text, ok): a command the assistant ran ended while nobody watched;
 // `assistant-lost`: isled stopped or restarted, so a request in flight will not be answered;
 // `appeared` (name): interface `name` can be called now (isled started, or started again);
 // `running-changed`: isled came or went (see `running`).
@@ -275,6 +287,19 @@ export class Daemon extends Signals.EventEmitter {
             break;
         case 'Level':
             this.emit('voice-level', args[0]);
+            break;
+        case 'Notice':
+            this.emit('assistant-notice', args[0], args[1]);
+            break;
+        case 'Withdrawn':
+            this.emit('agent-withdrawn', args[0]);
+            break;
+        case 'Asking':
+            try {
+                this.emit('agent-asking', JSON.parse(args[0]));
+            } catch (e) {
+                console.warn(`Isle: invalid permission request: ${e.message}`);
+            }
             break;
         case 'Alert':
             this.emit('usage-alert', ...args);
