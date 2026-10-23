@@ -12,12 +12,12 @@ use anyhow::{Context, bail};
 use chrono::{DateTime, Local, NaiveDate};
 use serde::Deserialize;
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout, Command};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::answer::{Answer, SCHEMA};
-use super::child::{self, Group};
+use super::child::{self, Events, Group};
 
 /// Claude Code's own coding-agent prompt is replaced by this; the job comes with the first request.
 const SYSTEM: &str = "You are Isle, a voice assistant on the user's Linux desktop, not a coding agent. Follow \
@@ -29,7 +29,7 @@ const STDERR_LINES: usize = 20;
 pub struct Claude {
     _child: Group,
     stdin: ChildStdin,
-    events: Lines<BufReader<ChildStdout>>,
+    events: Events<ChildStdout>,
     stderr: Arc<Mutex<VecDeque<String>>>,
     pub conversation: Option<String>,
 }
@@ -70,7 +70,7 @@ impl Claude {
         let mut child = child::spawn(&mut command)
             .context("could not start claude; is Claude Code installed?")?;
         let stdin = child.stdin.take().expect("piped stdin");
-        let events = BufReader::new(child.stdout.take().expect("piped stdout")).lines();
+        let events = Events::new(child.stdout.take().expect("piped stdout"));
         let stderr = Arc::new(Mutex::new(VecDeque::new()));
         let mut lines = BufReader::new(child.stderr.take().expect("piped stderr")).lines();
         let kept = stderr.clone();
@@ -120,10 +120,12 @@ impl Claude {
             .stdin
             .write_all(format!("{message}\n").as_bytes())
             .await;
-        while let Some(line) = self.events.next_line().await? {
-            let Ok(event) = serde_json::from_str::<Value>(&line) else {
-                continue;
-            };
+        // Its first event and its answer carry the conversation's id; tool results, the bulk, are skipped.
+        let words: &[&str] = match activity {
+            Some(_) => &["\"init\"", "\"result\"", "\"tool_use\""],
+            None => &["\"init\"", "\"result\""],
+        };
+        while let Some(event) = self.events.next(words).await? {
             if let Some(id) = event["session_id"].as_str() {
                 self.conversation = Some(id.to_owned());
             }

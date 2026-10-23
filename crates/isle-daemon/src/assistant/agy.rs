@@ -12,12 +12,12 @@ use anyhow::{Context, bail};
 use chrono::{DateTime, Local, NaiveDate};
 use serde::Deserialize;
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout, Command};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::answer::{Answer, SCHEMA};
-use super::child::{self, Group};
+use super::child::{self, Events, Group};
 
 /// agy may only search the web and read pages; commands and file changes go through Isle's actions,
 /// which the user sees (agy's own settings may let it run anything without asking). The hook gets
@@ -141,7 +141,7 @@ impl Drop for Agy {
 pub struct Agy {
     _child: Group,
     stdin: ChildStdin,
-    events: Lines<BufReader<ChildStdout>>,
+    events: Events<ChildStdout>,
     stderr: Arc<Mutex<VecDeque<String>>>,
     /// Set from agy's first event; a later session can resume it.
     pub conversation: Option<String>,
@@ -180,7 +180,7 @@ impl Agy {
         let mut child = child::spawn(&mut command)
             .context("could not start agy; is the Antigravity CLI installed?")?;
         let stdin = child.stdin.take().expect("piped stdin");
-        let events = BufReader::new(child.stdout.take().expect("piped stdout")).lines();
+        let events = Events::new(child.stdout.take().expect("piped stdout"));
         let stderr = Arc::new(Mutex::new(VecDeque::new()));
         let mut lines = BufReader::new(child.stderr.take().expect("piped stderr")).lines();
         let kept = stderr.clone();
@@ -231,10 +231,11 @@ impl Agy {
             .stdin
             .write_all(format!("{message}\n").as_bytes())
             .await;
-        while let Some(line) = self.events.next_line().await? {
-            let Ok(event) = serde_json::from_str::<Value>(&line) else {
-                continue;
-            };
+        let words: &[&str] = match activity {
+            Some(_) => &["\"init\"", "\"result\"", "\"step_update\""],
+            None => &["\"init\"", "\"result\""],
+        };
+        while let Some(event) = self.events.next(words).await? {
             match event["event"].as_str() {
                 Some("init") => {
                     self.conversation = event["conversation_id"].as_str().map(str::to_owned);

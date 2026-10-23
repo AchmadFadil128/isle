@@ -14,7 +14,7 @@ use tokio::process::Command;
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::answer::{Answer, SCHEMA};
-use super::child;
+use super::child::{self, Events};
 
 /// Fast answers for a voice assistant; the user's own Codex settings are not used.
 const EFFORT: &str = "model_reasoning_effort=\"low\"";
@@ -143,13 +143,26 @@ impl Codex {
             }
             last
         });
-        let mut events = BufReader::new(child.stdout.take().expect("piped stdout")).lines();
+        let mut events = Events::new(child.stdout.take().expect("piped stdout"));
         let mut answer = None;
         let mut failure = None;
-        while let Some(line) = events.next_line().await? {
-            let Ok(event) = serde_json::from_str::<Value>(&line) else {
-                continue;
-            };
+        // Commands' output, the bulk, is skipped unparsed.
+        let words: &[&str] = match activity {
+            Some(_) => &[
+                "\"thread.started\"",
+                "\"agent_message\"",
+                "\"turn.failed\"",
+                "\"error\"",
+                "\"web_search\"",
+            ],
+            None => &[
+                "\"thread.started\"",
+                "\"agent_message\"",
+                "\"turn.failed\"",
+                "\"error\"",
+            ],
+        };
+        while let Some(event) = events.next(words).await? {
             match event["type"].as_str() {
                 Some("thread.started") => {
                     self.conversation = event["thread_id"].as_str().map(str::to_owned)
