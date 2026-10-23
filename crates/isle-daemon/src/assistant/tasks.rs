@@ -199,7 +199,7 @@ pub async fn follow(task: &Task, progress: impl Fn(Progress)) -> (Ended, String)
         }
         rounds += 1;
         // Gone without a word: stopped, or cut short. Its last lines may still be on their way.
-        if rounds % ALIVE_EVERY == 0 && !running(task).await {
+        if rounds.is_multiple_of(ALIVE_EVERY) && !running(task).await {
             tokio::time::sleep(POLL).await;
             if let Ok(text) = read_from(&task.log, &mut read).await {
                 output.push_str(&text);

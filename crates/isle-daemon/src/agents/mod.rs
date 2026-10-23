@@ -7,6 +7,7 @@ mod claude;
 mod codex;
 mod file;
 pub mod hook;
+mod json_hooks;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -28,8 +29,16 @@ const MAX_MESSAGE: usize = 160;
 const MAX_PROJECT: usize = 60;
 const MAX_SESSION: usize = 100;
 const MAX_CWD: usize = 1024;
-/// Events of one kind from one AI closer together than this are dropped.
+/// Events of one kind from one AI session closer together than this are dropped.
 const MIN_GAP: Duration = Duration::from_millis(300);
+/// A permission waits this long for an answer on the island; then the AI asks in its own terminal
+/// (its hook may wait ten minutes: this ends first).
+const ANSWER_WITHIN: Duration = Duration::from_secs(9 * 60 + 30);
+/// While a permission waits, how often isled checks the hook asking is still there (the user may have
+/// answered in the terminal, and the AI let its hook go).
+const STILL_ASKING: Duration = Duration::from_secs(2);
+const MAX_INPUT: usize = 300;
+const MAX_TOOL: usize = 60;
 /// A config file is looked at again once it has been quiet this long.
 const SETTLE: Duration = Duration::from_millis(250);
 
@@ -90,8 +99,8 @@ impl Ai {
             .to_str()
             .with_context(|| format!("isled's path {} is not UTF-8", isled.display()))?;
         match self {
-            Ai::Claude => claude::install(&self.config(), &claude::command(isled)),
-            Ai::Codex => codex::install(&self.config(), isled),
+            Ai::Claude => claude::install(&self.config(), &claude::command(isled, "claude")),
+            Ai::Codex => codex::install(&self.config(), isled, &claude::command(isled, "codex")),
         }
     }
 
@@ -199,15 +208,55 @@ fn cut(text: &str, max: usize) -> String {
     short
 }
 
-/// Drops an event that follows the last of its kind from the same AI too closely.
+/// A permission an AI agent asks for, as its hook sends it and the island shows it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Request {
+    pub id: String,
+    pub provider: String,
+    pub project: String,
+    pub cwd: String,
+    pub session: String,
+    /// The tool (Bash, Edit…) and what it would run or touch, on one line.
+    pub tool: String,
+    pub input: String,
+    /// Whether the AI offers to keep it for next time (Claude's "always").
+    pub always: bool,
+}
+
+impl Request {
+    fn checked(mut self) -> Result<Self, String> {
+        let event = Event {
+            provider: self.provider.clone(),
+            kind: "permission".into(),
+            project: self.project.clone(),
+            cwd: self.cwd.clone(),
+            message: String::new(),
+            session: self.session.clone(),
+        }
+        .checked()?;
+        self.project = event.project;
+        self.cwd = event.cwd;
+        self.session = event.session;
+        self.tool = cut(&self.tool, MAX_TOOL);
+        self.input = cut(&self.input, MAX_INPUT);
+        Ok(self)
+    }
+}
+
+/// Drops an event that follows the last of its kind from the same AI session too closely.
 #[derive(Default)]
 struct Limiter {
-    last: HashMap<(String, String), Instant>,
+    last: HashMap<(String, String, String), Instant>,
 }
 
 impl Limiter {
     fn allow(&mut self, event: &Event, now: Instant) -> bool {
-        let key = (event.provider.clone(), event.kind.clone());
+        let key = (
+            event.provider.clone(),
+            event.kind.clone(),
+            event.session.clone(),
+        );
         if self
             .last
             .get(&key)
@@ -220,16 +269,21 @@ impl Limiter {
     }
 }
 
+/// Permissions waiting for the user, by id, and where each answer goes.
+type Waiting = std::sync::Mutex<HashMap<String, tokio::sync::oneshot::Sender<String>>>;
+
 #[derive(Default)]
 pub struct AgentsService {
-    limiter: Limiter,
+    limiter: std::sync::Mutex<Limiter>,
+    waiting: std::sync::Arc<Waiting>,
+    asked: std::sync::atomic::AtomicU64,
 }
 
 #[interface(name = "io.github.zickrian.isle.Agents1")]
 impl AgentsService {
     /// Puts Isle's hook in `provider`'s config, or takes it out. GNOME Shell's to ask, no other program's.
     async fn set_hooked(
-        &mut self,
+        &self,
         provider: &str,
         on: bool,
         #[zbus(connection)] connection: &zbus::Connection,
@@ -251,14 +305,19 @@ impl AgentsService {
 
     /// From `isled --agent-hook`: JSON `{provider, kind, project, cwd, message, session}`.
     async fn report(
-        &mut self,
+        &self,
         json: &str,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> fdo::Result<()> {
         let event: Event =
             serde_json::from_str(json).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
         let event = event.checked().map_err(fdo::Error::InvalidArgs)?;
-        if !self.limiter.allow(&event, Instant::now()) {
+        let allowed = self
+            .limiter
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .allow(&event, Instant::now());
+        if !allowed {
             debug!(
                 "dropped a {} {} event: too soon",
                 event.provider, event.kind
@@ -269,6 +328,78 @@ impl AgentsService {
         Ok(Self::event(&emitter, &json).await?)
     }
 
+    /// From `isled --agent-hook` as an AI asks a permission: JSON `{provider, project, cwd, session, tool,
+    /// input, always}`. Shows it on the island and waits for the user: "allow", "always" or "deny"; "" when
+    /// the island will not answer (the AI then asks in its own terminal).
+    async fn decide(
+        &self,
+        json: &str,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> fdo::Result<String> {
+        let request: Request =
+            serde_json::from_str(json).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
+        let mut request = request.checked().map_err(fdo::Error::InvalidArgs)?;
+        let number = self
+            .asked
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        request.id = format!("{}-{number}", request.provider);
+        let (answer, answered) = tokio::sync::oneshot::channel();
+        self.waiting
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(request.id.clone(), answer);
+        let shown = serde_json::to_string(&request).unwrap_or_default();
+        Self::asking(&emitter, &shown).await?;
+        let asker = header.sender().map(|name| name.to_owned());
+        let decision = wait_for_answer(connection, asker, answered).await;
+        // Over, one way or another: the island lets it go.
+        let still = self
+            .waiting
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&request.id);
+        if still.is_some() {
+            Self::withdrawn(&emitter, &request.id).await.ok();
+        }
+        Ok(decision)
+    }
+
+    /// The island's answer to permission `id`: "allow", "always" or "deny" ("" lets the AI ask itself).
+    async fn resolve(
+        &self,
+        id: &str,
+        decision: &str,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+    ) -> fdo::Result<()> {
+        crate::caller::shell_only(connection, &header).await?;
+        if !["allow", "always", "deny", ""].contains(&decision) {
+            return Err(fdo::Error::InvalidArgs(format!(
+                "no such answer `{}`",
+                cut(decision, 20)
+            )));
+        }
+        let answer = self
+            .waiting
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(id);
+        if let Some(answer) = answer {
+            answer.send(decision.to_owned()).ok();
+        }
+        Ok(())
+    }
+
+    /// An AI asks a permission: the JSON `Decide` got, with its `id` for `Resolve`.
+    #[zbus(signal)]
+    async fn asking(emitter: &SignalEmitter<'_>, json: &str) -> zbus::Result<()>;
+
+    /// Permission `id` needs no answer any more (answered in the terminal, or it waited too long).
+    #[zbus(signal)]
+    async fn withdrawn(emitter: &SignalEmitter<'_>, id: &str) -> zbus::Result<()>;
+
     /// JSON `{claude: {found, hooked}, codex: {found, hooked}}`, read afresh.
     #[zbus(property)]
     fn agents(&self) -> String {
@@ -277,6 +408,31 @@ impl AgentsService {
 
     #[zbus(signal)]
     async fn event(emitter: &SignalEmitter<'_>, json: &str) -> zbus::Result<()>;
+}
+
+/// The user's answer, or "" if none comes in time or the hook asking is gone (the AI moved on).
+async fn wait_for_answer(
+    connection: &zbus::Connection,
+    asker: Option<zbus::names::UniqueName<'static>>,
+    mut answered: tokio::sync::oneshot::Receiver<String>,
+) -> String {
+    let dbus = zbus::fdo::DBusProxy::new(connection).await.ok();
+    let deadline = Instant::now() + ANSWER_WITHIN;
+    loop {
+        tokio::select! {
+            answer = &mut answered => return answer.unwrap_or_default(),
+            () = tokio::time::sleep(STILL_ASKING) => {
+                if Instant::now() >= deadline {
+                    return String::new();
+                }
+                if let (Some(dbus), Some(asker)) = (&dbus, &asker)
+                    && !dbus.name_has_owner(asker.clone().into()).await.unwrap_or(true)
+                {
+                    return String::new();
+                }
+            }
+        }
+    }
 }
 
 /// Publishes `Agents` again whenever an AI's config file changes (the user, or the AI, edited it).
@@ -297,7 +453,26 @@ async fn watch_configs(
 ) -> anyhow::Result<()> {
     let inotify = Inotify::init()?;
     let mut watches = inotify.watches();
-    let files: Vec<PathBuf> = Ai::ALL.into_iter().map(Ai::config).collect();
+    let files: Vec<PathBuf> = Ai::ALL
+        .into_iter()
+        .map(Ai::config)
+        .chain([codex::hooks_path()])
+        .collect();
+    // Where their programs land when installed (npm, the installers): a new one is found at once.
+    let home = dirs::home_dir().unwrap_or_default();
+    for dir in [
+        home.join(".local/bin"),
+        home.join(".npm-global/bin"),
+        "/usr/local/bin".into(),
+        "/usr/bin".into(),
+    ] {
+        watches
+            .add(
+                &dir,
+                WatchMask::CREATE | WatchMask::MOVED_TO | WatchMask::DELETE,
+            )
+            .ok();
+    }
     let mut watched = false;
     for file in &files {
         let Some(dir) = file.parent() else { continue };
@@ -322,10 +497,15 @@ async fn watch_configs(
     if !watched {
         std::future::pending::<()>().await;
     }
+    let programs = [
+        std::ffi::OsStr::new("claude"),
+        std::ffi::OsStr::new("codex"),
+    ];
     let names: Vec<&std::ffi::OsStr> = files
         .iter()
         .flat_map(|file| [file.file_name(), file.parent().and_then(Path::file_name)])
         .flatten()
+        .chain(programs)
         .collect();
     let mut events = inotify.into_event_stream([0u8; 1024])?;
     let mut due = None;

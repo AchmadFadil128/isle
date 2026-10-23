@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Codex's alerts: `notify = ["<isled>", "--agent-hook", "codex"]` in its config.toml, which Codex runs
-//! with a JSON summary after each turn. Only set when no other program gets Codex's notifications.
+//! Codex: hooks in its hooks.json running `isled --agent-hook codex`: `PermissionRequest` (its approval,
+//! answered from the island) and `Stop` (done). A Codex older than hooks (0.124) gets
+//! `notify = ["<isled>", "--agent-hook", "codex"]` in its config.toml instead, for done alone, and only
+//! when no other program gets Codex's notifications.
 
 use std::path::{Path, PathBuf};
 
@@ -9,6 +11,66 @@ use anyhow::{Context, bail};
 use toml_edit::{Array, DocumentMut, Item, value};
 
 use super::file;
+use super::json_hooks::{self, Spec};
+
+/// The hook events Isle listens to; an approval waits for the user's answer up to ten minutes.
+pub const SPEC: Spec = Spec {
+    events: &[("PermissionRequest", Some(600)), ("Stop", None)],
+    mark: "--agent-hook codex",
+    retired: &[],
+};
+/// The first Codex with hooks.
+const HOOKS_SINCE: (u32, u32) = (0, 124);
+
+/// `$CODEX_HOME/hooks.json`, else `~/.codex/hooks.json`.
+pub fn hooks_path() -> PathBuf {
+    config_path().with_file_name("hooks.json")
+}
+
+/// Whether the installed Codex has hooks; unknown counts as yes (a current one).
+fn has_hooks() -> bool {
+    let Some(program) = crate::assistant::Provider::Codex.program() else {
+        return true;
+    };
+    let output = std::process::Command::new(program)
+        .arg("--version")
+        .output();
+    let text = output
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    version(&text).is_none_or(|(major, minor)| (major, minor) >= HOOKS_SINCE)
+}
+
+/// "codex-cli 0.163.0" → (0, 163).
+fn version(text: &str) -> Option<(u32, u32)> {
+    let numbers = text
+        .split_whitespace()
+        .find(|word| word.chars().next().is_some_and(|c| c.is_ascii_digit()))?;
+    let mut parts = numbers.split('.').map(|part| part.parse::<u32>().ok());
+    Some((parts.next()??, parts.next()??))
+}
+
+/// Whether Codex runs Isle's hooks (or, an older one, notifies Isle).
+pub fn hooked(path: &Path) -> bool {
+    json_hooks::hooked(&hooks_path(), &SPEC) || notifies(path)
+}
+
+/// Isle's hooks in hooks.json, and an older `notify` of Isle's taken out; an old Codex gets `notify`.
+pub fn install(path: &Path, isled: &str, command: &str) -> anyhow::Result<()> {
+    if !has_hooks() {
+        return install_notify(path, isled);
+    }
+    json_hooks::install(&hooks_path(), command, &SPEC)?;
+    remove_notify(path)?;
+    Ok(())
+}
+
+/// Takes Isle's hooks and `notify` out; whether there were any.
+pub fn remove(path: &Path) -> anyhow::Result<bool> {
+    let hooks = json_hooks::remove(&hooks_path(), &SPEC)?;
+    let notify = remove_notify(path)?;
+    Ok(hooks || notify)
+}
 
 /// `$CODEX_HOME/config.toml`, else `~/.codex/config.toml`.
 pub fn config_path() -> PathBuf {
@@ -37,7 +99,7 @@ fn notify(isled: &str) -> Array {
 }
 
 /// Whether Codex notifies Isle.
-pub fn hooked(path: &Path) -> bool {
+fn notifies(path: &Path) -> bool {
     file::read(path)
         .ok()
         .flatten()
@@ -46,7 +108,7 @@ pub fn hooked(path: &Path) -> bool {
 }
 
 /// Points `notify` at isled; never over another program's.
-pub fn install(path: &Path, isled: &str) -> anyhow::Result<()> {
+fn install_notify(path: &Path, isled: &str) -> anyhow::Result<()> {
     let text = file::read(path).with_context(|| format!("could not read {}", path.display()))?;
     let mut config = parse(path, text.as_deref())?;
     match config.get("notify") {
@@ -64,7 +126,7 @@ pub fn install(path: &Path, isled: &str) -> anyhow::Result<()> {
 }
 
 /// Takes Isle's `notify` out; whether it was there.
-pub fn remove(path: &Path) -> anyhow::Result<bool> {
+fn remove_notify(path: &Path) -> anyhow::Result<bool> {
     let text = file::read(path).with_context(|| format!("could not read {}", path.display()))?;
     let Some(text) = text else {
         return Ok(false);
@@ -100,14 +162,22 @@ mod tests {
     const ISLED: &str = "/usr/bin/isled";
 
     #[test]
+    fn reads_codexs_version() {
+        assert_eq!(version("codex-cli 0.163.0\n"), Some((0, 163)));
+        assert_eq!(version("codex-cli 0.98.2"), Some((0, 98)));
+        assert_eq!(version("nonsense"), None);
+        assert!((0, 98) < HOOKS_SINCE && (0, 163) >= HOOKS_SINCE);
+    }
+
+    #[test]
     fn notify_goes_in_above_the_tables_and_comes_out_again() {
         let dir = scratch("codex-install");
         let path = dir.join("config.toml");
         let before = "# My Codex\nmodel = \"gpt-5\"  # the best\n\n[projects.\"/home/a\"]\ntrust_level = \"trusted\"\n";
         fs::write(&path, before).unwrap();
-        assert!(!hooked(&path));
-        install(&path, ISLED).unwrap();
-        assert!(hooked(&path));
+        assert!(!notifies(&path));
+        install_notify(&path, ISLED).unwrap();
+        assert!(notifies(&path));
         let text = fs::read_to_string(&path).unwrap();
         assert_eq!(
             text,
@@ -117,11 +187,11 @@ mod tests {
             fs::read_to_string(file::sibling(&path, ".isle-backup")).unwrap(),
             before
         );
-        install(&path, ISLED).unwrap();
+        install_notify(&path, ISLED).unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), text);
-        assert!(remove(&path).unwrap());
+        assert!(remove_notify(&path).unwrap());
         assert_eq!(fs::read_to_string(&path).unwrap(), before);
-        assert!(!remove(&path).unwrap());
+        assert!(!remove_notify(&path).unwrap());
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -131,15 +201,15 @@ mod tests {
         let path = dir.join("config.toml");
         let before = "notify = [\"notify-send\", \"Codex\"]\n";
         fs::write(&path, before).unwrap();
-        let err = install(&path, ISLED).unwrap_err();
+        let err = install_notify(&path, ISLED).unwrap_err();
         assert_eq!(
             err.to_string(),
             "Codex already sends its notifications to another program"
         );
-        assert!(!remove(&path).unwrap());
+        assert!(!remove_notify(&path).unwrap());
         assert_eq!(fs::read_to_string(&path).unwrap(), before);
         fs::write(&path, "notify = [").unwrap();
-        assert!(install(&path, ISLED).is_err());
+        assert!(install_notify(&path, ISLED).is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), "notify = [");
         fs::remove_dir_all(dir).unwrap();
     }
@@ -148,13 +218,13 @@ mod tests {
     fn a_missing_config_is_made_with_one_line() {
         let dir = scratch("codex-new");
         let path = dir.join("codex/config.toml");
-        install(&path, "/home/a b/.local/bin/isled").unwrap();
+        install_notify(&path, "/home/a b/.local/bin/isled").unwrap();
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
             "notify = [\"/home/a b/.local/bin/isled\", \"--agent-hook\", \"codex\"]\n"
         );
         // Another isled's entry is Isle's too: pointed at this one.
-        install(&path, ISLED).unwrap();
+        install_notify(&path, ISLED).unwrap();
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
             "notify = [\"/usr/bin/isled\", \"--agent-hook\", \"codex\"]\n"
