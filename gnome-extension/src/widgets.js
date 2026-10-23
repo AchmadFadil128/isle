@@ -169,7 +169,14 @@ const DISABLED_OPACITY = 90;
 export function setEnabled(button, enabled) {
     button.reactive = enabled;
     button.can_focus = enabled;
-    button.ease({opacity: enabled ? 255 : DISABLED_OPACITY, duration: 150});
+    const opacity = enabled ? 255 : DISABLED_OPACITY;
+    if (!restsAt(button, 'opacity', opacity))
+        button.ease({opacity, duration: 150});
+}
+
+/** Whether `actor`'s `property` is `value`, with no ease under way: Clutter would still run one to it. */
+export function restsAt(actor, property, value) {
+    return actor[property] === value && !actor.get_transition(property);
 }
 
 /** Sets an icon button's icon. */
@@ -298,6 +305,9 @@ export const Ring = GObject.registerClass({
     }
 
     set color(rgb) {
+        const color = this._color;
+        if (rgb[0] === color[0] && rgb[1] === color[1] && rgb[2] === color[2])
+            return;
         this._color = rgb;
         this._area.queue_repaint();
     }
@@ -828,8 +838,11 @@ class VolumeGlyph extends St.Widget {
                 mode: on ? Clutter.AnimationMode.EASE_OUT_CUBIC : Clutter.AnimationMode.EASE_IN_QUAD,
             });
         });
-        this._body.ease({opacity: this._muted ? 0 : 255, duration: WAVE_MS});
-        this._off.ease({opacity: this._muted ? 255 : 0, duration: WAVE_MS});
+        const [body, off] = this._muted ? [0, 255] : [255, 0];
+        if (!restsAt(this._body, 'opacity', body))
+            this._body.ease({opacity: body, duration: WAVE_MS});
+        if (!restsAt(this._off, 'opacity', off))
+            this._off.ease({opacity: off, duration: WAVE_MS});
     }
 });
 
@@ -866,6 +879,8 @@ class LevelBar extends St.Widget {
         if (this._pendingGrow !== null)
             return;
         const fill = Math.round(this._width * this._level);
+        if (restsAt(this._fill, 'width', fill))
+            return;
         this._fill.remove_transition('width');
         if (this.mapped)
             this._fill.ease({width: fill, duration: 160, mode: Clutter.AnimationMode.EASE_OUT_QUAD});

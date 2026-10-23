@@ -12,7 +12,7 @@ import {vividColorOfFile} from '../colors.js';
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import * as Playback from '../playback.js';
-import {Art, Bars, Slider, fence, icon, iconButton, label, ownIcon, setButtonIcon, smallCover} from '../widgets.js';
+import {Art, Bars, Slider, fence, icon, iconButton, label, ownIcon, restsAt, setButtonIcon, smallCover} from '../widgets.js';
 import {LyricsPane} from './lyrics.js';
 import {Page} from './page.js';
 
@@ -445,7 +445,9 @@ class MediaPage extends Page {
     _syncBars() {
         const playing = Playback.isPlaying(this.daemon.state.nowPlaying);
         this._lyricsBars.playing = this.active && playing;
-        this._lyricsBars.ease({opacity: playing ? 255 : PAUSED_BARS_OPACITY, duration: 200});
+        const opacity = playing ? 255 : PAUSED_BARS_OPACITY;
+        if (!restsAt(this._lyricsBars, 'opacity', opacity))
+            this._lyricsBars.ease({opacity, duration: 200});
     }
 
     onActivate() {
