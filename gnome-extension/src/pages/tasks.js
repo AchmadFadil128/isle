@@ -63,6 +63,8 @@ class TasksPage extends Page {
         this._leaving = new Set();
         /** Ticked and gone, until isled reports them done. */
         this._gone = new Set();
+        /** Each shown reminder's row by id, kept while the reminder is unchanged. */
+        this._rows = new Map();
 
         const column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true});
         column.add_child(this._buildHeader());
@@ -179,21 +181,39 @@ class TasksPage extends Page {
         // rebuilt: taking it off the stage, even for a moment, would drop the keyboard focus.
         if (!this._newRow.get_parent())
             this._list.add_child(this._newRow);
+        // The rows of unchanged reminders stay; those of changed or gone ones go.
+        const keys = new Map(shown.map(task => [task.id, JSON.stringify(task)]));
+        const going = [...this._rows].filter(([id, row]) => keys.get(id) !== row._key);
         // A row's field losing its focus as it is destroyed upsets the input method: let go of it first.
         const focus = global.stage.get_key_focus();
-        if (focus && this._list.contains(focus) && !this._newRow.contains(focus))
+        if (focus && going.some(([, row]) => row.contains(focus)))
             global.stage.set_key_focus(null);
-        for (const child of this._list.get_children()) {
-            if (child !== this._newRow)
-                child.destroy();
+        for (const [id, row] of going) {
+            row.destroy();
+            this._rows.delete(id);
         }
         // One added while the list is on screen opens its row, as on macOS; on first showing, all are there.
         const known = this.mapped ? this._known : null;
+        let previous = null;
         for (const task of shown) {
-            const row = this._row(task);
-            this._list.insert_child_below(row, this._newRow);
-            if (known && !known.has(task.id))
-                this._arrive(row);
+            let row = this._rows.get(task.id);
+            if (!row) {
+                row = this._row(task);
+                row._key = keys.get(task.id);
+                this._rows.set(task.id, row);
+                if (previous)
+                    this._list.insert_child_above(row, previous);
+                else
+                    this._list.insert_child_at_index(row, 0);
+                if (known && !known.has(task.id))
+                    this._arrive(row);
+            } else if (row.get_previous_sibling() !== previous) {
+                if (previous)
+                    this._list.set_child_above_sibling(row, previous);
+                else
+                    this._list.set_child_below_sibling(row, null);
+            }
+            previous = row;
         }
         this._known = new Set(shown.map(task => task.id));
         this._empty.visible = shown.length === 0;
@@ -343,6 +363,8 @@ class TasksPage extends Page {
         const entry = new St.Entry({style_class: 'isle-reminder-field', text: task.title, x_expand: true, can_focus: true});
         titleBox.replace_child(title, entry);
         this._renaming = task.id;
+        // Built anew once renamed, with its title back in place of the field.
+        this._rows.get(task.id)._key = null;
         this.emit('request-keyboard', true);
         entry.grab_key_focus();
         entry.clutter_text.set_selection(0, -1);
