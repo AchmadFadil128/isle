@@ -34,8 +34,38 @@ const FADE_OUT = 160;
 const FADE_IN = 320;
 /** The incoming view waits for the shape to make room before appearing. */
 const FADE_IN_DELAY = 120;
-/** How far the views scale as the shape grows or shrinks: they travel with it, as on the iPhone. */
-const VIEW_SCALE = 0.06;
+/** How far (px) the views slide as the shape grows or shrinks: they travel with it, as on the iPhone. Whole
+ * pixels only, never a scale: a scaled picture or text is resampled every frame and seems to shiver. */
+const VIEW_SHIFT = 8;
+/**
+ * Moves `view` from `from` to `to` px down over `duration` ms (after `delay`), easing out, in whole pixels:
+ * a picture between two pixels is blurred and seems to shiver as it moves.
+ */
+function slide(view, from, to, delay = 0, duration = 0) {
+    view._isleSlide?.stop();
+    view._isleSlide = null;
+    view.translation_y = from;
+    if (!duration || from === to || !view.mapped) {
+        view.translation_y = to;
+        return;
+    }
+    if (!view._isleSlideWatched) {
+        view._isleSlideWatched = true;
+        view.connect('destroy', () => view._isleSlide?.stop());
+    }
+    const timeline = new Clutter.Timeline({actor: view, duration, delay,
+        progress_mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+    timeline.connect('new-frame', () =>
+        (view.translation_y = Math.round(from + (to - from) * timeline.get_progress())));
+    timeline.connect('stopped', () => {
+        if (view._isleSlide === timeline)
+            view._isleSlide = null;
+    });
+    timeline.connect('completed', () => (view.translation_y = to));
+    view._isleSlide = timeline;
+    timeline.start();
+}
+
 /** Below this shoulder size (px) the corners may climb into the top bar, so the island rounds smoothly. */
 const SHOULDER_FADE = 4;
 
@@ -185,8 +215,8 @@ export const Island = GObject.registerClass({
             this._glow.queue_repaint();
     }
 
-    /** Where `actor` in the shown view will be once the island settles: {x, y, width, height}. */
-    restingRect(actor) {
+    /** Where `actor` in the shown view (the view itself by default) will be once the island settles: {x, y, width, height}. */
+    restingRect(actor = this._view) {
         if (!this._monitor || !this._view)
             return null;
         // Views stay put on screen, centred on the monitor (see `_placeView`).
@@ -245,11 +275,11 @@ export const Island = GObject.registerClass({
             return false;
         if (shown) {
             view.opacity = 0;
-            view.translation_y = OUT_OF_REACH;
+            slide(view, OUT_OF_REACH, OUT_OF_REACH);
             view.show();
         } else {
             view.hide();
-            view.translation_y = 0;
+            slide(view, 0, 0);
         }
         return true;
     }
@@ -312,22 +342,19 @@ export const Island = GObject.registerClass({
             return;
 
         const previous = this._view;
-        // Smaller (or larger) as the island takes or gives room; never sideways, it hangs from the top.
-        const away = growing ? 1 + VIEW_SCALE : 1 - VIEW_SCALE;
+        // Down as the island takes room, up as it gives it; never sideways, it hangs from the top.
         if (previous) {
             previous.remove_all_transitions();
-            previous.set_pivot_point(0.5, 0);
+            slide(previous, previous.translation_y, growing ? VIEW_SHIFT : -VIEW_SHIFT, 0, FADE_OUT);
             previous.ease({
                 opacity: 0,
-                scale_x: away,
-                scale_y: away,
                 duration: FADE_OUT,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
                 onStopped: finished => {
                     if (!finished)
                         return;
                     previous.hide();
-                    previous.set_scale(1, 1);
+                    slide(previous, 0, 0);
                 },
             });
         }
@@ -336,18 +363,15 @@ export const Island = GObject.registerClass({
         // Still fading out (shown again within a moment): it comes back from where it is, without a blink.
         const returning = view.visible && view.opacity > 0;
         view.remove_all_transitions();
-        view.translation_x = view.translation_y = 0;
-        view.set_pivot_point(0.5, 0);
+        const from = returning ? view.translation_y : growing ? -VIEW_SHIFT : VIEW_SHIFT;
+        view.translation_x = 0;
         view.show();
-        if (!returning) {
-            const from = growing ? 1 - VIEW_SCALE : 1 + VIEW_SCALE;
+        if (!returning)
             view.opacity = 0;
-            view.set_scale(from, from);
-        }
         const delay = previous && !returning ? FADE_IN_DELAY : 0;
         view.ease({opacity: 255, delay, duration: FADE_IN, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
-        // Settles as the shape does, and ends at exactly 1: text is only sharp unscaled.
-        view.ease({scale_x: 1, scale_y: 1, delay, duration: FADE_IN + 80, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+        // Settles as the shape does.
+        slide(view, from, 0, delay, FADE_IN + 80);
     }
 
     _sync() {
