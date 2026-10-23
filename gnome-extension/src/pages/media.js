@@ -59,9 +59,13 @@ class MediaPage extends Page {
 
         this.watch(['nowPlaying', 'lyrics'], () => this._update());
         this.watch(['players'], () => this._syncPlayers());
-        this._audioChanged = audio.connect('changed', () => this._updateAudio());
+        this._audioIds = [
+            audio.connect('changed', () => this._updateVolume()),
+            audio.connect('outputs-changed', () => this._updateOutputs()),
+        ];
         this._update();
-        this._updateAudio();
+        this._updateVolume();
+        this._updateOutputs();
         this.connect('destroy', () => this._onDestroy());
     }
 
@@ -358,15 +362,17 @@ class MediaPage extends Page {
         }
     }
 
-    _updateAudio() {
+    _updateVolume() {
         const audio = this._audio;
         setButtonIcon(this._muteButton, audio.iconName);
         this._volumeSlider.value = audio.muted ? 0 : audio.volume;
         this._volumeText.text = audio.muted ? 'Muted' : `${Math.round(audio.volume * 100)}%`;
+    }
 
-        // Volume and mute come here too, many times a second while a slider moves; the rows only change
-        // with the outputs themselves.
+    _updateOutputs() {
+        const audio = this._audio;
         const outputs = audio.outputs;
+        // The mixer reports more than the rows show (its state); they are built again only when theirs differ.
         const key = JSON.stringify(outputs.map(({id, name, detail, active}) => [id, name, detail, active]));
         if (key === this._outputsKey)
             return;
@@ -448,6 +454,6 @@ class MediaPage extends Page {
     }
 
     _onDestroy() {
-        this._audio.disconnect(this._audioChanged);
+        this._audioIds.forEach(id => this._audio.disconnect(id));
     }
 });

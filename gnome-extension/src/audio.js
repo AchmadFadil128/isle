@@ -10,7 +10,8 @@ import {getMixerControl} from 'resource:///org/gnome/shell/ui/status/volume.js';
 // by the time the extension runs, so existing ones are found by looking up this id range once.
 const MAX_DEVICE_ID = 256;
 
-/** Signals: `changed` (): volume, mute, outputs or the active output changed. */
+/** Signals: `changed` (): volume, mute, outputs or the active output changed; `outputs-changed` (): only
+ * the outputs or the active one, not volume or mute (many times a second while a slider moves). */
 export class AudioOutputs extends Signals.EventEmitter {
     constructor() {
         super();
@@ -30,13 +31,13 @@ export class AudioOutputs extends Signals.EventEmitter {
                 const device = this._mixer.lookup_output_id(id);
                 if (device)
                     this._devices.set(id, device);
-                this.emit('changed');
+                this._outputsChanged();
             }),
             this._mixer.connect('output-removed', (_mixer, id) => {
                 this._devices.delete(id);
-                this.emit('changed');
+                this._outputsChanged();
             }),
-            this._mixer.connect('active-output-update', () => this.emit('changed')),
+            this._mixer.connect('active-output-update', () => this._outputsChanged()),
             this._mixer.connect('default-sink-changed', () => this._watchSink()),
             this._mixer.connect('state-changed', () => this._watchSink()),
         ];
@@ -112,7 +113,12 @@ export class AudioOutputs extends Signals.EventEmitter {
             this._sinkIds = ['notify::volume', 'notify::is-muted'].map(signal =>
                 this._sink.connect(signal, () => this.emit('changed')));
         }
+        this._outputsChanged();
+    }
+
+    _outputsChanged() {
         this.emit('changed');
+        this.emit('outputs-changed');
     }
 
     destroy() {
