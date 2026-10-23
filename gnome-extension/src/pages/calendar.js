@@ -433,9 +433,14 @@ class CalendarPage extends Page {
         row.add_child(label(when, 'isle-cal-event-time'));
 
         if (event.ownId !== null) {
-            // × while the pointer is on the row, as on the Tasks page.
-            const remove = iconButton('isle-close-symbolic', 'isle-button-flat isle-task-remove',
-                () => this.daemon.call('calendar', 'Remove', event.ownId), {size: 10, accessibleName: 'Remove event'});
+            // × while the pointer is on the row, as on the Tasks page; once, as there.
+            let removing = false;
+            const remove = iconButton('isle-close-symbolic', 'isle-button-flat isle-task-remove', () => {
+                if (!removing) {
+                    removing = true;
+                    this.daemon.call('calendar', 'Remove', event.ownId);
+                }
+            }, {size: 10, accessibleName: 'Remove event'});
             remove.opacity = 0;
             onHover(row, hovered => remove.ease({opacity: hovered ? 255 : 0, duration: 120}));
             row.add_child(remove);

@@ -36,6 +36,8 @@ const BUSY_WAIT: Duration = Duration::from_secs(1);
 const BUSY_WAIT_MAX: Duration = Duration::from_secs(5);
 /// A song LRCLIB had no lyrics for is looked up again after this, as they may have been added.
 const NOT_FOUND_RETRY: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+/// LRCLIB knows nothing longer (it refuses the length with HTTP 400): a mix, a podcast or a stream.
+const LONGEST_SONG_S: f64 = 3600.0;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -152,7 +154,7 @@ pub fn fetch(query: &TrackQuery) -> Lyrics {
     let (title, artist) = search_terms(&query.title, &query.artist);
     // Without an artist it is rarely a song (a browser tab called
     // "Instagram"), and searching would match any song of that name.
-    if title.is_empty() || artist.is_empty() {
+    if title.is_empty() || artist.is_empty() || query.length_s > LONGEST_SONG_S {
         return query.status(LyricsStatus::NotFound);
     }
     let cache = cache_path(query);
@@ -194,7 +196,8 @@ fn lookup(query: &TrackQuery, title: String, artist: String) -> Result<Option<Re
     let duration = format!("{:.0}", query.length_s);
 
     // An exact match on title, artist, album and duration is the most precise.
-    if !artist.is_empty() && query.length_s > 0.0 {
+    // LRCLIB takes a length of 1 s to an hour; under a second rounds to 0, which it refuses.
+    if !artist.is_empty() && query.length_s >= 0.5 {
         let exact = get_json::<Record>(
             "get",
             &[
@@ -406,6 +409,18 @@ mod tests {
         let mut empty = record("Lumen Coast", Some(216.0), false);
         empty.plain_lyrics = Some("  ".into());
         assert!(best_match(vec![empty], 216.0, "Lumen Coast", false).is_none());
+    }
+
+    #[test]
+    fn nothing_longer_than_an_hour_is_looked_up() {
+        let query = TrackQuery {
+            title: "Lofi beats to study to".into(),
+            artist: "Lofi Girl".into(),
+            album: String::new(),
+            length_s: 3.0 * 60.0 * 60.0,
+        };
+        // Answered at once, without the network or the cache.
+        assert_eq!(fetch(&query).status, LyricsStatus::NotFound);
     }
 
     #[test]

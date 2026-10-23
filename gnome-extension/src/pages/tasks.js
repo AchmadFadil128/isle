@@ -280,8 +280,14 @@ class TasksPage extends Page {
         content.add_child(titleBox);
 
         // × appears while the pointer is on the row.
-        const remove = iconButton('isle-close-symbolic', 'isle-button-flat isle-reminder-remove',
-            () => this.daemon.call('todo', 'Remove', task.id), {size: 9, accessibleName: 'Delete reminder'});
+        // Once: a double click would ask isled to delete what is already gone.
+        let removing = false;
+        const remove = iconButton('isle-close-symbolic', 'isle-button-flat isle-reminder-remove', () => {
+            if (!removing) {
+                removing = true;
+                this.daemon.call('todo', 'Remove', task.id);
+            }
+        }, {size: 9, accessibleName: 'Delete reminder'});
         remove.opacity = 0;
         onHover(row, hovered => remove.ease({opacity: hovered ? 255 : 0, duration: 120}));
         content.add_child(remove);
