@@ -19,7 +19,11 @@ All notable changes to Isle are listed here. The format follows
 ### Fixed
 
 - Pictures and text no longer shiver as the island opens, closes or shows
-  an alert: views slide by whole pixels instead of scaling.
+  an alert, as pages change, as AI usage switches plans or as messages
+  come into the conversation: they slide by whole pixels instead of
+  scaling or resting between pixels.
+- Smoother assistant: its glow is drawn at most once a frame, which halves
+  the frames that came late while it opens and closes.
 - Files dragged onto the island land wherever they are let go on it, not
   only over the tray, and the drop light no longer blinks as the pointer
   moves across the island.
