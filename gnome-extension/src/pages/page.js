@@ -92,9 +92,10 @@ export const Page = GObject.registerClass({
     /** Puts away what `warmUp` showed. */
     coolDown() {}
 
-    /** Notes a change made out of sight: its next showing would style and lay it out in the frames it animates. */
-    markCold() {
-        if (this.cold || this.mapped)
+    /** Notes a change made out of sight: its next showing would style and lay it out in the frames it animates.
+     * `force` for a change in a part of it not shown (lyrics behind the player), though the page is. */
+    markCold({force = false} = {}) {
+        if (this.cold || (this.mapped && !force))
             return;
         this.cold = true;
         this.emit('cold');
