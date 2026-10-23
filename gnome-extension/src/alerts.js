@@ -476,6 +476,22 @@ export function taskAsks(card, look, answer) {
     };
 }
 
+/** Isle connected to `provider` for the first time; `settings` opens where it can be turned off. */
+export function agentConnected(provider, look, settings) {
+    return {
+        key: `agent-connected:${provider}`,
+        bot: {look, glyph: 'check', form: 'success'},
+        title: `${AGENT_APPS[provider]} is connected`,
+        subtitle: provider === 'codex' ? 'Trust Isle’s hook once in Codex: /hooks' : 'Answer it from here when it asks',
+        tone: 'good',
+        actions: [
+            {label: 'Settings', callback: settings},
+            {label: 'OK', primary: true, callback: () => {}},
+        ],
+        duration: REMINDER_DURATION,
+    };
+}
+
 /** The alerts from `provider` could not be turned on; `reason` is isled's. */
 export function agentRefused(provider, reason) {
     const name = AGENT_NAMES[provider] ?? 'Your AI';

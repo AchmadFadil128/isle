@@ -113,8 +113,8 @@ export default class IslePreferences extends ExtensionPreferences {
         if (agents.length) {
             const agentGroup = new Adw.PreferencesGroup({
                 title: 'AI Agents',
-                description: 'When an AI coding agent asks for permission, answer it from the island; and know when it is done. ' +
-                    'Nothing shows while its window is in front. Turning one on adds a small hook to its own settings; off removes it.',
+                description: 'Answer your coding agents from the island when they ask, and know when they are done. ' +
+                    'On by default; off removes Isle\'s hook from that agent\'s settings.',
             });
             for (const {provider, title, subtitle} of agents) {
                 agentGroup.add(switchRow(settings, `agent-alerts-${provider}`, title, subtitle));
@@ -632,9 +632,9 @@ function agentsFound() {
         console.warn(`Isle: could not ask which AI agents are installed: ${e.message}`);
     }
     return [
-        {provider: 'claude', title: 'Claude Code', subtitle: 'Allow or deny what it asks from the island, and know when it is done'},
-        {provider: 'codex', title: 'Codex', subtitle: 'Allow or deny what it asks from the island, and know when it is done. Trust Isle\'s hook once in Codex (/hooks)'},
-        {provider: 'agy', title: 'Antigravity', subtitle: 'Know when agy is done'},
+        {provider: 'claude', title: 'Claude Code', subtitle: 'Allow, deny or always allow, and when it is done'},
+        {provider: 'codex', title: 'Codex', subtitle: 'Allow or deny, and when it is done · trust the hook once in /hooks'},
+        {provider: 'agy', title: 'Antigravity', subtitle: 'When agy is done'},
     ].filter(({provider}) => agents[provider]?.found);
 }
 

@@ -125,7 +125,7 @@ const VOICE_WORKING = ['transcribing', 'thinking', 'acting'];
 // by hand lately. Notifications count only when some arrived unseen (others were shown as alerts).
 const DEFAULT_PAGE_ORDER = ['call', 'notifications', 'music', 'focus'];
 /** The AI agents Isle can hear from (see `Agents1` in the daemon). */
-const AGENT_PROVIDERS = ['claude', 'codex'];
+const AGENT_PROVIDERS = ['claude', 'codex', 'agy'];
 
 export class Controller {
     constructor(extension) {
@@ -583,7 +583,18 @@ export class Controller {
     async _hookAgent(provider) {
         const on = this._settings.get_boolean(`agent-alerts-${provider}`);
         const {error} = await this._daemon.attempt('agents', 'SetHooked', provider, on);
-        if (!error || !on || this._destroying)
+        if (this._destroying)
+            return;
+        // On by default: the first time it connects, it says so once, so nothing changes unseen.
+        if (!error && on) {
+            const told = this._settings.get_strv('agents-announced');
+            if (!told.includes(provider)) {
+                this._settings.set_strv('agents-announced', [...told, provider]);
+                this._post(Alerts.agentConnected(provider, this._botLook, () => this._extension.openPreferences()));
+            }
+            return;
+        }
+        if (!error || !on)
             return;
         this._settings.set_boolean(`agent-alerts-${provider}`, false);
         this._post(Alerts.agentRefused(provider, error));
