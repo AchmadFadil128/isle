@@ -9,6 +9,8 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
+import {paletteFor} from './bot.js';
+import {BotIcon} from './botIcon.js';
 import * as Format from './format.js';
 import * as Palette from './palette.js';
 import * as Playback from './playback.js';
@@ -16,6 +18,9 @@ import {watchClock} from './wallClock.js';
 import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon} from './widgets.js';
 
 /** Sizes hanging below the top bar, and inside it with smaller text. */
+/** The assistant at work, in the right slot. */
+const ASSISTANT_SIZE = 18;
+
 const SIZES = {
     hanging: {clock: 164, activities: 256, art: 24, artRadius: 6, ring: 20, bars: 16, moon: 13, call: 15, second: 15},
     inBar: {clock: 144, activities: 232, art: 22, artRadius: 6, ring: 18, bars: 14, moon: 12, call: 14, second: 13},
@@ -60,8 +65,11 @@ export const CompactView = GObject.registerClass({
         this._micOff = new St.Icon({gicon: icon('isle-mic-off-symbolic'), icon_size: 15, style_class: 'isle-call-muted', y_align: Clutter.ActorAlign.CENTER});
         // isled is not running: what needs it cannot work (see the controller's service watch).
         this._serviceDown = new St.Icon({gicon: icon('dialog-warning-symbolic'), icon_size: 15, style_class: 'isle-compact-warning', y_align: Clutter.ActorAlign.CENTER});
-        // The assistant at work with the island closed: still, so it costs no frames.
-        this._assistant = new St.Icon({gicon: icon('isle-mic-symbolic'), icon_size: 15, style_class: 'isle-compact-assistant', y_align: Clutter.ActorAlign.CENTER});
+        // The assistant at work with the island closed: still, but for a blink and a glance every few seconds.
+        this._assistant = new BotIcon(ASSISTANT_SIZE, this._botLook());
+        this._assistant.y_align = Clutter.ActorAlign.CENTER;
+        this._botLookChanged = ['bot-shape', 'bot-color', 'bot-glow'].map(key =>
+            settings.connect(`changed::${key}`, () => (this._assistant.look = this._botLook())));
 
         const center = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true});
         this._clock = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
@@ -250,6 +258,7 @@ export const CompactView = GObject.registerClass({
             right = this._micOff;
         if (this._assistantBusy)
             right = this._assistant;
+        this._assistant.alive = right === this._assistant;
         if (this._isServiceDown)
             right = this._serviceDown;
         // On a call the green phone already says the microphone is on, as on an iPhone, unless another app records too.
@@ -426,12 +435,20 @@ export const CompactView = GObject.registerClass({
         }
     }
 
+    /** The assistant's shape and colours, from Settings (see bot.js). */
+    _botLook() {
+        return {shape: this._settings.get_string('bot-shape'),
+            palette: paletteFor(this._settings.get_string('bot-color'), this._settings.get_string('bot-glow'))};
+    }
+
     _onDestroy() {
         this._stopClock();
         for (const name of Object.keys(this._timeouts))
             this._cancel(name);
         this._daemon.disconnect(this._daemonChanged);
         this._settings.disconnect(this._settingsChanged);
+        for (const id of this._botLookChanged)
+            this._settings.disconnect(id);
         this._privacy.disconnect(this._privacyChanged);
         this._call.disconnect(this._callChanged);
         // Slots may hold actors that are not currently children.

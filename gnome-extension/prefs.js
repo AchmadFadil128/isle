@@ -8,16 +8,21 @@ import Gdk from 'gi://Gdk';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk';
+import Pango from 'gi://Pango';
+import PangoCairo from 'gi://PangoCairo';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import {DesktopAppInfo} from './src/appInfo.js';
+import {Bot, COLORS, SHAPES, paletteFor} from './src/bot.js';
+import {paintRim} from './src/glow.js';
 
 const DAEMON = 'io.github.zickrian.isle.Daemon';
 const DAEMON_PATH = '/io/github/zickrian/isle/Daemon';
 const POMODORO_INTERFACE = 'io.github.zickrian.isle.Pomodoro1';
 const CLIPBOARD_INTERFACE = 'io.github.zickrian.isle.Clipboard1';
 const AGENTS_INTERFACE = 'io.github.zickrian.isle.Agents1';
+const ASSISTANT_INTERFACE = 'io.github.zickrian.isle.Assistant1';
 /** Edits to the timer are sent once typing pauses for this long. */
 const SAVE_DELAY_MS = 400;
 
@@ -108,11 +113,19 @@ export default class IslePreferences extends ExtensionPreferences {
         if (agents.length) {
             const agentGroup = new Adw.PreferencesGroup({
                 title: 'AI Agents',
-                description: 'An alert when an AI coding agent needs your OK or is done, unless its window is in ' +
-                    'front. Turning one on adds a small hook to its own settings; turning it off removes it.',
+                description: 'When an AI coding agent asks for permission, answer it from the island; and know when it is done. ' +
+                    'Nothing shows while its window is in front. Turning one on adds a small hook to its own settings; off removes it.',
             });
-            for (const {provider, title, subtitle} of agents)
+            for (const {provider, title, subtitle} of agents) {
                 agentGroup.add(switchRow(settings, `agent-alerts-${provider}`, title, subtitle));
+                // agy may run commands without asking; this makes it ask on the island.
+                if (provider === 'agy') {
+                    const ask = switchRow(settings, 'agent-ask-agy', 'Ask before agy runs a command',
+                        'Each command agy wants to run waits for Allow on the island');
+                    settings.bind('agent-alerts-agy', ask, 'sensitive', Gio.SettingsBindFlags.GET);
+                    agentGroup.add(ask);
+                }
+            }
             page.add(agentGroup);
         }
         return page;
@@ -127,6 +140,7 @@ export default class IslePreferences extends ExtensionPreferences {
                 'computer (set up once with isle-setup-voice in a terminal); the request goes to the AI you pick, with your ' +
                 'own sign-in and plan.',
         });
+        page.add(lookGroup(settings));
         group.add(switchRow(settings, 'voice-assistant', 'Voice assistant', 'The shortcut and the mic in the open island'));
         group.add(shortcutRow(settings, 'voice-shortcut', 'Shortcut', 'Opens the assistant and listens'));
 
@@ -189,6 +203,21 @@ export default class IslePreferences extends ExtensionPreferences {
             ['id', 'Indonesian'],
             ['en', 'English'],
         ]));
+        options.push(choiceRow(settings, 'voice-keep-chat', 'Keep the conversation', 'Then it starts a new one and deletes the old', [
+            ['idle-30m', 'For 30 minutes without a word'],
+            ['idle-2h', 'For 2 hours without a word'],
+            ['day', 'Until midnight'],
+        ]));
+        const clearChat = new Adw.ActionRow({title: 'Clear the conversation now', subtitle: 'Deletes it here and the AI\'s copy of it',
+            activatable: true});
+        clearChat.add_suffix(new Gtk.Image({icon_name: 'user-trash-symbolic'}));
+        clearChat.connect('activated', () => confirm(clearChat.get_root(), {
+            heading: 'Clear the conversation?',
+            body: 'The assistant starts afresh; what was said is deleted here and from the AI\'s own history on this computer.',
+            action: 'Clear',
+        }, () => Gio.DBus.session.call(DAEMON, DAEMON_PATH, ASSISTANT_INTERFACE, 'ClearChat', null, null,
+            Gio.DBusCallFlags.NONE, -1, null, null)));
+        options.push(clearChat);
         options.push(switchRow(settings, 'voice-use-selection', 'Use selected text',
             'Send the text you have selected, so the AI can work on it; never from terminals or password managers'));
         options.push(switchRow(settings, 'voice-read-notifications', 'Read notifications',
@@ -387,6 +416,210 @@ export default class IslePreferences extends ExtensionPreferences {
     }
 }
 
+/** The assistant's shape and colours as Settings has them (see bot.js). */
+function lookOf(settings) {
+    return {shape: settings.get_string('bot-shape'),
+        palette: paletteFor(settings.get_string('bot-color'), settings.get_string('bot-glow'))};
+}
+
+const hexOf = rgba => `#${[rgba.red, rgba.green, rgba.blue].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('')}`;
+
+/** A still copy of the assistant `size` px big, redrawn by `update(look)`. */
+function botTile(size, look) {
+    const area = new Gtk.DrawingArea({content_width: size, content_height: size});
+    let bot = null;
+    const update = next => {
+        bot = new Bot(next);
+        bot.holdEyes();
+        for (let t = 1 / 30; t <= 0.7; t += 1 / 30)
+            bot.step(t, {x: 0.12, y: 0.06});
+        area.queue_draw();
+    };
+    area.set_draw_func((_area, cr) => bot.paint(cr, size));
+    update(look);
+    return {area, update};
+}
+
+// A row of picks (`choices`: [[value, child]…]) as toggles in a flowing grid, `key`'s value pressed.
+function pickerRow(settings, key, title, choices, {custom = null, perLine = 8} = {}) {
+    const row = new Adw.PreferencesRow({activatable: false});
+    const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 8, margin_top: 12, margin_bottom: 12,
+        margin_start: 12, margin_end: 12});
+    box.append(new Gtk.Label({label: title, xalign: 0, css_classes: ['heading']}));
+    const flow = new Gtk.FlowBox({selection_mode: Gtk.SelectionMode.NONE, homogeneous: true, max_children_per_line: perLine,
+        min_children_per_line: perLine, column_spacing: 4, row_spacing: 4});
+    const buttons = [];
+    let syncing = false;
+    for (const [value, child, tooltip] of choices) {
+        const button = new Gtk.ToggleButton({child, css_classes: ['flat'], tooltip_text: tooltip, halign: Gtk.Align.CENTER,
+            group: buttons[0] ?? null});
+        button.connect('toggled', () => {
+            if (!syncing && button.active && settings.get_string(key) !== value)
+                settings.set_string(key, value);
+        });
+        buttons.push(button);
+        flow.append(button);
+    }
+    if (custom)
+        flow.append(custom);
+    const sync = () => {
+        syncing = true;
+        const index = choices.findIndex(([value]) => value === settings.get_string(key));
+        if (index >= 0)
+            buttons[index].active = true;
+        else
+            buttons.forEach(button => (button.active = false));
+        syncing = false;
+    };
+    const changed = settings.connect(`changed::${key}`, sync);
+    row.connect('destroy', () => settings.disconnect(changed));
+    sync();
+    box.append(flow);
+    row.set_child(box);
+    return row;
+}
+
+// The assistant's look: a live preview of it in the island's pill (listening, thinking, glad), its shape,
+// its colour and the light it brings to the island.
+function lookGroup(settings) {
+    const group = new Adw.PreferencesGroup({title: 'Look', description: 'How the assistant looks, and the light it brings to the island.'});
+    const bot = new Bot(lookOf(settings));
+    const cache = {};
+    const motion = {time: 0, level: 0};
+    const preview = new Gtk.DrawingArea({content_height: 128, hexpand: true});
+    preview.set_draw_func((area, cr, width, height) => {
+        const w = Math.min(380, width - 32), h = 72, x = Math.round((width - w) / 2), y = Math.round((height - h) / 2);
+        cr.translate(x, y);
+        const r = 26;
+        cr.moveTo(0, 0);
+        cr.lineTo(w, 0);
+        cr.arc(w - r, h - r, r, 0, Math.PI / 2);
+        cr.arc(r, h - r, r, Math.PI / 2, Math.PI);
+        cr.closePath();
+        cr.setSourceRGBA(0, 0, 0, 1);
+        cr.fillPreserve();
+        cr.save();
+        cr.clip();
+        paintRim(cr, {left: 0, right: w, top: 0, radius: r}, h, bot.palette.glow, motion, 1, cache);
+        cr.restore();
+        cr.save();
+        cr.translate(16, (h - 40) / 2 - 3);
+        bot.paint(cr, 40);
+        cr.restore();
+        const layout = PangoCairo.create_layout(cr);
+        layout.set_font_description(Pango.FontDescription.from_string('Sans 600 11'));
+        layout.set_text(motion.caption, -1);
+        const [, extents] = layout.get_pixel_extents();
+        cr.moveTo(68, (h - extents.height) / 2 - 3);
+        cr.setSourceRGBA(1, 1, 1, motion.dim ? 0.6 : 0.95);
+        PangoCairo.show_layout(cr, layout);
+    });
+    // A little play, over and over: it listens to you speak, thinks, then is glad it got it done.
+    let start = null;
+    let form = null;
+    preview.add_tick_callback((area, clock) => {
+        const now = clock.get_frame_time() / 1e6;
+        start ??= now;
+        const t = now - start, at = t % 10;
+        const [next, caption, dim] = at < 4.5 ? ['listening', 'Listening…', true] : at < 7 ? ['thinking', 'Searching the web…', true]
+            : ['success', 'LibreOffice is installed.', false];
+        if (next !== form) {
+            form = next;
+            bot.setForm(form);
+        }
+        const speaking = at > 0.8 && at < 3.6 ? Math.max(0, Math.sin(at * 9) * 0.5 + Math.sin(at * 3.7) * 0.4) : 0;
+        motion.level = form === 'listening' ? speaking : form === 'thinking' ? 0.34 + 0.08 * Math.sin(t * 1.8) : 0.15;
+        motion.time = t * (form === 'thinking' ? 1.6 : 1);
+        motion.caption = caption;
+        motion.dim = dim;
+        bot.step(t, null, form === 'listening' ? speaking : 0);
+        area.queue_draw();
+        return GLib.SOURCE_CONTINUE;
+    });
+    group.add(new Adw.PreferencesRow({child: preview, activatable: false}));
+
+    const tiles = [];
+    const shapes = pickerRow(settings, 'bot-shape', 'Shape', Object.entries(SHAPES).map(([shape, {label}]) => {
+        const tile = botTile(40, {...lookOf(settings), shape});
+        tiles.push([shape, tile]);
+        return [shape, tile.area, label];
+    }));
+    group.add(shapes);
+
+    // A colour of your own: the picker's own button, showing the colour once there is one.
+    const customTile = botTile(30, {shape: 'circle', palette: paletteFor(settings.get_string('bot-color'))});
+    const customIcon = new Gtk.Image({icon_name: 'color-select-symbolic', pixel_size: 18});
+    const customColor = new Gtk.ToggleButton({css_classes: ['flat'], tooltip_text: 'A colour of your own', halign: Gtk.Align.CENTER});
+    const syncCustom = () => {
+        const color = settings.get_string('bot-color');
+        const own = color.startsWith('#');
+        if (own)
+            customTile.update({shape: 'circle', palette: paletteFor(color)});
+        customColor.child = own ? customTile.area : customIcon;
+        customColor.active = own;
+    };
+    customColor.connect('clicked', () => {
+        syncCustom();
+        const initial = new Gdk.RGBA();
+        initial.parse(settings.get_string('bot-color').startsWith('#') ? settings.get_string('bot-color') : '#8e7dff');
+        new Gtk.ColorDialog({title: 'Assistant colour', with_alpha: false}).choose_rgba(customColor.get_root(), initial, null,
+            (dialog, result) => {
+                try {
+                    settings.set_string('bot-color', hexOf(dialog.choose_rgba_finish(result)));
+                } catch {
+                    // Cancelled: as it was.
+                }
+            });
+    });
+    const colors = pickerRow(settings, 'bot-color', 'Colour', Object.entries(COLORS).map(([color, {label}]) =>
+        [color, botTile(30, {shape: 'circle', palette: paletteFor(color)}).area, label]), {custom: customColor, perLine: 6});
+    syncCustom();
+    group.add(colors);
+
+    const glow = new Adw.ComboRow({title: 'Glow', subtitle: 'The light along the island\'s edge while the assistant is open',
+        model: Gtk.StringList.new(['Match the assistant', 'Classic (violet, blue, cyan)', 'A colour of your own'])});
+    const glowColor = new Gtk.ColorDialogButton({dialog: new Gtk.ColorDialog({title: 'Glow colour', with_alpha: false}),
+        valign: Gtk.Align.CENTER});
+    glow.add_suffix(glowColor);
+    let syncingGlow = false;
+    const syncGlow = () => {
+        syncingGlow = true;
+        const value = settings.get_string('bot-glow');
+        glow.selected = value === 'match' ? 0 : value === 'classic' ? 1 : 2;
+        glowColor.visible = glow.selected === 2;
+        if (value.startsWith('#')) {
+            const rgba = new Gdk.RGBA();
+            rgba.parse(value);
+            glowColor.rgba = rgba;
+        }
+        syncingGlow = false;
+    };
+    glow.connect('notify::selected', () => {
+        if (syncingGlow)
+            return;
+        settings.set_string('bot-glow', ['match', 'classic', hexOf(glowColor.rgba)][glow.selected]);
+    });
+    glowColor.connect('notify::rgba', () => {
+        if (!syncingGlow && glow.selected === 2)
+            settings.set_string('bot-glow', hexOf(glowColor.rgba));
+    });
+    group.add(glow);
+
+    // Each change shows at once: the preview morphs, the tiles take the new colour.
+    const changed = ['bot-shape', 'bot-color', 'bot-glow'].map(key => settings.connect(`changed::${key}`, () => {
+        const look = lookOf(settings);
+        bot.palette = look.palette;
+        bot.setShape(look.shape);
+        for (const [shape, tile] of tiles)
+            tile.update({...look, shape});
+        syncCustom();
+        syncGlow();
+    }));
+    group.connect('destroy', () => changed.forEach(id => settings.disconnect(id)));
+    syncGlow();
+    return group;
+}
+
 /** The AI agents isled found installed: `{provider, title, subtitle}` each. */
 function agentsFound() {
     let agents = {};
@@ -398,8 +631,9 @@ function agentsFound() {
         console.warn(`Isle: could not ask which AI agents are installed: ${e.message}`);
     }
     return [
-        {provider: 'claude', title: 'Claude Code', subtitle: 'When Claude needs your permission, waits for you, or is done'},
-        {provider: 'codex', title: 'Codex', subtitle: 'When Codex is done'},
+        {provider: 'claude', title: 'Claude Code', subtitle: 'Allow or deny what it asks from the island, and know when it is done'},
+        {provider: 'codex', title: 'Codex', subtitle: 'Allow or deny what it asks from the island, and know when it is done. Trust Isle\'s hook once in Codex (/hooks)'},
+        {provider: 'agy', title: 'Antigravity', subtitle: 'Know when agy is done'},
     ].filter(({provider}) => agents[provider]?.found);
 }
 

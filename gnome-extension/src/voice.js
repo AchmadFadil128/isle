@@ -15,13 +15,13 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {describeActions, failed, outcomeOf, slotsFor, TILES} from './actionRules.js';
+import {Bot} from './bot.js';
+import {ChatView, CommandCard, elapsed} from './chat.js';
 import {isTerminal} from './clipboard.js';
 import {VERTICAL} from './compat.js';
 import {plainBody} from './notifications.js';
 import {icon, iconButton, pillButton, wrapLines} from './widgets.js';
 
-/** Three calm colours, violet to blue to cyan, that light the island while it is open (see island.js). */
-export const SIRI_COLORS = [[0.56, 0.4, 1], [0.27, 0.56, 1], [0.22, 0.84, 0.96]];
 
 const FACE_SIZE = 36;
 /** The pill while listening, and the panel an answer opens into. */
@@ -36,6 +36,14 @@ const ROW_PADDING = 14 + 20;
 /** Always room for the whole face. */
 const MIN_HEIGHT = FACE_SIZE + ROW_PADDING;
 const MAX_HEIGHT = 230;
+/** The conversation, open above the pill, grows the island to at most this (px below the top bar). */
+const CHAT_MAX_HEIGHT = 420;
+/** The pill grows to this with a command card in it. */
+const CARD_MAX_HEIGHT = 320;
+/** With no new step for this long (s), a quiet "Still working · 0:12" shows it hasn't stalled. */
+const STILL_WORKING_S = 8;
+/** "New chat · Undo" stays this long (ms); the old chat is deleted only after it. */
+export const UNDO_MS = 5000;
 /** Answers past this many characters are cut, the panel being small. */
 const MAX_REPLY = 360;
 /** Answers longer than this read as a paragraph: set smaller and lighter, as Siri's. */
@@ -47,10 +55,6 @@ const SELECTION_TIMEOUT_MS = 500;
 const MAX_NOTIFICATIONS = 10;
 const MAX_NOTIFICATION_BODY = 300;
 
-/** The head's radius; the eyes sit on a ball this big inside it and measure in this unit, in pixels. */
-const HEAD_RADIUS = 15;
-const EYE_BALL = 17.3;
-const EYE_UNIT = 20.3;
 /** An app just opened gets this long (ms) to show its window before the next step goes on without it. */
 const WINDOW_WAIT_MS = 5000;
 /** An app asked to quit gets this long (ms) to close its windows; one asking to save stays open. */
@@ -60,10 +64,6 @@ const PLAYER_WAIT_MS = 12000;
 /** Spotify's name on the session bus, for its MPRIS player. */
 const SPOTIFY_BUS = 'org.mpris.MediaPlayer2.spotify';
 
-/** How far the head turns towards what it looks at (degrees), and how far it may turn in all. */
-const LOOK_TURN = {yaw: 14, pitch: 12};
-const MAX_TURN = {yaw: 26, pitch: 22};
-const HEAD_TRAVEL = {x: 1.3, y: 1};
 /** How fast (per second) the glow follows the voice up and down, how fast a silent mic fades,
  * and how fast it moves to each phase's level. */
 const MIC_ATTACK = 14;
@@ -72,299 +72,77 @@ const MIC_FADE = 2;
 const LEVEL_RATE = 8;
 /** The glow's level when animations are off in GNOME: there, but still. */
 const STILL_LEVEL = 0.2;
-/** After answering it smiles this long (s). */
-const SMILE_S = 1.6;
-/** Surprised this long (s) when it first hears you; sleepy after this long (s) with nothing going on. */
-const SURPRISE_S = 0.6;
-const SLEEPY_S = 8;
-/** How fast (per second) the face takes on a new expression: a morph of about a third of a second. */
-const MORPH_RATE = 10;
-const pair = (w, h, tilt = 0, open = 1) => [{w, h, tilt, open}, {w, h, tilt: -tilt, open}];
-// Expressions from bloub (MIT, © 2026 Jérémy Perret, github.com/jeremy-prt/bloub): the head's turn and
-// how far apart the eyes sit (degrees), each eye's width and height (EYE_UNIT), tilt and how open.
-const EXPRESSIONS = {
-    attentive: {yaw: 4, pitch: 5, roll: -4, split: 16, eyes: pair(0.21, 0.44)},
-    surprised: {yaw: 3, pitch: -3, roll: 0, split: 19, eyes: pair(0.45, 0.47)},
-    curious: {yaw: 16, pitch: -9, roll: -15, split: 16.5, eyes: [{w: 0.24, h: 0.46, tilt: -8, open: 1}, {w: 0.2, h: 0.38, tilt: -8, open: 1}]},
-    happy: {yaw: 5, pitch: 9, roll: 0, split: 17, eyes: pair(0.27, 0.17, 14)},
-    confused: {yaw: -14, pitch: 3, roll: 8, split: 16.5, eyes: [{w: 0.2, h: 0.44, tilt: -18, open: 1}, {w: 0.28, h: 0.17, tilt: 14, open: 1}]},
-    sad: {yaw: 3, pitch: -13, roll: 0, split: 16, eyes: pair(0.22, 0.4, -28)},
-    sleepy: {yaw: 6, pitch: -9, roll: -3, split: 16, eyes: pair(0.2, 0.42, 0, 0.42)},
-};
-const copyExpression = ({eyes, ...turn}) => ({...turn, eyes: eyes.map(eye => ({...eye}))});
-/** Errors that come from not hearing you (isled's wording): it looks confused at them, sad at others. */
-const NOT_HEARD = /^(Didn[’']t catch that|The microphone is muted|No microphone)/;
-/** Blinks come every few seconds, at random, and take this long (s). */
-const BLINK_S = 0.15;
 /** Without the pointer moving for this long (s), the eyes wander on their own. */
 const POINTER_REST_S = 2.5;
+/** Errors that come from not hearing you (isled's wording): it looks confused at them, sad at others. */
+const NOT_HEARD = /^(Didn[’']t catch that|The microphone is muted|No microphone)/;
 /** How much each key typed lights the edge, as a syllable does. */
 const KEY_LEVEL = 0.32;
 
-const easeOutBack = x => 1 + 2.2 * (x - 1) ** 3 + 1.2 * (x - 1) ** 2;
-const clamp = (value, limit = 1) => Math.max(-limit, Math.min(limit, value));
-const RAD = Math.PI / 180;
-const TURN_KEYS = ['yaw', 'pitch', 'roll', 'split'];
-
-/** Turns `u` towards `v` by `angle` (radians), and `v` along: one rotation of two axes, in place. */
-function rotate(u, v, angle) {
-    const c = Math.cos(angle), s = Math.sin(angle);
-    for (let i = 0; i < 3; i++) {
-        const x = u[i], y = v[i];
-        u[i] = x * c + y * s;
-        v[i] = y * c - x * s;
-    }
-}
-
-// Reused each frame: a frame's garbage, 60 times a second, is what makes GJS pause to collect.
-const HEAD = {forward: new Float64Array(3), across: new Float64Array(3), up: new Float64Array(3)};
-const PLACES = [-1, 1].map(() => ({x: 0, y: 0, at: new Float64Array(3), across: new Float64Array(3), up: HEAD.up}));
-
-/** Where each eye sits on the turned head, and its axes there: the eyes lie on a ball, as bloub's. */
-function placeEyes({yaw, pitch, roll, split}) {
-    const {forward, across, up} = HEAD;
-    forward.fill(0);
-    across.fill(0);
-    up.fill(0);
-    forward[2] = across[0] = up[1] = 1;
-    rotate(forward, across, yaw * RAD);
-    rotate(up, forward, pitch * RAD);
-    rotate(across, up, roll * RAD);
-    for (let index = 0; index < 2; index++) {
-        const place = PLACES[index];
-        place.at.set(forward);
-        place.across.set(across);
-        rotate(place.at, place.across, split * (index ? 1 : -1) * RAD);
-        place.x = place.at[0] * EYE_BALL;
-        place.y = place.at[1] * EYE_BALL;
-    }
-    return PLACES;
-}
-
-// The character: a white head that turns to the pointer, sways, glances about and blinks; its eyes
-// stretch as you speak and it morphs between expressions (see EXPRESSIONS) as it listens and answers.
+// The character (see bot.js), on screen: it looks at the pointer, or reads along as you type.
 const Face = GObject.registerClass(
 class Face extends St.DrawingArea {
-    _init() {
+    _init(look) {
         super._init({width: FACE_SIZE, height: FACE_SIZE});
-        this.time = 0;
+        this.bot = new Bot(look);
         this.level = 0;
-        this._form = 'listening';
-        this._pointer = [0, 0];
         /** While typing: where on the stage to look (the caret), or null. */
         this.lookAt = null;
-        this.restart();
-        this.connect('repaint', area => this._paint(area));
+        this._pointer = [0, 0];
+        this._pointerAt = -POINTER_REST_S;
+        this._look = {x: 0, y: 0};
+        this.connect('repaint', area => {
+            const cr = area.get_context();
+            this.bot.paint(cr, FACE_SIZE);
+            cr.$dispose();
+        });
+    }
+
+    get time() {
+        return this.bot.time;
     }
 
     /** Starts the clock over, as the view's animation does when it opens again. */
     restart() {
-        this.time = 0;
-        this._formAt = 0;
-        this._last = 0;
-        this._gaze = {x: 0, y: 0};
-        this._glance = {x: 0, y: 0};
-        this._targetOut = {x: 0, y: 0};
-        this._nextGlance = 0;
+        this.bot.restart();
         this._pointerAt = -POINTER_REST_S;
-        this._blinkAt = -1;
-        this._nextBlink = 1.2;
-        this._surpriseAt = -SURPRISE_S;
-        this._heard = false;
-        this._voiceAt = 0;
-        this._shape = copyExpression(EXPRESSIONS.attentive);
-        this._turn = {yaw: 0, pitch: 0, roll: 0, split: 0};
     }
 
-    /** listening, typing, thinking, searching, reply, confused or error; each new form pops in. */
-    setForm(form, time) {
-        if (form !== this._form) {
-            this._form = form;
-            this._formAt = time;
-            this._heard = false;
-        }
+    /** A new shape and colours (see bot.js), changed in Settings. */
+    setLook({shape, palette}) {
+        this.bot.palette = palette;
+        this.bot.setShape(shape);
+        this.queue_repaint();
     }
 
-    /** Moves the eyes on to `time` (s): where they look, and when they blink. */
+    setForm(form) {
+        this.bot.setForm(form);
+    }
+
+    /** Moves the eyes on to `time` (s): at the caret, at the pointer, or about on their own. */
     step(time) {
-        const dt = Math.min(0.1, Math.max(0, time - this._last));
-        this._last = this.time = time;
-
         const [px, py] = global.get_pointer();
         if (px !== this._pointer[0] || py !== this._pointer[1]) {
             this._pointer[0] = px;
             this._pointer[1] = py;
             this._pointerAt = time;
         }
-        const target = this._target(time, px, py);
-        // Quick to turn, then settled: an eye's saccade.
-        const follow = 1 - Math.exp(-dt * 16);
-        if (Number.isFinite(target.x) && Number.isFinite(target.y)) {
-            this._gaze.x += (target.x - this._gaze.x) * follow;
-            this._gaze.y += (target.y - this._gaze.y) * follow;
-        }
-
-        // The first word heard surprises it, for a moment.
-        // Still speaking, if quietly: not sleepy then.
-        if (this._form === 'listening' && this.level > 0.12)
-            this._voiceAt = time;
-        if (this._form === 'listening' && this.level > 0.3) {
-            if (!this._heard)
-                this._surpriseAt = time;
-            this._heard = true;
-        }
-        const goal = EXPRESSIONS[this._expression(time)];
-        const morph = 1 - Math.exp(-dt * MORPH_RATE);
-        const shape = this._shape;
-        for (const key of TURN_KEYS)
-            shape[key] += (goal[key] - shape[key]) * morph;
-        for (let index = 0; index < shape.eyes.length; index++) {
-            const eye = shape.eyes[index];
-            for (const key in eye)
-                eye[key] += (goal.eyes[index][key] - eye[key]) * morph;
-        }
-
-        if (time >= this._nextBlink) {
-            this._blinkAt = time;
-            // Now and then a double blink; slow and far apart when sleepy.
-            const sleepy = shape.eyes[0].open < 0.7;
-            this._nextBlink = time + (sleepy ? 3.5 + Math.random() * 3 : Math.random() < 0.15 ? 0.3 : 2.4 + Math.random() * 3);
-        }
-    }
-
-    /** The expression for the form at `time` (see EXPRESSIONS). */
-    _expression(time) {
-        const since = time - this._formAt;
-        // Nothing going on for a while: no pointer, no voice, no new form.
-        const idle = time - Math.max(this._formAt, this._pointerAt, this._voiceAt) > SLEEPY_S;
-        switch (this._form) {
-        case 'listening':
-            return time - this._surpriseAt < SURPRISE_S ? 'surprised' : idle ? 'sleepy' : 'attentive';
-        case 'thinking':
-            return 'curious';
-        case 'reply':
-            return since < SMILE_S ? 'happy' : idle ? 'sleepy' : 'attentive';
-        case 'confused':
-            return 'confused';
-        case 'error':
-            return 'sad';
-        default:
-            return 'attentive';
-        }
-    }
-
-    /** Where the eyes look, each of x and y in -1..1 (one object, reused each frame). */
-    _target(time, px, py) {
-        const out = this._targetOut;
-        // Reading along as you type.
-        const caret = this._form === 'typing' ? this.lookAt?.() : null;
+        const form = this.bot.form;
+        const caret = form === 'typing' ? this.lookAt?.() : null;
+        let look = null;
         if (caret)
-            return this._towards(caret[0], caret[1]);
-        switch (this._form) {
-        // Thinking, sad and confused look where their expression turns the head, swaying a little.
-        case 'thinking':
-            out.x = 0.3 * Math.sin(time * 1.3);
-            out.y = -0.15;
-            return out;
-        // Reading along, line after line: a sweep left to right, then back.
-        case 'searching':
-            out.x = 0.9 * Math.sin(time * 2.2);
-            out.y = 0.15 + 0.1 * Math.sin(time * 0.7);
-            return out;
-        case 'error':
-            out.x = 0.15 * Math.sin(time * 0.8);
-            out.y = 0.1;
-            return out;
-        case 'confused':
-            out.x = 0.12 * Math.sin(time * 1.6);
-            out.y = 0;
-            return out;
-        }
-        if (time - this._pointerAt < POINTER_REST_S)
-            return this._towards(px, py);
-        if (time >= this._nextGlance) {
-            this._glance.x = (Math.random() * 2 - 1) * 0.8;
-            this._glance.y = (Math.random() * 2 - 1) * 0.5;
-            this._nextGlance = time + 1 + Math.random() * 2.2;
-        }
-        return this._glance;
+            look = this._towards(caret[0], caret[1]);
+        else if (!this.bot.looksOnItsOwn && time - this._pointerAt < POINTER_REST_S)
+            look = this._towards(px, py);
+        this.bot.step(time, look, this.level);
     }
 
     /** Looking towards the point `x`, `y` on screen. */
     _towards(x, y) {
         const [fx, fy] = this.get_transformed_position();
-        const out = this._targetOut;
-        out.x = clamp((x - fx - FACE_SIZE / 2) / 260);
-        out.y = clamp((y - fy - FACE_SIZE / 2) / 180);
-        return out;
-    }
-
-    _paint(area) {
-        const cr = area.get_context();
-        const [width, height] = area.get_surface_size();
-        const since = this.time - this._formAt;
-        const pop = easeOutBack(Math.min(1, since / 0.3));
-        const {x: gx, y: gy} = this._gaze;
-        cr.translate(width / 2, height / 2);
-        // Kept inside the drawing area at its largest (overshoot, voice, a turn).
-        const scale = (0.88 + 0.12 * pop) * (1 + 0.04 * this.level);
-        cr.scale(scale, scale);
-
-        const hx = gx * HEAD_TRAVEL.x;
-        const hy = gy * HEAD_TRAVEL.y;
-        cr.setSourceRGBA(0.97, 0.97, 0.98, 1);
-        cr.arc(hx, hy, HEAD_RADIUS, 0, 2 * Math.PI);
-        cr.fill();
-
-        // The expression's turn, plus where it looks and a slow sway, as if it breathed.
-        const t = this.time * 2 * Math.PI;
-        const shape = this._shape;
-        const turn = this._turn;
-        turn.yaw = clamp(shape.yaw + gx * LOOK_TURN.yaw + 2.2 * Math.sin(t / 11.3 + 0.4) + 0.7 * Math.sin(t / 3.7 + 2.1), MAX_TURN.yaw);
-        turn.pitch = clamp(shape.pitch - gy * LOOK_TURN.pitch + 1.7 * Math.sin(t / 9.1 + 1.3) + 0.5 * Math.sin(t / 4.3 + 0.7), MAX_TURN.pitch);
-        turn.roll = shape.roll + 0.9 * Math.sin(t / 13.7 + 3.2);
-        turn.split = shape.split;
-        cr.setSourceRGBA(0.08, 0.08, 0.09, 1);
-        const places = placeEyes(turn);
-        for (let index = 0; index < 2; index++)
-            this._eye(cr, hx + places[index].x, hy + places[index].y, places[index], shape.eyes[index]);
-        cr.$dispose();
-    }
-
-    // A rounded eye of `eye`'s shape lying on the head as `place` says (turned, foreshortened); taller as
-    // you speak; its lid falls from the top as it blinks or gets sleepy.
-    _eye(cr, x, y, place, eye) {
-        const blinking = this.time - this._blinkAt;
-        const length = eye.open < 0.7 ? 2.5 * BLINK_S : BLINK_S;
-        const blink = blinking >= 0 && blinking < length ? 1 - 0.88 * Math.sin(Math.PI * blinking / length) : 1;
-        const listening = this._form === 'listening' ? 1 + 0.32 * this.level : 1;
-        const w = EYE_UNIT * eye.w;
-        const h = EYE_UNIT * eye.h * listening;
-        const r = Math.min(w, h) / 2;
-        const ax = place.across[0], ay = place.across[1];
-        const ux = place.up[0], uy = place.up[1];
-        const angle = Math.atan2(ay, ax);
-        cr.save();
-        cr.translate(x, y);
-        cr.rotate(angle);
-        // Foreshortened as the head turns: narrower across, shorter up and down.
-        cr.scale(Math.max(0.2, Math.hypot(ax, ay)), Math.max(0.2, Math.abs(-Math.sin(angle) * ux + Math.cos(angle) * uy)));
-        cr.rotate(eye.tilt * RAD);
-        const shown = Math.max(0.12, eye.open * blink);
-        if (shown < 0.99) {
-            cr.rectangle(-w, h / 2 - h * shown, 2 * w, h * shown + 1);
-            cr.clip();
-        }
-        // A capsule either way: tall, or wide (a happy squint).
-        const left = -w / 2 + r, top = -h / 2 + r, right = w / 2 - r, bottom = h / 2 - r;
-        cr.newSubPath();
-        cr.arc(right, top, r, -Math.PI / 2, 0);
-        cr.arc(right, bottom, r, 0, Math.PI / 2);
-        cr.arc(left, bottom, r, Math.PI / 2, Math.PI);
-        cr.arc(left, top, r, Math.PI, 1.5 * Math.PI);
-        cr.closePath();
-        cr.fill();
-        cr.restore();
+        this._look.x = Math.max(-1, Math.min(1, (x - fx - FACE_SIZE / 2) / 260));
+        this._look.y = Math.max(-1, Math.min(1, (y - fy - FACE_SIZE / 2) / 180));
+        return this._look;
     }
 });
 
@@ -384,9 +162,17 @@ export const VoiceView = GObject.registerClass({
         'typed': {param_types: [GObject.TYPE_STRING]},
         // Each frame: the animation's time (s) and level, to move the island's edge glow with.
         'frame': {param_types: [GObject.TYPE_DOUBLE, GObject.TYPE_DOUBLE]},
+        // The + in the conversation, and Undo after it.
+        'new-chat': {},
+        'undo-new-chat': {},
+        // The command card's Run (true) or Deny (false), and its Stop while it runs.
+        'card-decided': {param_types: [GObject.TYPE_BOOLEAN]},
+        'card-stop': {},
+        // Something inside changed its size (the conversation opened, say): the island fits it again.
+        'size-changed': {},
     },
 }, class VoiceView extends St.Widget {
-    _init() {
+    _init(look) {
         super._init({style_class: 'isle-voice', layout_manager: new Clutter.BinLayout()});
         this._phase = 'listening';
         /** Shown instead of "Listening…" while it listens for the first request. */
@@ -400,7 +186,7 @@ export const VoiceView = GObject.registerClass({
         this._level = 0;
 
         const row = new St.BoxLayout({style_class: 'isle-voice-row', x_expand: true, y_expand: true});
-        this._face = new Face();
+        this._face = new Face(look);
         this._faceButton = new St.Button({
             style_class: 'isle-voice-orb',
             child: this._face,
@@ -411,8 +197,35 @@ export const VoiceView = GObject.registerClass({
         row.add_child(this._faceButton);
 
         this._texts = new St.BoxLayout({...VERTICAL, y_align: Clutter.ActorAlign.CENTER});
-        this._heard = new St.Label({style_class: 'isle-voice-heard'});
+        // What was heard, or what it asked; with earlier messages, a chevron opens the conversation.
+        this._heard = new St.Label({style_class: 'isle-voice-heard', y_align: Clutter.ActorAlign.CENTER});
         this._heard.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        const heardRow = new St.BoxLayout({style_class: 'isle-voice-heard-row'});
+        this._earlier = new St.Icon({gicon: icon('isle-chevron-up-symbolic'), icon_size: 10, style_class: 'isle-voice-earlier',
+            y_align: Clutter.ActorAlign.CENTER, visible: false});
+        heardRow.add_child(this._earlier);
+        heardRow.add_child(this._heard);
+        this._heardButton = new St.Button({child: heardRow, style_class: 'isle-voice-heard-button', reactive: false,
+            x_align: Clutter.ActorAlign.START, accessible_name: 'Show the conversation'});
+        this._heardButton.connect('clicked', () => this.openChat());
+        // After +: the old conversation can come back for a moment.
+        this._undo = new St.BoxLayout({style_class: 'isle-voice-undo', visible: false});
+        this._undo.add_child(new St.Label({text: 'Started a new chat', style_class: 'isle-voice-undo-text', y_align: Clutter.ActorAlign.CENTER}));
+        this._undo.add_child(pillButton('Undo', 'isle-pill-small isle-voice-undo-button', () => {
+            this.showUndo(false);
+            this.emit('undo-new-chat');
+        }));
+        // The command it wants to run, waiting for Run, then running.
+        this._card = new CommandCard();
+        this._card.visible = false;
+        this._card.connect('decided', (_card, run) => {
+            this._face.bot.gesture(run ? 'nod' : 'shake');
+            // The edge flares as it starts, and dims a moment on a no.
+            this._boost = run ? 1 : -1;
+            this.emit('card-decided', run);
+        });
+        this._card.connect('stop', () => this.emit('card-stop'));
+        this._still = new St.Label({style_class: 'isle-voice-still', visible: false});
         this._text = new St.Label({style_class: 'isle-voice-text'});
         this._hint = new St.Label({style_class: 'isle-voice-hint'});
         for (const label of [this._text, this._hint])
@@ -447,10 +260,13 @@ export const VoiceView = GObject.registerClass({
             const [cx, cy] = caret.get_transformed_position();
             return [cx + x, cy + y + line / 2].every(Number.isFinite) ? [cx + x, cy + y + line / 2] : null;
         };
-        this._texts.add_child(this._heard);
+        this._texts.add_child(this._undo);
+        this._texts.add_child(this._heardButton);
         this._texts.add_child(this._entry);
         this._texts.add_child(this._text);
         this._texts.add_child(this._stepsBox);
+        this._texts.add_child(this._card);
+        this._texts.add_child(this._still);
         this._texts.add_child(this._hint);
         this._texts.add_child(this._signIn);
         this._texts.add_child(this._setUp);
@@ -468,7 +284,20 @@ export const VoiceView = GObject.registerClass({
         }
         this._shownAction = null;
         row.add_child(this._action);
-        this.add_child(row);
+        // The conversation above the pill's row, when open; the row stays as it is below it.
+        this._chat = new ChatView();
+        this._chat.visible = false;
+        this._chat.connect('new-chat', () => this.emit('new-chat'));
+        this._history = [];
+        this._column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true});
+        this._column.add_child(this._chat);
+        this._column.add_child(row);
+        this.add_child(this._column);
+        this._row = row;
+        this._boost = 0;
+        this._workingAt = 0;
+        this._stepAt = 0;
+        this._stillShown = '';
 
         this._timeline = new Clutter.Timeline({actor: this, duration: 1000, repeat_count: -1});
         this._timeline.connect('new-frame', () => this._tick());
@@ -498,7 +327,14 @@ export const VoiceView = GObject.registerClass({
             error: [heard, state.error || 'Something went wrong', false],
         }[state.phase] ?? ['', '', true];
         this._heard.text = top;
-        this._heard.visible = Boolean(top);
+        this._heardButton.visible = Boolean(top) && !this.chatOpen;
+        this._syncEarlier();
+        if (WORKING.includes(state.phase) && !WORKING.includes(this._lastPhase ?? ''))
+            this._workingAt = this._lastTick;
+        if (step !== this._lastStep)
+            this._stepAt = this._lastTick;
+        this._lastStep = step;
+        this._lastPhase = state.phase;
         this._text.text = main;
         if (dim)
             this._text.add_style_class_name('isle-voice-text-dim');
@@ -514,6 +350,7 @@ export const VoiceView = GObject.registerClass({
         this._hint.visible = Boolean(hint);
         // While it works, the steps already done, dimmed below the current one.
         this._showSteps(working ? this._steps.slice(0, -1).slice(-MAX_DONE_STEPS) : []);
+        this._syncCardText();
         this._signIn.visible = state.phase === 'error' && Boolean(state.sign_in);
         this._setUp.visible = state.phase === 'error' && Boolean(state.set_up);
         // Stop while it works; else typing instead (to follow up, too).
@@ -521,7 +358,106 @@ export const VoiceView = GObject.registerClass({
         const searching = (state.phase === 'thinking' && Boolean(state.activity)) || state.phase === 'acting';
         const notHeard = state.phase === 'error' && NOT_HEARD.test(state.error ?? '');
         const form = searching ? 'searching' : notHeard ? 'confused' : {transcribing: 'thinking'}[state.phase] ?? state.phase;
-        this._face.setForm(form, this._face.time);
+        this._face.setForm(this._cardForm() ?? form);
+    }
+
+    /** The form the command card asks for: looking at its buttons, watching it run, glad it worked. */
+    _cardForm() {
+        if (!this._card.visible)
+            return null;
+        return {waiting: 'asking', running: 'running', done: 'success', failed: 'error'}[this._card.status] ?? null;
+    }
+
+    // A card that waits or runs says it all: the line above it would only repeat it.
+    _syncCardText() {
+        const busy = this._card.visible && ['waiting', 'running'].includes(this._card.status);
+        this._text.visible = !busy && !this.typing;
+    }
+
+    /** The command card: {command, why, risks, status, output, seconds, exit}, or null for none. */
+    showCard(card) {
+        this._card.visible = Boolean(card);
+        if (card) {
+            this._card.setCard(card);
+            this._showAction(card.status === 'waiting' || card.status === 'running' ? null : this._typeButton);
+        }
+        const form = this._cardForm();
+        if (form)
+            this._face.setForm(form);
+        this._syncCardText();
+        this.emit('size-changed');
+    }
+
+    /** The conversation so far (see ChatView): shown when open, and behind the chevron by what was heard. */
+    setHistory(items) {
+        this._history = items;
+        this._chat.setItems(items);
+        if (!items.length && this.chatOpen)
+            this.closeChat();
+        this._syncEarlier();
+        if (this.chatOpen)
+            this.emit('size-changed');
+    }
+
+    _syncEarlier() {
+        // The chevron, for a conversation longer than what the pill shows.
+        const earlier = this._history.length > 2 && !this.chatOpen;
+        this._earlier.visible = earlier;
+        this._heardButton.reactive = earlier;
+    }
+
+    get chatOpen() {
+        return this._chat.visible;
+    }
+
+    // Open, the conversation shows above and the row below becomes the field to write in (the face still
+    // listens when tapped), so nothing shows twice.
+    openChat() {
+        if (this.chatOpen || !this._history.length)
+            return;
+        this._chat.visible = true;
+        this._heardButton.visible = false;
+        this._syncEarlier();
+        if (!WORKING.includes(this._phase) && !this.typing)
+            this.emit('type-requested');
+        if (St.Settings.get().enable_animations) {
+            this._chat.opacity = 0;
+            this._chat.ease({opacity: 255, duration: 260, delay: 80, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+        }
+        this.emit('size-changed');
+    }
+
+    closeChat() {
+        if (!this.chatOpen)
+            return;
+        this._chat.visible = false;
+        this._syncEarlier();
+        this.emit('size-changed');
+    }
+
+    /** "Started a new chat · Undo", for UNDO_MS after +. */
+    showUndo(shown) {
+        this._undo.visible = shown;
+        if (shown)
+            this.closeChat();
+        this.emit('size-changed');
+    }
+
+    // Scrolling up over the pill brings the conversation; down, at its end, puts it away.
+    vfunc_scroll_event(event) {
+        const direction = event.get_scroll_direction();
+        let dy = direction === Clutter.ScrollDirection.UP ? -1 : direction === Clutter.ScrollDirection.DOWN ? 1 : 0;
+        if (direction === Clutter.ScrollDirection.SMOOTH)
+            dy = event.get_scroll_delta()[1];
+        if (dy < -0.3 && !this.chatOpen && this._history.length) {
+            this.openChat();
+            return Clutter.EVENT_STOP;
+        }
+        if (dy > 0.3 && this.chatOpen && this._row.contains(event.get_source())) {
+            this.closeChat();
+            return Clutter.EVENT_STOP;
+        }
+        return Clutter.EVENT_PROPAGATE;
     }
 
     _send() {
@@ -579,7 +515,7 @@ export const VoiceView = GObject.registerClass({
         this._syncSend();
         this._entry.grab_key_focus();
         this._entry.clutter_text.set_cursor_position(-1);
-        this._face.setForm('typing', this._face.time);
+        this._face.setForm('typing');
     }
 
     stopTyping() {
@@ -623,6 +559,11 @@ export const VoiceView = GObject.registerClass({
         return this._phase;
     }
 
+    /** The character's shape and colours: {shape, palette} (see bot.js). */
+    set look(look) {
+        this._face.setLook(look);
+    }
+
     /** The exchange on show once answered: {heard, reply}, else null. */
     get exchange() {
         return this._phase === 'reply' ? this._exchange : null;
@@ -630,7 +571,8 @@ export const VoiceView = GObject.registerClass({
 
     get preferredWidth() {
         // With something to show above, it stays wide, so a conversation never jumps.
-        const short = ['listening', 'transcribing'].includes(this._phase) && !this.followUp && !this.typing;
+        const short = ['listening', 'transcribing'].includes(this._phase) && !this.followUp && !this.typing &&
+            !this.chatOpen && !this._undo.visible;
         return short ? LISTENING_WIDTH : ANSWER_WIDTH;
     }
 
@@ -639,14 +581,23 @@ export const VoiceView = GObject.registerClass({
         // Typing, the field takes the button's place too (its send is inside it).
         const width = this.preferredWidth - TEXT_INSET + (this._action.visible ? 0 : ACTION_SIZE + 12);
         // Measured per label: the box's own answer is the size set below.
-        const natural = [this._heard, this._entry, this._text, this._stepsBox, this._hint, this._signIn, this._setUp].filter(part => part.visible)
-            .reduce((sum, part) => sum + part.get_preferred_height(width)[1], 0);
+        const parts = [this._undo, this._heardButton, this._entry, this._text, this._card, this._stepsBox, this._still,
+            this._hint, this._signIn, this._setUp];
+        const natural = parts.filter(part => part.visible).reduce((sum, part) => sum + part.get_preferred_height(width)[1], 0);
+        // A command card needs room for its buttons.
+        const most = this._card.visible ? CARD_MAX_HEIGHT : MAX_HEIGHT;
         // Set outright: the row kept an earlier, shorter height for them.
-        this._texts.set_size(width, Math.min(natural, MAX_HEIGHT - ROW_PADDING));
+        this._texts.set_size(width, Math.min(natural, most - ROW_PADDING));
         // Beside a line or two it sits in the middle; beside more, level with the first line.
         this._faceButton.y_align = this._action.y_align =
             natural > FACE_SIZE + 8 ? Clutter.ActorAlign.START : Clutter.ActorAlign.CENTER;
-        return Math.round(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, natural + ROW_PADDING)));
+        const row = Math.round(Math.min(most, Math.max(MIN_HEIGHT, natural + ROW_PADDING)));
+        this._row.height = row;
+        if (!this.chatOpen)
+            return row;
+        const chat = this._chat.naturalHeight(this.preferredWidth, CHAT_MAX_HEIGHT - row);
+        this._chat.height = chat;
+        return row + chat;
     }
 
     /** Animates while shown; rests otherwise. With animations off in GNOME, the face and glow hold still. */
@@ -664,6 +615,20 @@ export const VoiceView = GObject.registerClass({
         } else if (!active) {
             this._timeline.stop();
         }
+    }
+
+    // While it works with no new step for a while: how long it has been at it, once a second.
+    _syncStill(t) {
+        const working = WORKING.includes(this._phase) && !this._card.visible;
+        const text = working && t - this._stepAt > STILL_WORKING_S ? `Still working · ${elapsed(t - this._workingAt)}` : '';
+        if (text === this._stillShown)
+            return;
+        const resize = Boolean(text) !== Boolean(this._stillShown);
+        this._stillShown = text;
+        this._still.text = text;
+        this._still.visible = Boolean(text);
+        if (resize)
+            this.emit('size-changed');
     }
 
     /** The edge glow's level for the phase at `t` (s). */
@@ -695,12 +660,16 @@ export const VoiceView = GObject.registerClass({
         this._micTarget = (this._micTarget ?? 0) * Math.exp(-dt * MIC_FADE);
         const rate = this._micTarget > this._mic ? MIC_ATTACK : MIC_RELEASE;
         this._mic += (this._micTarget - this._mic) * (1 - Math.exp(-dt * rate));
-        // The edge glow swells with your voice, breathes while thinking and settles once answered.
-        const target = this._levelFor(t);
+        // The edge glow swells with your voice, breathes while thinking and settles once answered;
+        // Run flares it and Deny dims it, for a moment.
+        this._boost *= Math.exp(-dt * 3);
+        const target = Math.max(0, this._levelFor(t) + 0.55 * this._boost);
         this._level += (target - this._level) * (1 - Math.exp(-dt * LEVEL_RATE));
         this._face.level = this._level;
         this._face.step(t);
         this._face.queue_repaint();
+        this._card.tick(t);
+        this._syncStill(t);
         // A little faster while it thinks; summed up, so a change of speed never makes the glow jump.
         const speed = WORKING.includes(this._phase) ? 1.6 : 1;
         this._flow += dt * speed;

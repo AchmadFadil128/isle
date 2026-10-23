@@ -8,6 +8,7 @@ import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
+import {paintRim} from './glow.js';
 import {GENTLE, Spring, SpringDriver} from './spring.js';
 import {fence} from './widgets.js';
 
@@ -69,8 +70,8 @@ export const Island = GObject.registerClass({
         this._drawn = {width: -1, height: -1, radius: -1, shoulder: -1, fraction: 0, inset: -1};
         /** The shape's box as last traced (see `_outline`). */
         this._outlineBox = {left: 0, right: 0, top: 0, radius: 0};
-        /** The glow's rising mask, kept while its top and height stay. */
-        this._rising = null;
+        /** The glow's rising mask, kept while its top and height stay (see glow.js). */
+        this._rising = {};
 
         /** Where the island and its views' frame were last put, in whole pixels (see `_sync`). */
         this._islandX = 0;
@@ -426,8 +427,7 @@ export const Island = GObject.registerClass({
         cr.translate(this._islandFraction, 0);
         this._outline(cr, height);
         cr.clip();
-        const {left, right, top, radius} = this._outlineBox;
-        this._paintRim(cr, left, right, top, height, radius);
+        paintRim(cr, this._outlineBox, height, this._tint, this._motion, this._tintStrength, this._rising);
         cr.$dispose();
     }
 
@@ -458,77 +458,6 @@ export const Island = GObject.registerClass({
         box.right = right;
         box.top = top;
         box.radius = radius;
-    }
-
-    // Light from the edge inside the shape, as Siri's: brightest along the bottom and fading up the
-    // sides, its colours flowing; it swells and brightens with `level` (the voice).
-    _paintRim(cr, left, right, top, height, radius) {
-        const {time, level} = this._motion;
-        const strength = this._tintStrength;
-        const r = Math.max(0, radius);
-        const sides = () => this._traceSides(cr, left, right, top, height, r);
-        cr.pushGroup();
-        cr.setOperator(Cairo.Operator.ADD);
-        // Faint strokes, each narrower, so the edge glows softly inwards.
-        const STEPS = 3;
-        cr.setSource(this._flow(left, right, time, (0.09 + 0.07 * level) * strength));
-        for (let i = 0; i < STEPS; i++) {
-            cr.setLineWidth((20 + 14 * level) * (1 - i / STEPS));
-            sides();
-            cr.stroke();
-        }
-        // A thin haze along the bottom, deeper as it swells: light, not shapes.
-        const rise = Math.min(46, Math.max(0, height - top) * 0.45) * (0.75 + 0.45 * level);
-        const haze = new Cairo.LinearGradient(0, height - rise, 0, height);
-        haze.addColorStopRGBA(0, 0, 0, 0, 0);
-        haze.addColorStopRGBA(1, 0, 0, 0, 1);
-        cr.setSource(this._flow(left, right, time * 0.8 + 2, (0.3 + 0.2 * level) * strength, true));
-        cr.mask(haze);
-        // A crisp line of light at the very edge.
-        cr.setSource(this._flow(left, right, time * 1.4, (0.42 + 0.25 * level) * strength, true));
-        cr.setLineWidth(2.5);
-        sides();
-        cr.stroke();
-        cr.popGroupToSource();
-        // Rising from the bottom: gone by the top of the sides.
-        if (this._rising?.top !== top || this._rising.height !== height) {
-            const pattern = new Cairo.LinearGradient(0, top, 0, height);
-            pattern.addColorStopRGBA(0, 0, 0, 0, 0);
-            pattern.addColorStopRGBA(0.55, 0, 0, 0, 0.35);
-            pattern.addColorStopRGBA(1, 0, 0, 0, 1);
-            this._rising = {top, height, pattern};
-        }
-        cr.setOperator(Cairo.Operator.OVER);
-        cr.mask(this._rising.pattern);
-    }
-
-    /** The glow's path: up both sides and along the bottom, round its corners (`r`). */
-    _traceSides(cr, left, right, top, height, r) {
-        cr.moveTo(left, top);
-        cr.lineTo(left, height - r);
-        cr.arcNegative(left + r, height - r, r, Math.PI, Math.PI / 2);
-        cr.lineTo(right - r, height);
-        cr.arcNegative(right - r, height - r, r, Math.PI / 2, 0);
-        cr.lineTo(right, top);
-    }
-
-    /** A left-to-right gradient of the tint's colours, shifted by `time` so they flow. */
-    _flow(left, right, time, alpha, shimmer = false) {
-        const colors = this._tint;
-        const gradient = new Cairo.LinearGradient(left, 0, right, 0);
-        const STOPS = 24;
-        for (let i = 0; i <= STOPS; i++) {
-            const at = (i / STOPS + time * 0.12) * colors.length;
-            const index = Math.floor(at);
-            const mix = at - index;
-            const from = colors[index % colors.length];
-            const to = colors[(index + 1) % colors.length];
-            // A slow swell of brightness travelling along, so the light moves, not only its hue.
-            const swell = shimmer ? 0.7 + 0.3 * Math.sin((i / STOPS) * 2 * Math.PI * 1.5 - time * 1.6) : 1;
-            gradient.addColorStopRGBA(i / STOPS, from[0] + (to[0] - from[0]) * mix,
-                from[1] + (to[1] - from[1]) * mix, from[2] + (to[2] - from[2]) * mix, alpha * swell);
-        }
-        return gradient;
     }
 
     /** The gradients that paint the tint over the black shape, in order. */

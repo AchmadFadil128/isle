@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Short-lived alerts the island grows to show. An alert: {key (same key replaces), icon | gicon | art, badge,
-// appIcon, ring, ringIconSize, volume, title, titleLines, subtitle, tone, value, status, level, action, duration, onActivate, page,
-// priority, transient, motion (the icon's, once; see `playMotion` in widgets.js)}.
+// Short-lived alerts the island grows to show. An alert: {key (same key replaces), icon | gicon | art | bot, badge,
+// appIcon, ring, ringIconSize, volume, title, titleLines, subtitle, code, tone, value, status, level, action | actions,
+// duration, onActivate, page, priority, transient, motion (the icon's, once; see `playMotion` in widgets.js)}.
 
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
+import {BotIcon} from './botIcon.js';
 import {VERTICAL} from './compat.js';
 import * as Palette from './palette.js';
 import {Art, LevelBar, Ring, VolumeGlyph, icon, isSymbolic, ownIcon, pillButton, playMotion, wrapLines} from './widgets.js';
@@ -20,6 +22,11 @@ const MAX_WIDTH = 380;
 const HEIGHT = {one: 44, two: 52};
 /** A two-line title's width: the widest alert less its padding (14 + 14), badge (32) and spacing (10). */
 const TITLE_WRAP_WIDTH = MAX_WIDTH - 70;
+/** An alert that asks (Allow, Deny…) is this wide, with the assistant this big beside it. */
+const DECISION_WIDTH = 440;
+const BOT_SIZE = 46;
+/** Its answer shows this long (ms), the assistant hopping or shaking, before the alert goes. */
+const ANSWERED_MS = 850;
 
 /** The ring starts sweeping once the island has made room; a level bar grows a little sooner. */
 const RING_DELAY = 350;
@@ -35,6 +42,8 @@ const TONE_COLORS = {
     // The plans' colours on the Usage page (see pages/usage.js).
     claude: [0.85, 0.47, 0.34],
     codex: [0.06, 0.64, 0.5],
+    agy: [0.3, 0.55, 1],
+    warn: Palette.ORANGE,
     break: Palette.BLUE,
     calendar: Palette.BLUE,
 };
@@ -90,9 +99,12 @@ class PeekView extends St.Widget {
         this._ringBadge = new St.Bin({style_class: 'isle-peek-ring-badge', child: this._ringIcon});
         this._ring = new Ring({size: 32, lineWidth: 3, child: this._ringBadge});
         this._volume = new VolumeGlyph();
+        // The assistant, for what it or an AI agent asks or has done.
+        this._bot = new BotIcon(BOT_SIZE);
         this._row.add_child(this._badge);
 
         const texts = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        this._texts = texts;
         this._title = new St.Label({style_class: 'isle-peek-title'});
         this._subtitle = new St.Label({style_class: 'isle-peek-subtitle'});
         for (const text of [this._title, this._subtitle]) {
@@ -104,6 +116,19 @@ class PeekView extends St.Widget {
         this._title.clutter_text.line_wrap = false;
         this._titleLines = 1;
         this._lineHeight = 0;
+        // What an agent wants to run, and the answers to give it.
+        this._code = new St.Label({style_class: 'isle-peek-code', x_align: Clutter.ActorAlign.START});
+        this._code.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
+        texts.add_child(this._code);
+        this._actions = new St.BoxLayout({style_class: 'isle-peek-actions'});
+        texts.add_child(this._actions);
+        this._answered = new St.BoxLayout({style_class: 'isle-peek-answered', visible: false});
+        this._answeredIcon = new St.Icon({icon_size: 12, y_align: Clutter.ActorAlign.CENTER});
+        this._answeredText = new St.Label({style_class: 'isle-peek-answered-text', y_align: Clutter.ActorAlign.CENTER});
+        this._answered.add_child(this._answeredIcon);
+        this._answered.add_child(this._answeredText);
+        texts.add_child(this._answered);
+        this._answerTimer = 0;
         this._row.add_child(texts);
 
         // Trailing: a value, a level bar or a button.
@@ -150,7 +175,17 @@ class PeekView extends St.Widget {
         const gicon = alert.gicon ? ownIcon(alert.gicon) : icon(alert.icon ?? 'dialog-information-symbolic');
         const hasRing = alert.ring !== undefined && alert.ring !== null;
 
-        if (alert.art !== undefined) {
+        this._asks = Boolean(alert.actions?.length);
+        // One that asks reads from the left, like a dialog; the others sit centred.
+        this._row.x_align = this._asks || alert.code ? Clutter.ActorAlign.FILL : Clutter.ActorAlign.CENTER;
+        this._row.style_class = this._asks || alert.code ? 'isle-peek-row isle-peek-row-asks' : 'isle-peek-row';
+        if (alert.bot) {
+            this._bot.look = alert.bot.look;
+            this._bot.form = alert.bot.form ?? 'attentive';
+            this._bot.badge = alert.bot.glyph ? {color: rgb, glyph: alert.bot.glyph} : null;
+            this._setChild(this._badge, this._bot);
+            this._badge.style_class = '';
+        } else if (alert.art !== undefined) {
             this._artBadgeIcon.gicon = alert.badge ?? null;
             this._art.setPath(alert.art);
             this._syncArtBadge();
@@ -193,7 +228,7 @@ class PeekView extends St.Widget {
             this._ringKey = null;
         this._volumeKey = alert.volume ? alert.key : null;
         // Its icon's motion plays once, for a new alert (not one updating in place), once the island made room.
-        const moving = hasRing ? this._ringIcon : alert.art === undefined && !alert.volume ? this._icon : null;
+        const moving = hasRing ? this._ringIcon : alert.art === undefined && !alert.volume && !alert.bot ? this._icon : null;
         const motionKey = `${alert.key}:${alert.title}`;
         if (moving && motionKey !== this._motionKey)
             playMotion(moving, alert.motion, {delay: RING_DELAY});
@@ -213,6 +248,10 @@ class PeekView extends St.Widget {
         this._title.text = title;
         this._subtitle.text = alert.subtitle ?? '';
         this._subtitle.visible = Boolean(alert.subtitle);
+
+        this._code.text = alert.code ?? '';
+        this._code.visible = Boolean(alert.code);
+        this._showActions(alert.actions ?? [], onDone);
 
         this._actionButton?.destroy();
         this._actionButton = null;
@@ -251,6 +290,51 @@ class PeekView extends St.Widget {
         }
     }
 
+    // The answers an alert offers (Deny, Allow, Always…), each {label, primary, answer: allow | deny, callback}:
+    // the callback runs at once; an allow or deny then shows a moment, the assistant hopping or shaking.
+    _showActions(actions, onDone) {
+        this._clearAnswer();
+        this._actions.destroy_all_children();
+        this._actions.visible = actions.length > 0;
+        this._answered.visible = false;
+        for (const action of actions) {
+            const style = action.primary ? 'isle-pill-small isle-peek-action isle-pill-white' : 'isle-pill-small isle-peek-action';
+            this._actions.add_child(pillButton(action.label, style, () => this._answer(action, onDone)));
+        }
+    }
+
+    _answer(action, onDone) {
+        if (this._answerTimer)
+            return;
+        action.callback();
+        if (!action.answer) {
+            onDone?.();
+            return;
+        }
+        const allowed = action.answer === 'allow';
+        this._bot.badge = {color: allowed ? Palette.GREEN : Palette.RED, glyph: allowed ? 'check' : 'cross'};
+        this._bot.form = allowed ? 'success' : 'attentive';
+        this._bot.play(allowed ? 'hop' : 'shake');
+        this._answeredIcon.gicon = icon(allowed ? 'isle-check-symbolic' : 'isle-close-symbolic');
+        this._answeredText.text = action.done ?? (allowed ? 'Allowed' : 'Denied');
+        this._answered.style_class = `isle-peek-answered ${allowed ? 'isle-peek-allowed' : 'isle-peek-denied'}`;
+        this._actions.visible = false;
+        this._answered.visible = true;
+        if (!allowed)
+            playMotion(this._texts, 'shake');
+        this._answerTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ANSWERED_MS, () => {
+            this._answerTimer = 0;
+            onDone?.();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _clearAnswer() {
+        if (this._answerTimer)
+            GLib.source_remove(this._answerTimer);
+        this._answerTimer = 0;
+    }
+
     /** A ring's percentage counts up as it sweeps. */
     _syncCount() {
         if (!this._count)
@@ -266,6 +350,11 @@ class PeekView extends St.Widget {
 
     /** The height below the top bar this alert needs: less with a title alone. */
     get preferredHeight() {
+        // One that asks: as tall as its lines, code and buttons, with even room above and below.
+        if (this._asks || this._code.visible) {
+            const [, natural] = this._texts.get_preferred_height(DECISION_WIDTH - BOT_SIZE - 38);
+            return Math.round(Math.max(BOT_SIZE + 24, natural + 26));
+        }
         const height = this._subtitle.visible ? HEIGHT.two : HEIGHT.one;
         return height + Math.round((this._titleLines - 1) * this._lineHeight);
     }
@@ -314,6 +403,8 @@ class PeekView extends St.Widget {
 
     /** The width the island should have for this alert. */
     get preferredWidth() {
+        if (this._asks || this._code.visible)
+            return DECISION_WIDTH;
         const [, natural] = this._row.get_preferred_width(-1);
         if (this._titleLines > 1)
             return MAX_WIDTH;
@@ -328,8 +419,9 @@ class PeekView extends St.Widget {
     }
 
     _onDestroy() {
+        this._clearAnswer();
         // Pieces not currently shown are not children and must be freed here.
-        for (const actor of [this._icon, this._artBox, this._ring, this._volume, this._value, this._status, this._levelBox]) {
+        for (const actor of [this._icon, this._artBox, this._ring, this._volume, this._bot, this._value, this._status, this._levelBox]) {
             if (!actor.get_parent())
                 actor.destroy();
         }

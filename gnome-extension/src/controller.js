@@ -13,6 +13,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 
 import * as Alerts from './alerts.js';
+import {paletteFor} from './bot.js';
 import {ClipboardHistory} from './clipboard.js';
 import {CompactView} from './compact.js';
 import {grabsKeyboard} from './compat.js';
@@ -38,7 +39,7 @@ import {TasksPage} from './pages/tasks.js';
 import {TimerPage} from './pages/timer.js';
 import {UsagePage} from './pages/usage.js';
 import {ReminderWatcher} from './reminders.js';
-import {GREETING, InstalledApps, SIRI_COLORS, VoiceView, actionTypes, aiSettings, openSetUp, openSignIn, runActions, stopPending, voiceContext} from './voice.js';
+import {GREETING, InstalledApps, VoiceView, actionTypes, aiSettings, openSetUp, openSignIn, runActions, stopPending, voiceContext} from './voice.js';
 import {TextWriter} from './writer.js';
 
 /** While the pointer rests before the island opens (Settings: hover-delay), it moves at most this far. */
@@ -111,6 +112,9 @@ const VOICE_ERROR_MS = 4000;
 /** Once read with the pointer on it, an answer goes this soon after the pointer leaves. */
 const VOICE_LEAVE_MS = 1200;
 /** isled's phases while it works on a request: with the island closed, it carries on in the background. */
+/** Where in its flow, and how bright, the still glow of an alert that asks is drawn. */
+const ALERT_GLOW_TIME = 2.2;
+const ALERT_GLOW_LEVEL = 0.3;
 const VOICE_WORKING = ['transcribing', 'thinking', 'acting'];
 
 // Pages that open by default when they have something to show, best first, unless one was picked
@@ -206,7 +210,8 @@ export class Controller {
         // Two, taking turns: a new alert fades in over the one it replaces, rather than swapping in a frame.
         this._peeks = [new PeekView(), new PeekView()];
         this._peek = this._peeks[0];
-        this._voice = new VoiceView();
+        this._botLook = this._readBotLook();
+        this._voice = new VoiceView(this._botLook);
     }
 
     // The bar and the island appear together: the clock gives way to it in the same frame.
@@ -350,6 +355,8 @@ export class Controller {
         this._focusMonitorChanged = global.display.connect('window-entered-monitor', () => this._syncMonitor());
         this._settingsChanged.push(this._settings.connect('changed::voice-assistant', () => this._syncVoiceEnabled()));
         this._settingsChanged.push(this._settings.connect('changed::voice-shortcut', () => (this._voice.shortcut = this._voiceShortcut)));
+        for (const key of ['bot-shape', 'bot-color', 'bot-glow'])
+            this._settingsChanged.push(this._settings.connect(`changed::${key}`, () => this._syncBotLook()));
         for (const key of ['usage-enabled', 'usage-claude', 'usage-codex', 'usage-warn', 'usage-critical'])
             this._settingsChanged.push(this._settings.connect(`changed::${key}`, () => this._syncUsage()));
         for (const key of ['event-alerts', 'event-alert-minutes'])
@@ -436,6 +443,10 @@ export class Controller {
                 this.collapse();
         });
         this._voice.connect('frame', (_view, time, level) => this._island.setTintMotion(time, level));
+        this._voice.connect('size-changed', () => {
+            if (this._presentation === 'voice')
+                this._render();
+        });
         daemon.connect('pomodoro-finished', (_daemon, finished, next) => {
             this._chime('complete');
             this._post(Alerts.pomodoroFinished(finished, next, daemon.state.pomodoro, daemon));
@@ -720,11 +731,27 @@ export class Controller {
         this._later('warm', Math.max(WARM_AFTER_CLOSE_MS, WARM_GAP_MS - sinceLast), () => this._warmUp(false));
     }
 
+    /** The assistant's shape and colours, from Settings (see bot.js). */
+    _readBotLook() {
+        return {shape: this._settings.get_string('bot-shape'),
+            palette: paletteFor(this._settings.get_string('bot-color'), this._settings.get_string('bot-glow'))};
+    }
+
+    _syncBotLook() {
+        this._botLook = this._readBotLook();
+        this._voice.look = this._botLook;
+        this._syncTint();
+    }
+
     _syncTint() {
         const expanded = this._presentation === 'expanded';
         const voice = this._presentation === 'voice';
-        const tint = voice ? SIRI_COLORS : expanded ? this._expanded.tint : null;
-        const style = voice ? 'siri' : expanded ? this._expanded.tintStyle : null;
+        // An alert that asks or tells what an agent did glows in its colours, still: drawn once.
+        const glow = this._presentation === 'peek' ? this._alert?.glow : null;
+        const tint = voice ? this._botLook.palette.glow : glow ?? (expanded ? this._expanded.tint : null);
+        const style = voice || glow ? 'siri' : expanded ? this._expanded.tintStyle : null;
+        if (glow && tint !== this._tint)
+            this._island.setTintMotion(ALERT_GLOW_TIME, ALERT_GLOW_LEVEL);
         if (tint !== this._tint || style !== this._tintStyle) {
             this._tint = tint;
             this._tintStyle = style;

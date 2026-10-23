@@ -366,7 +366,8 @@ export function meeting(event, link, join) {
     };
 }
 
-const AGENT_NAMES = {claude: 'Claude', codex: 'Codex'};
+const AGENT_NAMES = {claude: 'Claude', codex: 'Codex', agy: 'Antigravity'};
+const AGENT_APPS = {claude: 'Claude Code', codex: 'Codex', agy: 'Antigravity'};
 
 /** An AI agent needs the user, or is done ({provider, kind, project, message}); `show` brings its window up. */
 export function agent(event, show) {
@@ -388,6 +389,90 @@ export function agent(event, show) {
         // It waits on the user: it stays until they are there to see it.
         sticky: waiting,
         action: show ? {label: 'Show', callback: show} : null,
+    };
+}
+
+/** The light round an alert that asks (amber), and one that tells an agent is done (green). */
+const ASKING_GLOW = [[1, 0.62, 0.04], [1, 0.42, 0.25], [1, 0.8, 0.3]];
+const DONE_GLOW = [[0.19, 0.82, 0.35], [0.35, 0.88, 0.75], [0.7, 0.94, 0.35]];
+
+/** What a tool call is about, in a line: a command as it is, else the tool and what it works on. */
+function toolLine(tool, input) {
+    if (input?.command)
+        return String(input.command).split('\n')[0];
+    const target = input?.file_path ?? input?.path ?? input?.url ?? input?.pattern ?? '';
+    return [tool, target].filter(Boolean).join(' ');
+}
+
+/**
+ * An AI agent asks to run something ({provider, project, tool, input, always}); `answer(choice)` sends
+ * allow, deny or always back to it. The assistant shows it, as the one asking on its behalf.
+ */
+export function agentAsks(request, look, answer) {
+    const actions = [
+        {label: 'Deny', answer: 'deny', callback: () => answer('deny')},
+        {label: 'Allow', answer: 'allow', primary: !request.always, callback: () => answer('allow')},
+    ];
+    // Claude can keep a rule for next time; the alert says where it is kept.
+    if (request.always)
+        actions.push({label: 'Always', answer: 'allow', primary: true, done: 'Always allowed here', callback: () => answer('always')});
+    return {
+        key: `agent-ask:${request.id}`,
+        bot: {look, glyph: '!'},
+        title: `${request.project || AGENT_APPS[request.provider]} needs permission`,
+        subtitle: request.project ? AGENT_APPS[request.provider] : '',
+        code: toolLine(request.tool, request.input),
+        tone: 'warn',
+        glow: ASKING_GLOW,
+        actions,
+        // It waits on the user: it stays until answered, or until the agent stops asking.
+        sticky: true,
+        duration: 600000,
+        priority: 'instant',
+    };
+}
+
+/** An AI agent finished ({provider, project, message: its last words}); `show` brings its window up. */
+export function agentDone(event, look, show) {
+    const summary = firstSentence(event.message) || 'Finished';
+    return {
+        key: `agent:${event.provider}:${event.session || event.project}`,
+        bot: {look, glyph: 'check', form: 'success'},
+        title: summary,
+        subtitle: `${[event.project, AGENT_APPS[event.provider]].filter(Boolean).join(' · ')} finished`,
+        tone: 'good',
+        glow: DONE_GLOW,
+        actions: [
+            ...show ? [{label: 'Open terminal', callback: show}] : [],
+            {label: 'OK', primary: true, callback: () => {}},
+        ],
+        duration: REMINDER_DURATION,
+    };
+}
+
+/** The first sentence of `text`, cut to a line's worth. */
+function firstSentence(text) {
+    const first = (text ?? '').trim().split(/(?<=[.!?])\s|\n/)[0]?.replace(/[*_`#>]/g, '').trim() ?? '';
+    return first.length > 90 ? `${first.slice(0, 89).trimEnd()}…` : first;
+}
+
+/** Isle's assistant wants to run `card.command` while the island is closed; `answer(run)` decides. */
+export function taskAsks(card, look, answer) {
+    return {
+        key: `task-ask:${card.id}`,
+        bot: {look, glyph: '!'},
+        title: card.why,
+        subtitle: card.risks?.includes('root') ? 'Isle wants to run this · asks for your password' : 'Isle wants to run this',
+        code: card.command,
+        tone: 'warn',
+        glow: look.palette.glow,
+        actions: [
+            {label: 'Deny', answer: 'deny', callback: () => answer(false)},
+            {label: 'Run', answer: 'allow', primary: true, done: 'Running', callback: () => answer(true)},
+        ],
+        sticky: true,
+        duration: 600000,
+        priority: 'instant',
     };
 }
 
