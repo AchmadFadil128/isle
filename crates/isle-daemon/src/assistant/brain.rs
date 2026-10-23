@@ -83,6 +83,11 @@ impl Provider {
         }
     }
 
+    /// The provider with id `id` ("agy", "claude", "codex").
+    pub fn from_id(id: &str) -> Option<Provider> {
+        AUTO.into_iter().find(|p| p.id() == id)
+    }
+
     /// Whether it takes Isle's job as its own instructions (a system prompt), once per conversation;
     /// agy gets it with the conversation's first request instead.
     pub fn takes_instructions(self) -> bool {

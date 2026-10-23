@@ -11,6 +11,13 @@ const GB: f64 = 1024.0 * 1024.0 * 1024.0;
 /// A few lines such as "Battery: 77%, not charging; charge limit 60% (…)", all on one line each.
 pub fn facts() -> String {
     let mut lines = vec![format!("The system: {}.", system())];
+    let managers = package_managers();
+    if !managers.is_empty() {
+        lines.push(format!(
+            "Ways to install software here: {}.",
+            managers.join(", ")
+        ));
+    }
     if let Some(folders) = folders() {
         lines.push(format!("Folders in ~: {folders}."));
     }
@@ -33,6 +40,23 @@ pub fn facts() -> String {
         lines.push(format!("Now: {}.", usage.join("; ")));
     }
     lines.join("\n")
+}
+
+/// The package managers installed, in the order an install should prefer them.
+fn package_managers() -> Vec<&'static str> {
+    let home = dirs::home_dir().unwrap_or_default();
+    let dirs = [
+        Path::new("/usr/bin").to_owned(),
+        Path::new("/bin").to_owned(),
+        Path::new("/usr/local/bin").to_owned(),
+        home.join(".local/bin"),
+    ];
+    [
+        "apt", "dnf", "zypper", "pacman", "flatpak", "snap", "brew", "npm", "pipx",
+    ]
+    .into_iter()
+    .filter(|name| dirs.iter().any(|dir| dir.join(name).is_file()))
+    .collect()
 }
 
 /// The folders in the home folder, not hidden, sorted; at most 40.

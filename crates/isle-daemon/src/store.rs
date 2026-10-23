@@ -123,6 +123,19 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
     }
 }
 
+impl<T> Store<T> {
+    /// Deletes the file, and any save still waiting to be written: what it held is gone for good.
+    pub fn remove(&self) {
+        let _writing = lock(&self.writer.writing);
+        lock(&self.writer.pending).take();
+        match fs::remove_file(&self.path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => warn!("could not delete {}: {err}", self.path.display()),
+        }
+    }
+}
+
 /// Writes a store's file, one write at a time.
 struct Writer {
     path: PathBuf,
