@@ -450,7 +450,7 @@ export const ClipsView = GObject.registerClass({
             const link = item.preview.trim();
             const host = label(hostOf(link), 'isle-clip-host');
             host.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-            const url = label(link.replace(/^https?:\/\//i, ''), 'isle-clip-url');
+            const url = label(link.replace(/^https?:\/\//i, ''), 'isle-clip-url', {y_expand: true, y_align: Clutter.ActorAlign.FILL});
             wrapLines(url, Pango.EllipsizeMode.END);
             box.add_child(host);
             box.add_child(url);
@@ -461,7 +461,9 @@ export const ClipsView = GObject.registerClass({
             const code = CODE_PATTERN.test(item.preview);
             // Leading blank lines and long runs of spaces waste the card.
             const shown = code ? item.preview.replace(/^\s*\n/, '') : item.preview.replace(/\s+/g, ' ').trim();
-            const text = label(shown.slice(0, 160), code ? 'isle-clip-text isle-clip-code' : 'isle-clip-text');
+            // The card's height for its lines: else the text asks for one line and is cut there.
+            const text = label(shown.slice(0, 160), code ? 'isle-clip-text isle-clip-code' : 'isle-clip-text',
+                {y_expand: true, y_align: Clutter.ActorAlign.FILL});
             wrapLines(text, Pango.EllipsizeMode.END);
             box.add_child(text);
             return box;
