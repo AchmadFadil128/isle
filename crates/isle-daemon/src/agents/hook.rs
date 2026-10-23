@@ -5,8 +5,8 @@
 //! It never fails: when there is no answer (no isled, no reply in time) it prints nothing, and the AI asks
 //! in its own terminal as it would without Isle.
 
-use std::io::Read;
-use std::path::Path;
+use std::io::{Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -20,6 +20,12 @@ const TIMEOUT: Duration = Duration::from_secs(1);
 const ANSWER: Duration = Duration::from_secs(9 * 60 + 40);
 /// Claude Code's payload is small; more than this is not read.
 const MAX_INPUT: u64 = 1024 * 1024;
+/// How often a waiting permission looks whether it was answered in the AI's own terminal instead.
+const ANSWERED_EVERY: Duration = Duration::from_secs(1);
+/// How long the tool's call may take to show in the transcript before that is no longer looked for.
+const FIND_CALL_FOR: u32 = 6;
+/// The end of the transcript searched for the tool's call, and the most read of it at a time.
+const TRANSCRIPT_TAIL: u64 = 1024 * 1024;
 
 /// `args` are what follows `--agent-hook`: the AI, then (Codex) its JSON as the last.
 pub async fn run(args: &[String]) {
@@ -38,11 +44,17 @@ pub async fn run(args: &[String]) {
         let Some(request) = request(ai.unwrap_or_default(), &payload) else {
             return;
         };
-        let answer = tokio::time::timeout(ANSWER, decide(&request)).await;
-        if let Ok(Ok(answer)) = answer
-            && let Some(output) = decision(ai.unwrap_or_default(), &answer, &payload)
-        {
-            println!("{output}");
+        // Answered in its terminal first, the AI leaves its hook waiting: it ends itself, and with it the
+        // island's alert.
+        tokio::select! {
+            answer = tokio::time::timeout(ANSWER, decide(&request)) => {
+                if let Ok(Ok(answer)) = answer
+                    && let Some(output) = decision(ai.unwrap_or_default(), &answer, &payload)
+                {
+                    println!("{output}");
+                }
+            }
+            () = answered_elsewhere(&payload), if ai == Some("claude") => {}
         }
         return;
     }
@@ -112,6 +124,89 @@ async fn decide(request: &Request) -> zbus::Result<String> {
         .call_with_flags::<_, _, String>("Decide", MethodFlags::NoAutoStart.into(), &(json,))
         .await?
         .ok_or_else(|| zbus::Error::Failure("no answer".into()))
+}
+
+/// Resolves once the permission was answered in Claude Code's own terminal (it asks there at the same
+/// time; Codex waits for the hook): its transcript has the result of this tool call. Never, when that cannot be told (no transcript, the call not found in it).
+async fn answered_elsewhere(payload: &Value) {
+    let path = payload["transcript_path"].as_str().map(PathBuf::from);
+    let mut found = None;
+    for _ in 0..FIND_CALL_FOR {
+        found = path
+            .as_deref()
+            .and_then(|path| find_call(path, &payload["tool_name"], &payload["tool_input"]));
+        if found.is_some() {
+            break;
+        }
+        tokio::time::sleep(ANSWERED_EVERY).await;
+    }
+    let (Some(path), Some((id, mut read))) = (path, found) else {
+        return std::future::pending().await;
+    };
+    loop {
+        if read_on(&path, &mut read).is_some_and(|text| has_result(&text, &id)) {
+            return;
+        }
+        tokio::time::sleep(ANSWERED_EVERY).await;
+    }
+}
+
+/// The id of the newest call of `tool` with `input` in the transcript at `path`, and where the lines
+/// after it start.
+fn find_call(path: &Path, tool: &Value, input: &Value) -> Option<(String, u64)> {
+    let mut file = std::fs::File::open(path).ok()?;
+    let start = file.metadata().ok()?.len().saturating_sub(TRANSCRIPT_TAIL);
+    file.seek(SeekFrom::Start(start)).ok()?;
+    let mut bytes = Vec::new();
+    file.take(TRANSCRIPT_TAIL).read_to_end(&mut bytes).ok()?;
+    // Whole lines only, newest first, each with where the next one starts.
+    let mut line_end = bytes.iter().rposition(|&b| b == b'\n')? + 1;
+    for line in bytes[..line_end].rsplit(|&b| b == b'\n').skip(1) {
+        let next = start + line_end as u64;
+        line_end = line_end.saturating_sub(line.len() + 1);
+        let Ok(line) = std::str::from_utf8(line) else {
+            continue;
+        };
+        if !line.contains("tool_use") {
+            continue;
+        }
+        let Ok(entry) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        let calls = entry["message"]["content"].as_array().into_iter().flatten();
+        for call in calls.filter(|call| call["type"] == "tool_use" && &call["name"] == tool) {
+            // The input as given, or at least its command: the AI may add a field of its own.
+            let same = &call["input"] == input
+                || (!input["command"].is_null() && call["input"]["command"] == input["command"]);
+            if same && let Some(id) = call["id"].as_str() {
+                return Some((id.to_owned(), next));
+            }
+        }
+    }
+    None
+}
+
+/// What was written to `path` since `read` (whole lines only), moving `read` on.
+fn read_on(path: &Path, read: &mut u64) -> Option<String> {
+    let mut file = std::fs::File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    if len <= *read {
+        return None;
+    }
+    file.seek(SeekFrom::Start(*read)).ok()?;
+    let mut bytes = Vec::new();
+    file.take(TRANSCRIPT_TAIL).read_to_end(&mut bytes).ok()?;
+    let whole = bytes.iter().rposition(|&b| b == b'\n')? + 1;
+    bytes.truncate(whole);
+    *read += whole as u64;
+    Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// Whether `lines` hold the result of the call `id`: run, or refused in the terminal.
+fn has_result(lines: &str, id: &str) -> bool {
+    lines
+        .lines()
+        .any(|line| line.contains(id) && line.contains("tool_result"))
 }
 
 /// The user's answer as the AI's hook output, or none (no answer: the AI asks itself). "always" keeps
@@ -248,6 +343,38 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn sees_an_answer_given_in_the_terminal() {
+        let path =
+            std::env::temp_dir().join(format!("isle-transcript-{}.jsonl", std::process::id()));
+        let input = json!({"command": "npm test", "description": "Run the tests"});
+        let call = json!({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "toolu_older", "name": "Bash", "input": {"command": "ls"}},
+            {"type": "tool_use", "id": "toolu_1", "name": "Bash", "input": input}]}});
+        std::fs::write(
+            &path,
+            format!("{{\"type\":\"user\",\"note\":\"é\"}}\n{call}\n{{\"partial"),
+        )
+        .unwrap();
+        let (id, mut read) = find_call(&path, &json!("Bash"), &input).unwrap();
+        assert_eq!(id, "toolu_1");
+        // Another call's result is not this one's; this one's is.
+        let other = json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "toolu_older"}]}});
+        let mine = json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "toolu_1"}]}});
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        std::io::Write::write_all(&mut file, format!("\"}}\n{other}\n").as_bytes()).unwrap();
+        assert!(!has_result(&read_on(&path, &mut read).unwrap(), &id));
+        std::io::Write::write_all(&mut file, format!("{mine}\n").as_bytes()).unwrap();
+        assert!(has_result(&read_on(&path, &mut read).unwrap(), &id));
+        assert!(read_on(&path, &mut read).is_none());
+        assert!(find_call(&path, &json!("Bash"), &json!({"command": "rm -rf /"})).is_none());
+
+        std::fs::remove_file(&path).ok();
+    }
 
     #[test]
     fn claude_permission_and_waiting() {

@@ -241,6 +241,7 @@ export class Controller {
             const focus = global.display.focus_window;
             if (this._voiceOpen && this._voiceAnswered && focus && focus !== this._voiceTarget)
                 this.collapse();
+            this._passToAgentWindow(focus);
             this._syncMonitor();
         });
         // Hidden by a fullscreen window meanwhile: what waited shows now.
@@ -1651,7 +1652,20 @@ export class Controller {
             answer => this._daemon.call('agents', 'Resolve', request.id, answer));
         // Put away unanswered: the terminal asks instead.
         alert.onDismissed = pass;
+        alert.agentWindow = window;
         return this._post(alert);
+    }
+
+    // Gone to the agent's own window while its ask waits here: it asks there instead (Codex shows its
+    // prompt only once Isle lets go).
+    _passToAgentWindow(focus) {
+        if (!focus)
+            return;
+        const asks = [this._alert, ...this._queue].filter(alert => alert?.agentWindow === focus);
+        for (const alert of asks) {
+            this._withdrawAlert(alert.key);
+            alert.onDismissed?.();
+        }
     }
 
     /** An answer or an error is on show, no longer listening or thinking. */
