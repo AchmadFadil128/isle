@@ -6,14 +6,21 @@
 /* ── Shared ───────────────────────────────────────────── */
 
 /* Inter (installed with Isle) or SF Pro (`isle-sf`, set by shell.js). St takes a single quoted
- * family only: a list stops it reading the rules that follow. Tabular figures keep times still. */
+ * family only: a list stops it reading the rules that follow. */
 #isleIsland {
   color: #ffffff;
   font-family: "Inter Variable";
-  font-feature-settings: "tnum";
 }
 
 #isleIsland.isle-sf { font-family: "SF Pro Display"; }
+
+/* Tabular figures for numbers that change or line up, so they hold still; prose keeps proportional
+ * ones, as on macOS ("11:10" and "isle-0.9.1" would space out). */
+.isle-compact-clock, .isle-compact-second-time, .isle-header-time, .isle-recording-time,
+.isle-timer-time, .isle-stepper-value, .isle-time, .isle-volume-text, .isle-peek-value,
+.isle-call-duration, .isle-reminders-count, .isle-cal-event-time, .isle-cal-day, .isle-usage-percent {
+  font-feature-settings: "tnum";
+}
 
 .isle-button {
   color: #ffffff;
@@ -71,7 +78,7 @@
 
 .isle-empty { spacing: 4px; }
 .isle-empty-icon { color: rgba(255, 255, 255, 0.35); padding-bottom: 4px; }
-.isle-empty-title { font-size: 15px; font-weight: 600; }
+.isle-empty-title { font-size: 15px; font-weight: 600; letter-spacing: -0.1px; }
 .isle-empty-hint { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
 
 .isle-entry {
@@ -137,12 +144,12 @@
 /* Both slots keep their width when empty so the clock stays centred. */
 .isle-compact-slot { width: 24px; }
 
-.isle-compact-clock { font-size: 17px; font-weight: 600; }
+.isle-compact-clock { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
 
 /* Inside the top bar everything is sized like the bar's own text. */
 .isle-compact-in-bar .isle-compact-row { padding: 0 14px; spacing: 10px; }
 .isle-compact-in-bar .isle-compact-slot { width: 22px; }
-.isle-compact-in-bar .isle-compact-clock { font-size: 15px; }
+.isle-compact-in-bar .isle-compact-clock { font-size: 15px; letter-spacing: -0.1px; }
 
 .isle-unseen-dot {
   width: 6px;
@@ -179,7 +186,7 @@
 .isle-compact-call-time { color: #30d158; }
 .isle-compact-second { spacing: 5px; }
 .isle-compact-second-call { color: #30d158; }
-.isle-compact-second-time { font-size: 13px; font-weight: 600; font-feature-settings: "tnum"; }
+.isle-compact-second-time { font-size: 13px; font-weight: 600; }
 .isle-compact-in-bar .isle-compact-second-time { font-size: 12px; }
 
 /* ── Alerts (peek) ────────────────────────────────────── */
@@ -220,12 +227,8 @@
 /* The orb on the left, then what was heard above the answer (voice.js sizes them to match). */
 .isle-voice-row { padding: 14px 16px 20px 16px; spacing: 12px; }
 .isle-voice-orb { border-radius: 999px; }
-/* Prose: proportional figures (the island's tabular ones space out "5-hour" and the like). */
-.isle-voice-heard, .isle-voice-text, .isle-voice-hint, .isle-voice-step-text, .isle-peek-subtitle {
-  font-feature-settings: normal;
-}
 .isle-voice-heard { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-bottom: 2px; }
-.isle-voice-text { font-size: 15px; font-weight: 500; }
+.isle-voice-text { font-size: 15px; font-weight: 500; letter-spacing: -0.1px; }
 .isle-voice-text-dim { color: rgba(255, 255, 255, 0.6); font-weight: 600; }
 .isle-voice-text-long { font-size: 14px; font-weight: 400; color: rgba(255, 255, 255, 0.92); }
 .isle-voice-hint { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-top: 4px; }
@@ -481,7 +484,7 @@
 .isle-steppers { spacing: 8px; }
 .isle-stepper { padding: 3px 4px 3px 12px; spacing: 4px; border-radius: 999px; background-color: #1c1c1e; }
 .isle-stepper-name { font-size: 12px; font-weight: 500; color: rgba(255, 255, 255, 0.55); width: 40px; }
-.isle-stepper-value { font-size: 15px; font-weight: 600; width: 26px; text-align: right; padding-right: 6px; }
+.isle-stepper-value { font-size: 15px; font-weight: 600; letter-spacing: -0.1px; width: 26px; text-align: right; padding-right: 6px; }
 .isle-stepper-button { padding: 6px; border-radius: 999px; color: rgba(255, 255, 255, 0.8); }
 .isle-stepper-button:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
 
@@ -505,7 +508,7 @@
  * whole rows, close as macOS's Reminders widget sets them. */
 .isle-reminders-header { height: 24px; padding: 0 0 0 2px; spacing: 4px; }
 .isle-reminders-title { font-size: 17px; font-weight: 600; color: #ff9f0a; letter-spacing: -0.2px; }
-.isle-reminders-count { font-size: 17px; font-weight: 600; color: #ff9f0a; padding-right: 2px; }
+.isle-reminders-count { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; color: #ff9f0a; padding-right: 2px; }
 .isle-reminders-add { padding: 5px; border-radius: 99px; color: rgba(255, 255, 255, 0.55); }
 .isle-reminders-add:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
 
