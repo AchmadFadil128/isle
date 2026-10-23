@@ -184,10 +184,11 @@
 .isle-call-icon { color: #30d158; }
 .isle-call-muted { color: #ff453a; }
 .isle-compact-call-time { color: #30d158; }
-.isle-compact-second { spacing: 5px; }
+.isle-compact-second { spacing: 8px; }
 .isle-compact-second-call { color: #30d158; }
-.isle-compact-second-time { font-size: 13px; font-weight: 600; }
-.isle-compact-in-bar .isle-compact-second-time { font-size: 12px; }
+/* As large as the clock and on its line: the two times read as one row. */
+.isle-compact-second-time { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+.isle-compact-in-bar .isle-compact-second-time { font-size: 15px; letter-spacing: -0.1px; }
 
 /* ── Alerts (peek) ────────────────────────────────────── */
 

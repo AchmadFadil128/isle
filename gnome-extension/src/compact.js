@@ -22,8 +22,8 @@ import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon} from './widgets.js';
 const ASSISTANT_SIZE = 18;
 
 const SIZES = {
-    hanging: {clock: 164, activities: 256, art: 24, artRadius: 6, ring: 20, bars: 16, moon: 13, call: 15, second: 15},
-    inBar: {clock: 144, activities: 232, art: 22, artRadius: 6, ring: 18, bars: 14, moon: 12, call: 14, second: 13},
+    hanging: {clock: 164, activities: 256, art: 24, artRadius: 6, ring: 20, bars: 16, moon: 13, call: 15},
+    inBar: {clock: 144, activities: 232, art: 22, artRadius: 6, ring: 18, bars: 14, moon: 12, call: 14},
 };
 /** The music bars' opacity while the song is paused. */
 const PAUSED_OPACITY = 110;
@@ -83,10 +83,11 @@ export const CompactView = GObject.registerClass({
 
         this._right = new St.Bin({style_class: 'isle-compact-slot', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
         this._bars = new Bars({height: 16});
-        // A second activity on the right: the timer's ring and time left, or a call's phone and length.
-        this._secondRing = new Ring({size: 15, lineWidth: 2.5, trackOpacity: 0.2});
-        this._secondTimer = this._secondPart(this._secondRing, 'isle-compact-second');
-        this._secondPhone = new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 13, y_align: Clutter.ActorAlign.CENTER});
+        // A second activity on the right, its time as large as the clock and level with it: the timer's
+        // time left (beside the song's bars while one plays), or a call's phone and length.
+        this._secondBars = new Bars({height: 16});
+        this._secondTimer = this._secondPart(this._secondBars, 'isle-compact-second');
+        this._secondPhone = new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 15, y_align: Clutter.ActorAlign.CENTER});
         this._secondCall = this._secondPart(this._secondPhone, 'isle-compact-second isle-compact-second-call');
         /** How much wider the right side is than a slot, while it holds a second time (balanced on the left). */
         this._secondExtra = 0;
@@ -123,8 +124,9 @@ export const CompactView = GObject.registerClass({
             this._tickRecording();
             this._refreshRing();
             this._tickSecond();
-            // Measure the privacy dots' balance now that they can be.
-            if (this.mapped && this._privacyBalance.visible && !this._privacyBalance.width)
+            // Measure what could not be off screen: the privacy dots' balance, a second time's width.
+            const second = this._right.child === this._secondTimer || this._right.child === this._secondCall;
+            if (this.mapped && ((this._privacyBalance.visible && !this._privacyBalance.width) || second))
                 this._refresh();
         });
         this._tickClock();
@@ -204,11 +206,9 @@ export const CompactView = GObject.registerClass({
         const size = SIZES[inBar ? 'inBar' : 'hanging'];
         this._art.resize(size.art, size.artRadius);
         this._ring.set_size(size.ring, size.ring);
-        this._bars.maxHeight = size.bars;
+        this._bars.maxHeight = this._secondBars.maxHeight = size.bars;
         this._moon.icon_size = size.moon;
-        this._phone.icon_size = this._micOff.icon_size = size.call;
-        this._secondRing.set_size(size.second, size.second);
-        this._secondPhone.icon_size = size.second - 2;
+        this._phone.icon_size = this._micOff.icon_size = this._secondPhone.icon_size = size.call;
         if (inBar)
             this.add_style_class_name('isle-compact-in-bar');
         else
@@ -276,6 +276,9 @@ export const CompactView = GObject.registerClass({
         }
         if (this._right.child !== right)
             this._right.child = right;
+        // The song's bars beside the timer's time, while the song is the first activity; set before
+        // the right side is measured.
+        this._secondBars.visible = primary === 'music' && second === 'timer';
         this._tickSecond();
         this._balanceSecond(right);
         if (!inSlot && !this._privacyDots.get_parent())
@@ -285,7 +288,8 @@ export const CompactView = GObject.registerClass({
         else
             this._privacyDots.remove_style_class_name('isle-privacy-dots-in-slot');
         // Paused: the bars rest, dimmed.
-        this._bars.ease({opacity: playing ? 255 : PAUSED_OPACITY, duration: 200});
+        for (const bars of [this._bars, this._secondBars])
+            bars.ease({opacity: playing ? 255 : PAUSED_OPACITY, duration: 200});
         this._syncBars();
         const outside = this._privacyDots.visible && !inSlot;
         this._privacyBalance.visible = outside;
@@ -351,21 +355,30 @@ export const CompactView = GObject.registerClass({
             return;
         }
         let next;
+        const length = part._time.text.length;
         if (part === this._secondTimer) {
             const {pomodoro} = this._daemon.state;
             if (!pomodoro || pomodoro.phase === 'idle')
                 return;
             const remaining = pomodoro.running ? Math.max(0, pomodoro.ends_at_ms - Format.nowMs()) : pomodoro.remaining_ms;
             const [r, g, b] = timerColor(pomodoro.phase);
-            this._secondRing.color = [r, g, b];
-            this._secondRing.progress = 1 - remaining / pomodoro.duration_ms;
             part._time.text = Format.duration(remaining);
-            part._time.style = `color: rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)});`;
+            // Restyled only when the phase changes, not each second.
+            const style = `color: rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)});`;
+            if (part._time.style !== style)
+                part._time.style = style;
             next = pomodoro.running ? remaining % 1000 || 1000 : 0;
         } else {
             const elapsedMs = (GLib.get_monotonic_time() - this._call.since) / 1000;
             part._time.text = Format.duration(elapsedMs);
             next = 1000 - (elapsedMs % 1000);
+        }
+        // Longer or shorter (59:59 to 1:00:00): the side is measured again, or the time would be cut.
+        if (part._time.text.length !== length && this.mapped) {
+            const widthBefore = this.preferredWidth;
+            this._balanceSecond(part);
+            if (this.preferredWidth !== widthBefore)
+                this.emit('width-changed');
         }
         if (next && this.mapped)
             this._later('second', next + 10, () => this._tickSecond());
@@ -389,7 +402,9 @@ export const CompactView = GObject.registerClass({
     }
 
     _syncBars() {
-        this._bars.playing = this.mapped && !this._idle && Playback.isPlaying(this._daemon.state.nowPlaying);
+        const playing = this.mapped && !this._idle && Playback.isPlaying(this._daemon.state.nowPlaying);
+        this._bars.playing = playing;
+        this._secondBars.playing = playing && this._secondBars.visible && this._right.child === this._secondTimer;
     }
 
     /** Shows how long the screen has been recording, once a second while on screen. */
