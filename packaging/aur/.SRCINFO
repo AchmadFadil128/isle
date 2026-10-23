@@ -1,6 +1,6 @@
 pkgbase = isle-bin
 	pkgdesc = A dynamic island for the GNOME Shell top bar: music with synced lyrics, calls, a focus timer, a calendar, a file shelf and a voice assistant
-	pkgver = 0.8.1
+	pkgver = 0.9.0
 	pkgrel = 1
 	url = https://github.com/zickrian/isle
 	install = isle-bin.install
@@ -21,7 +21,7 @@ pkgbase = isle-bin
 	conflicts = isle
 	options = !strip
 	options = !debug
-	source_x86_64 = https://github.com/zickrian/isle/releases/download/v0.8.1/isle-0.8.1-x86_64-linux.tar.gz
-	sha256sums_x86_64 = a8930d0c4d27289c48b865db66cc57f04c4138ebb94eca398bcb44e3f70c859f
+	source_x86_64 = https://github.com/zickrian/isle/releases/download/v0.9.0/isle-0.9.0-x86_64-linux.tar.gz
+	sha256sums_x86_64 = 76fcfa4809e1fa306275e5f0841aa4bc1d2905f8e87f857fd6cb791d35a45419
 
 pkgname = isle-bin
