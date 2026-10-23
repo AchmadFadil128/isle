@@ -147,11 +147,19 @@ class UsagePage extends Page {
         const providers = this._providers();
         const index = this._index();
         this._shown = providers[index]?.id ?? null;
-        this._card.destroy_all_children();
-        this._bars = [];
-        if (providers[index])
-            this._card.add_child(this._content(providers[index]));
-        this._updateDots(providers.length, index);
+        // Built anew only when what it shows changed; else its times move on in place.
+        const key = JSON.stringify([providers.map(({updated_ms: _at, ...rest}) => rest), this._marks, index]);
+        if (key !== this._key) {
+            this._key = key;
+            this._card.destroy_all_children();
+            this._bars = [];
+            this._resetLabels = [];
+            if (providers[index])
+                this._card.add_child(this._content(providers[index]));
+            this._updateDots(providers.length, index);
+        } else if (providers[index]) {
+            this._retime(providers[index]);
+        }
         // Fresh numbers arriving as the bars grow in: the new bars carry on growing, never jump to full.
         const filled = this._filled();
         if (filled < 1)
@@ -251,6 +259,14 @@ class UsagePage extends Page {
         return Math.min(1, elapsed / FILL_MS);
     }
 
+    /** Brings "Updated 14:32" and "resets in 12m" up to date. */
+    _retime(provider) {
+        const fromCodex = provider.note?.startsWith('As of');
+        if (!provider.note || fromCodex)
+            this._stamp.text = updated(provider.updated_ms, fromCodex);
+        this._resetLabels.forEach(([reset, ms]) => (reset.text = resets(ms)));
+    }
+
     _content(provider) {
         const accent = ACCENTS[provider.id] ?? FALLBACK;
         const content = new St.BoxLayout({...VERTICAL, style_class: 'isle-usage-content', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
@@ -266,6 +282,7 @@ class UsagePage extends Page {
         const stamp = label(warning ? provider.note : updated(provider.updated_ms, fromCodex),
             `isle-usage-stamp${warning ? ' warning' : ''}`, {x_expand: true, x_align: Clutter.ActorAlign.END});
         stamp.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        this._stamp = stamp;
         head.add_child(stamp);
         content.add_child(head);
 
@@ -287,8 +304,11 @@ class UsagePage extends Page {
         const title = label(name, 'isle-usage-window', {x_expand: true});
         title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         line.add_child(title);
-        if (resetsAt > 0)
-            line.add_child(label(resets(resetsAt), 'isle-usage-reset'));
+        if (resetsAt > 0) {
+            const reset = label(resets(resetsAt), 'isle-usage-reset');
+            this._resetLabels.push([reset, resetsAt]);
+            line.add_child(reset);
+        }
         line.add_child(label(`${Math.round(used)}%`, `isle-usage-percent ${level}`));
         limit.add_child(line);
 
