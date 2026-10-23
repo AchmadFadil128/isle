@@ -133,7 +133,10 @@ export const ShelfPage = GObject.registerClass({
             this.emit('request-keyboard', true);
             return Clutter.EVENT_PROPAGATE;
         });
-        text.connect('text-changed', () => (this._clips.query = this._search.text));
+        text.connect('text-changed', () => {
+            if (!this._clearingSearch)
+                this._clips.query = this._search.text;
+        });
         text.connect('activate', () => this._clips.activateSelected());
         text.connect('key-press-event', (_text, event) => this._onSearchKey(event));
         // The selection outline only means something while typing.
@@ -258,10 +261,12 @@ export const ShelfPage = GObject.registerClass({
 
     // Updates
 
-    /** Redraws a view now if the page is open, else when it next opens. */
+    /** Redraws a view now if the page is open, else when it is next warmed up or opens. */
     _refresh(view) {
         if (!this.active) {
             this._stale.add(view);
+            // Also while still on screen, fading out as the island closes.
+            this.markCold({force: true});
             return;
         }
         if (view === 'clips') {
@@ -411,15 +416,25 @@ export const ShelfPage = GObject.registerClass({
 
     // Page
 
-    onActivate() {
-        if (this._stale.delete('clips'))
+    /** Redraws the views that changed while closed. */
+    _flushStale() {
+        const clips = this._stale.delete('clips');
+        if (clips)
             this._updateClips();
-        else
-            this._clips.refreshAges();
         if (this._stale.delete('files')) {
             this._files.update();
             this._updateFilesHint();
         }
+        return clips;
+    }
+
+    warmUp() {
+        this._flushStale();
+    }
+
+    onActivate() {
+        if (!this._flushStale())
+            this._clips.refreshAges();
         this.daemon.call('shelf', 'Refresh');
     }
 
@@ -431,8 +446,14 @@ export const ShelfPage = GObject.registerClass({
         for (const id of this._copied.filter(copied => items.some(item => item.id === copied)))
             this.daemon.call('clipboard', 'Touch', id);
         this._copied = [];
-        // Each visit starts with an empty search.
-        this._search.text = '';
+        // Each visit starts with an empty search; the cards follow out of sight (see `warmUp`).
+        if (this._search.text) {
+            this._clearingSearch = true;
+            this._search.text = '';
+            this._clearingSearch = false;
+            this._clips.clearQuery();
+            this._refresh('clips');
+        }
         this._closeSearch();
         this._endConfirm();
     }
