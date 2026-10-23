@@ -1355,6 +1355,12 @@ export class Controller {
     /** Asks a typed request, with what the island knows, as `_listen` does for a spoken one. */
     async _ask(text) {
         this._askedTyped = true;
+        // In the conversation, what was sent shows at once, as in Messages.
+        if (this._voice.chatOpen) {
+            this._sent = {role: 'user', text, spoken: false, at: Date.now()};
+            this._chatItems.push(this._sent);
+            this._voice.setHistory([...this._chatItems]);
+        }
         const request = ++this._listenRequest;
         this._voice.setState({phase: 'thinking', heard: text});
         this._render();
@@ -1529,10 +1535,19 @@ export class Controller {
         if (this._chatStale(now))
             this._chatItems = [];
         this._chatAt = now;
-        if (state.heard)
+        // Shown already when sent from the conversation.
+        const sent = this._sent && this._chatItems.includes(this._sent) && this._sent.text === state.heard;
+        this._sent = null;
+        if (state.heard && !sent)
             this._chatItems.push({role: 'user', text: state.heard, spoken: !this._askedTyped, at: now});
+        // The command it ran (or was told not to) goes in as one line; in the conversation the card makes way.
+        const card = this._voice.endedCard;
+        if (card)
+            this._chatItems.push({role: 'command', command: card.command, status: card.status, at: now});
         if (state.reply)
             this._chatItems.push({role: 'assistant', text: state.reply, at: now});
+        if (card && this._voice.chatOpen)
+            this._voice.showCard(null);
         this._chatItems = this._chatItems.slice(-CHAT_SHOWN);
         this._voice.setHistory([...this._chatItems]);
     }

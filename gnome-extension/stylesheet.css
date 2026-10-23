@@ -259,6 +259,17 @@
 .isle-voice-earlier { color: rgba(255, 255, 255, 0.5); }
 .isle-voice-still { font-size: 12px; color: rgba(255, 255, 255, 0.42); padding-top: 4px; }
 .isle-voice-undo { spacing: 8px; padding-bottom: 6px; }
+.isle-voice-ideas { spacing: 6px; padding-top: 8px; }
+.isle-voice-idea {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 11px;
+    border-radius: 999px;
+    color: rgba(255, 255, 255, 0.8);
+    background-color: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.isle-voice-idea:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.13); }
 .isle-voice-undo-text { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
 .isle-voice-undo-button { font-size: 12px; padding: 3px 10px; }
 
@@ -273,7 +284,16 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
 }
 .isle-card-ended { padding: 8px 12px; spacing: 6px; background-color: rgba(255, 255, 255, 0.035); }
-.isle-card-top { spacing: 8px; }
+.isle-card-top { spacing: 9px; }
+.isle-card-glyph {
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    color: rgba(255, 255, 255, 0.85);
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.isle-card-ended .isle-card-glyph { width: 18px; height: 18px; border-radius: 6px; color: rgba(255, 255, 255, 0.6); }
 .isle-card-title { font-size: 13px; font-weight: 600; }
 .isle-card-chips { spacing: 5px; }
 .isle-card-chip { spacing: 4px; padding: 2px 8px 2px 7px; border-radius: 999px; color: #ffb340; background-color: rgba(255, 179, 64, 0.13); }
@@ -325,7 +345,8 @@
 .isle-chat-title { font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.45); }
 .isle-chat-new { padding: 5px; color: rgba(255, 255, 255, 0.75); background-color: rgba(255, 255, 255, 0.08); }
 .isle-chat-new:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.16); }
-.isle-chat-list { spacing: 10px; padding-bottom: 4px; }
+.isle-chat-list { spacing: 10px; padding-top: 6px; padding-bottom: 4px; }
+.isle-chat-scroll { -st-vfade-offset: 28px; }
 .isle-chat-user { padding: 6px 12px; spacing: 5px; border-radius: 15px; background-color: rgba(255, 255, 255, 0.12); }
 .isle-chat-user-text { font-size: 13px; }
 .isle-chat-spoken { color: rgba(255, 255, 255, 0.5); margin-top: 3px; }

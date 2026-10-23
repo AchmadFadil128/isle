@@ -95,6 +95,20 @@ class Sweep extends St.DrawingArea {
     }
 });
 
+/**
+ * An answer's light Markdown as Pango markup: **bold**, `code` and "- " lists; everything else as written.
+ * The text is escaped first, so nothing in it can be read as markup.
+ */
+export function answerMarkup(text) {
+    return text.split('\n').map(line => {
+        let out = GLib.markup_escape_text(line, -1);
+        out = out.replace(/^\s*[-*•]\s+/, '  •  ');
+        out = out.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+        out = out.replace(/`([^`]+)`/g, '<span font_family="monospace" background="#ffffff" bgalpha="12%">$1</span>');
+        return out;
+    }).join('\n');
+}
+
 /** How a command's words are coloured: a little like a shell's own highlighting. */
 const SHELL = {
     prompt: ['#ffffff', 45],
@@ -163,6 +177,10 @@ export const CommandCard = GObject.registerClass({
         super._init({...VERTICAL, style_class: 'isle-card', x_expand: true});
         this.set_pivot_point(0.5, 0.5);
         const top = new St.BoxLayout({style_class: 'isle-card-top'});
+        // The terminal's own sign, in a small tile, so the card reads as a command at a glance.
+        this._glyph = new St.Bin({style_class: 'isle-card-glyph', y_align: Clutter.ActorAlign.CENTER,
+            child: new St.Icon({gicon: icon('isle-terminal-symbolic'), icon_size: 12})});
+        top.add_child(this._glyph);
         this._title = label('', 'isle-card-title', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         this._title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this._chips = new St.BoxLayout({style_class: 'isle-card-chips', y_align: Clutter.ActorAlign.CENTER});
@@ -340,16 +358,25 @@ export const ChatView = GObject.registerClass({
      * gets the time above it; its answers after yours get its face.
      */
     setItems(items) {
+        // Those after the ones shown before are new: they rise into place.
+        const known = this._items.length && items.length >= this._items.length && items[0] === this._items[0]
+            ? this._items.length : items.length;
         this._items = items;
         this._list.destroy_all_children();
         let last = null;
-        for (const item of items) {
+        items.forEach((item, index) => {
             if (item.at && (!last?.at || item.at - last.at > TIME_GAP_MS))
                 this._list.add_child(label(Format.timeOfDay(GLib.DateTime.new_from_unix_local(Math.floor(item.at / 1000))),
                     'isle-chat-time', {x_align: Clutter.ActorAlign.CENTER}));
-            this._list.add_child(this._row(item, last?.role !== 'assistant'));
+            const row = this._row(item, last?.role !== 'assistant');
+            this._list.add_child(row);
+            if (index >= known && St.Settings.get().enable_animations) {
+                row.set({opacity: 0, translation_y: 10});
+                row.ease({opacity: 255, translation_y: 0, duration: 260, delay: 60 * (index - known),
+                    mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            }
             last = item;
-        }
+        });
         this._title.text = 'Conversation';
     }
 
@@ -390,8 +417,9 @@ export const ChatView = GObject.registerClass({
         const face = withFace && this._look ? new BotIcon(FACE_SIZE, this._look) : new St.Widget({width: FACE_SIZE});
         face.y_align = Clutter.ActorAlign.START;
         row.add_child(face);
-        const text = label(item.text, 'isle-chat-reply', {x_expand: true});
-        wrapLines(text);
+        const text = label('', 'isle-chat-reply', {x_expand: true});
+        text.clutter_text.set({line_wrap: true, line_wrap_mode: Pango.WrapMode.WORD_CHAR, ellipsize: Pango.EllipsizeMode.NONE});
+        text.clutter_text.set_markup(answerMarkup(item.text));
         row.add_child(text);
         return row;
     }
