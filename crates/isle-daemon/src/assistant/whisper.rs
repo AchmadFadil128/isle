@@ -19,11 +19,15 @@ use super::child::{self, Group};
 use crate::store::{data_dir, write_private};
 
 const NATIVE: &str = "isle-whisper";
+/// Set, the user picked the GPUs (by their Vulkan numbers) the helper may use.
+const PINNED: &str = "GGML_VK_VISIBLE_DEVICES";
 /// How long `isled --doctor` waits for the helper to say where it runs.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Set once the GPU failed (a driver that crashes): the processor from then on, until isled restarts.
 static GPU_FAILED: AtomicBool = AtomicBool::new(false);
+/// Set once the helper found no GPU to use: later ones skip loading Vulkan, until isled restarts.
+static NO_GPU: AtomicBool = AtomicBool::new(false);
 
 /// `isle-whisper` beside isled (both go in ~/.local/bin), else on the PATH.
 fn native() -> Option<PathBuf> {
@@ -152,7 +156,8 @@ impl Whisper {
     /// starts all the same, and answers that the model is not downloaded.
     pub fn start(model: &str, language: &str) -> anyhow::Result<Self> {
         let helper = native().context("speech recognition is not set up")?;
-        Self::start_with(helper, model, language, GPU_FAILED.load(Ordering::Relaxed))
+        let cpu = GPU_FAILED.load(Ordering::Relaxed) || NO_GPU.load(Ordering::Relaxed);
+        Self::start_with(helper, model, language, cpu)
     }
 
     fn start_with(helper: PathBuf, model: &str, language: &str, cpu: bool) -> anyhow::Result<Self> {
@@ -231,10 +236,15 @@ impl Whisper {
     async fn attempt(&mut self, audio: &[i16]) -> anyhow::Result<String> {
         if !self.ready {
             let ready = self.read().await?;
+            let device = ready["device"].as_str();
             info!(
                 "speech recognition runs on {}",
-                ready["device"].as_str().unwrap_or("an unknown device")
+                device.unwrap_or("an unknown device")
             );
+            // No GPU to use, and none picked by hand: the next helpers start on the processor.
+            if self.on_gpu && device == Some("cpu") && std::env::var_os(PINNED).is_none() {
+                NO_GPU.store(true, Ordering::Relaxed);
+            }
             self.ready = true;
         }
         self.ask(audio).await
