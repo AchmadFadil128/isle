@@ -162,6 +162,8 @@ export const VoiceView = GObject.registerClass({
         'set-up': {},
         // The stop button, while a request is being worked on.
         'stop': {},
+        // The mic in the empty field, or a tap on the face while typing: say it instead.
+        'speak': {},
         // The keyboard button: type the request instead of saying it.
         'type-requested': {},
         // A typed request, sent with Enter.
@@ -200,7 +202,7 @@ export const VoiceView = GObject.registerClass({
             accessible_name: 'Speak',
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._faceButton.connect('clicked', () => this.emit('orb-clicked'));
+        this._faceButton.connect('clicked', () => this.emit(this.typing ? 'speak' : 'orb-clicked'));
         row.add_child(this._faceButton);
 
         this._texts = new St.BoxLayout({...VERTICAL, y_align: Clutter.ActorAlign.CENTER});
@@ -264,11 +266,18 @@ export const VoiceView = GObject.registerClass({
             x_expand: true, visible: false});
         const caret = this._entry.clutter_text;
         caret.connect('activate', () => this._send());
-        // Sent from inside the field, as in Messages.
-        this._sendButton = new St.Bin({style_class: 'isle-voice-send', reactive: true,
-            child: new St.Icon({gicon: icon('isle-send-symbolic'), icon_size: 14})});
+        // Inside the field, as in Messages: a mic while it is empty (speak instead), Send once there are words.
+        this._sendIcon = new St.Icon({gicon: icon('isle-mic-symbolic'), icon_size: 14});
+        this._sendButton = new St.Bin({style_class: 'isle-voice-send', reactive: true, child: this._sendIcon});
+        this._sendButton.set_pivot_point(0.5, 0.5);
+        this._sendShows = null;
         this._entry.set_secondary_icon(this._sendButton);
-        this._entry.connect('secondary-icon-clicked', () => this._send());
+        this._entry.connect('secondary-icon-clicked', () => {
+            if (this._entry.text.trim())
+                this._send();
+            else
+                this.emit('speak');
+        });
         caret.connect('text-changed', () => {
             this._micTarget = KEY_LEVEL;
             this._syncSend();
@@ -520,11 +529,20 @@ export const VoiceView = GObject.registerClass({
     }
 
     // Dim until there is something to send.
+    // The mic while the field is empty, Send once there are words; the new one pops in.
     _syncSend() {
-        if (this._entry.text.trim())
-            this._sendButton.remove_style_class_name('isle-voice-send-empty');
-        else
-            this._sendButton.add_style_class_name('isle-voice-send-empty');
+        const shows = this._entry.text.trim() ? 'send' : 'mic';
+        if (shows === this._sendShows)
+            return;
+        this._sendShows = shows;
+        this._sendIcon.gicon = icon(shows === 'send' ? 'isle-send-symbolic' : 'isle-mic-symbolic');
+        this._sendButton.style_class = shows === 'send' ? 'isle-voice-send' : 'isle-voice-send isle-voice-send-mic';
+        this._sendButton.accessible_name = shows === 'send' ? 'Send' : 'Speak instead';
+        if (!St.Settings.get().enable_animations || !this._sendButton.mapped)
+            return;
+        this._sendButton.remove_all_transitions();
+        this._sendButton.set({scale_x: 0.6, scale_y: 0.6});
+        this._sendButton.ease({scale_x: 1, scale_y: 1, duration: 200, mode: Clutter.AnimationMode.EASE_OUT_BACK});
     }
 
     _showSteps(done) {

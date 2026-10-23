@@ -438,6 +438,11 @@ export class Controller {
         this._voice.connect('orb-clicked', () => this._onVoiceKey());
         this._voice.connect('type-requested', () => this._startTyping(''));
         this._voice.connect('typed', (_view, text) => this._ask(text));
+        // Typing, then speaking after all: the field goes, it listens (the conversation stays open).
+        this._voice.connect('speak', () => {
+            this._autoListens = 0;
+            this._listen();
+        });
         this._voice.connect('new-chat', () => this._newChat());
         this._voice.connect('undo-new-chat', () => this._undoNewChat());
         this._voice.connect('stop', () => {

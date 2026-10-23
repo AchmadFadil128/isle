@@ -364,7 +364,8 @@
 .isle-voice-action:active { background-color: rgba(255, 255, 255, 0.22); }
 .isle-voice-stop { padding: 10px; color: #ffffff; background-color: rgba(255, 255, 255, 0.14); }
 .isle-voice-send { padding: 7px; border-radius: 999px; color: #000000; background-color: #ffffff; transition-duration: 150ms; }
-.isle-voice-send-empty { color: rgba(255, 255, 255, 0.45); background-color: rgba(255, 255, 255, 0.12); }
+.isle-voice-send-mic { color: #ffffff; background-color: rgba(255, 255, 255, 0.14); }
+.isle-voice-send-mic:hover { background-color: rgba(255, 255, 255, 0.24); }
 
 /* The typed request: a quiet field, no accent ring (GNOME's and Blur my Shell's, with !important). */
 #isleIsland .isle-voice-entry,
