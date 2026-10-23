@@ -320,6 +320,11 @@ export const VoiceView = GObject.registerClass({
         this._chat.visible = false;
         this._chat.connect('new-chat', () => this.emit('new-chat'));
         this._chat.connect('close', () => this.closeChat());
+        // Selecting text to copy takes the keys for a moment; they come back to the field, so typing goes on.
+        this._chat.connect('settled', () => {
+            if (this.typing)
+                this._entry.grab_key_focus();
+        });
         this._history = [];
         this._column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true});
         this._column.add_child(this._chat);

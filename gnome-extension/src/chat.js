@@ -46,16 +46,16 @@ const SELECTED_TEXT = Color.from_string('#ffffff')[1];
 /** A selection is copied once it has been still this long (ms) with the button up. */
 const SELECT_SETTLE_MS = 150;
 
-/** Puts `text` on the clipboard, and in the primary selection (the middle click) too. */
+/** Puts `text` on the clipboard (Ctrl+V); not in the middle-click selection, so a stray middle click or
+ * three-finger tap in the field never pastes it there. */
 function copy(text) {
-    const clipboard = St.Clipboard.get_default();
-    clipboard.set_text(St.ClipboardType.CLIPBOARD, text);
-    clipboard.set_text(St.ClipboardType.PRIMARY, text);
+    St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
 }
 
 // Text that can be selected, as in a terminal: once a selection settles (the button up), it is copied, and
-// `copied` says so. Watched through the selection itself: GNOME 49+ gives text no button events of its own.
-function copyable(actor, copied) {
+// `copied` says so; `settled` follows every press, so the keys can go back to the field. Watched through the
+// selection itself: GNOME 49+ gives text no button events of its own.
+function copyable(actor, copied, settled) {
     const text = actor.clutter_text;
     text.set({selectable: true, reactive: true});
     text.set_selection_color(SELECTION);
@@ -75,6 +75,7 @@ function copyable(actor, copied) {
             copied();
         }
         last = selected ?? '';
+        settled();
         return GLib.SOURCE_REMOVE;
     };
     for (const property of ['notify::selection-bound', 'notify::cursor-position']) {
@@ -411,7 +412,8 @@ export const CommandCard = GObject.registerClass({
 // The conversation so far: your words right, in bubbles (a mic for spoken ones), its answers left, the
 // commands it ran as short lines; + starts a new one. It scrolls, newest at the bottom.
 export const ChatView = GObject.registerClass({
-    Signals: {'new-chat': {}, 'close': {}},
+    // `settled`: a press on its text is over (a selection copied, or a plain click), so the keys go back.
+    Signals: {'new-chat': {}, 'close': {}, 'settled': {}},
 }, class ChatView extends St.BoxLayout {
     _init() {
         super._init({...VERTICAL, style_class: 'isle-chat', x_expand: true});
@@ -488,7 +490,7 @@ export const ChatView = GObject.registerClass({
         if (item.role === 'user') {
             const bubble = new Bubble({style_class: 'isle-chat-user', x_align: Clutter.ActorAlign.END}, BUBBLE_MAX);
             const text = label(item.text, 'isle-chat-user-text', {x_expand: true});
-            copyable(text, () => this._copied());
+            copyable(text, () => this._copied(), () => this.emit('settled'));
             wrapLines(text);
             bubble.add_child(text);
             return bubble;
@@ -515,7 +517,7 @@ export const ChatView = GObject.registerClass({
         face.y_align = Clutter.ActorAlign.START;
         row.add_child(face);
         const text = label('', 'isle-chat-reply', {x_expand: true});
-        copyable(text, () => this._copied());
+        copyable(text, () => this._copied(), () => this.emit('settled'));
         text.clutter_text.set({line_wrap: true, line_wrap_mode: Pango.WrapMode.WORD_CHAR, ellipsize: Pango.EllipsizeMode.NONE});
         text.clutter_text.set_markup(answerMarkup(item.text));
         row.add_child(text);
