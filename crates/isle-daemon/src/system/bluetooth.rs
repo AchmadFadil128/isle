@@ -30,13 +30,11 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
         .path("/")?
         .build()
         .await?;
-    let rule = MatchRule::builder()
-        .msg_type(MessageType::Signal)
-        .sender(BLUEZ)?
-        .interface("org.freedesktop.DBus.Properties")?
-        .member("PropertiesChanged")?
-        .build();
-    let mut changes = MessageStream::for_match_rule(rule, &system, None).await?;
+    // Only devices' and their batteries' changes: adapters and media transports change often.
+    let mut changes = futures_util::stream::select(
+        properties_changed(&system, DEVICE).await?,
+        properties_changed(&system, BATTERY).await?,
+    );
     let mut added = manager.receive_interfaces_added().await?;
 
     // Devices that were already connected when Isle started.
@@ -92,6 +90,18 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
             else => return Ok(()),
         }
     }
+}
+
+/// BlueZ's `PropertiesChanged` signals for `interface`.
+async fn properties_changed(system: &Connection, interface: &str) -> zbus::Result<MessageStream> {
+    let rule = MatchRule::builder()
+        .msg_type(MessageType::Signal)
+        .sender(BLUEZ)?
+        .interface("org.freedesktop.DBus.Properties")?
+        .member("PropertiesChanged")?
+        .arg(0, interface)?
+        .build();
+    MessageStream::for_match_rule(rule, system, None).await
 }
 
 async fn connection_changed(

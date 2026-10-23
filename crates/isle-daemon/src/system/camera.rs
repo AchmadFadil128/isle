@@ -34,7 +34,7 @@ pub async fn watch(iface: InterfaceRef<SystemService>) -> anyhow::Result<()> {
     let mut cameras: HashMap<WatchDescriptor, Camera> = HashMap::new();
     // Count the handles held right now, e.g. a call already running when
     // isled starts.
-    rescan(&mut watches, &mut cameras);
+    rescan(&mut watches, &mut cameras).await;
 
     // Start from what is published, which after a restart of this watcher
     // may be a stale "in use" that needs clearing.
@@ -49,7 +49,7 @@ pub async fn watch(iface: InterfaceRef<SystemService>) -> anyhow::Result<()> {
                 let event = event?;
                 if event.mask.contains(EventMask::Q_OVERFLOW) {
                     debug!("camera events were lost; counting open handles afresh");
-                    rescan(&mut watches, &mut cameras);
+                    rescan(&mut watches, &mut cameras).await;
                 } else if event.wd == directory {
                     let Some(name) = event.name.as_ref().and_then(|n| n.to_str()) else { continue };
                     if !name.starts_with("video") {
@@ -95,13 +95,18 @@ fn in_use(cameras: &HashMap<WatchDescriptor, Camera>) -> bool {
 
 /// Rebuilds the camera list and every count from scratch: at start-up, and
 /// when inotify lost events so the counts can no longer be trusted.
-fn rescan(watches: &mut Watches, cameras: &mut HashMap<WatchDescriptor, Camera>) {
+async fn rescan(watches: &mut Watches, cameras: &mut HashMap<WatchDescriptor, Camera>) {
     cameras.clear();
     for path in camera_paths() {
         add_camera(watches, cameras, path);
     }
+    // Every process's handles are looked at: file work, off the runtime's thread.
+    let devices: Vec<PathBuf> = cameras.values().map(|camera| camera.path.clone()).collect();
+    let open = tokio::task::spawn_blocking(move || holders(&devices))
+        .await
+        .unwrap_or_default();
     for camera in cameras.values_mut() {
-        camera.open = holders(&camera.path);
+        camera.open = open.get(&camera.path).copied().unwrap_or(0);
     }
 }
 
@@ -138,16 +143,26 @@ fn add_camera(
     }
 }
 
-/// Open handles on `device` from our own processes' `/proc/*/fd` (others' are unreadable).
-/// Only used when inotify counts are not trustworthy: at start-up and after lost events.
-fn holders(device: &Path) -> usize {
+/// Open handles on each of `devices` from our own processes' `/proc/*/fd` (others' are unreadable),
+/// in one pass. Only used when inotify counts are not trustworthy: at start-up and after lost events.
+fn holders(devices: &[PathBuf]) -> HashMap<PathBuf, usize> {
+    let mut open = HashMap::new();
     let Ok(processes) = fs::read_dir("/proc") else {
-        return 0;
+        return open;
     };
-    processes
+    if devices.is_empty() {
+        return open;
+    }
+    for fd in processes
         .flatten()
         .filter_map(|process| fs::read_dir(process.path().join("fd")).ok())
         .flat_map(|fds| fds.flatten())
-        .filter(|fd| fs::read_link(fd.path()).is_ok_and(|target| target == device))
-        .count()
+    {
+        if let Ok(target) = fs::read_link(fd.path())
+            && devices.contains(&target)
+        {
+            *open.entry(target).or_default() += 1;
+        }
+    }
+    open
 }

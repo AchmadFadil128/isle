@@ -1,29 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::collections::HashMap;
+
+use zbus::fdo::PropertiesProxy;
+use zbus::names::InterfaceName;
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::{Connection, proxy};
 
 use super::{Network, SystemEvent, SystemService, publish, settled};
 use zbus::object_server::InterfaceRef;
 
+const DESTINATION: &str = "org.freedesktop.NetworkManager";
+const INTERFACE: &str = "org.freedesktop.NetworkManager";
 /// NetworkManager's NM_STATE_CONNECTED_SITE; anything above means connected.
 const STATE_CONNECTED_SITE: u32 = 60;
-
-#[proxy(
-    interface = "org.freedesktop.NetworkManager",
-    default_service = "org.freedesktop.NetworkManager",
-    default_path = "/org/freedesktop/NetworkManager",
-    gen_blocking = false
-)]
-trait NetworkManager {
-    #[zbus(property)]
-    fn state(&self) -> zbus::Result<u32>;
-    #[zbus(property)]
-    fn primary_connection(&self) -> zbus::Result<OwnedObjectPath>;
-    #[zbus(property)]
-    fn primary_connection_type(&self) -> zbus::Result<String>;
-}
 
 #[proxy(
     interface = "org.freedesktop.NetworkManager.Connection.Active",
@@ -36,20 +27,19 @@ trait ActiveConnection {
 }
 
 pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> anyhow::Result<()> {
-    let manager = NetworkManagerProxy::builder(&system)
+    let properties = PropertiesProxy::builder(&system)
+        .destination(DESTINATION)?
+        .path("/org/freedesktop/NetworkManager")?
         .cache_properties(CacheProperties::No)
         .build()
         .await?;
-    let properties = zbus::fdo::PropertiesProxy::builder(&system)
-        .destination("org.freedesktop.NetworkManager")?
-        .path("/org/freedesktop/NetworkManager")?
-        .build()
+    let mut changes = properties
+        .receive_properties_changed_with_args(&[(0, INTERFACE)])
         .await?;
-    let mut changes = properties.receive_properties_changed().await?;
     let mut previous: Option<Network> = None;
 
     loop {
-        let current = read(&system, &manager).await?;
+        let current = read(&system, &properties).await?;
         let event = previous
             .as_ref()
             .filter(|before| {
@@ -68,18 +58,38 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
     }
 }
 
-async fn read(system: &Connection, manager: &NetworkManagerProxy<'_>) -> zbus::Result<Network> {
-    if manager.state().await? < STATE_CONNECTED_SITE {
+/// What NetworkManager is connected through, from one `GetAll` and the connection's name.
+async fn read(system: &Connection, properties: &PropertiesProxy<'_>) -> zbus::Result<Network> {
+    let all: HashMap<String, OwnedValue> = properties
+        .get_all(InterfaceName::from_static_str_unchecked(INTERFACE))
+        .await?;
+    let state = all.get("State").and_then(|v| u32::try_from(v).ok());
+    if state.unwrap_or(0) < STATE_CONNECTED_SITE {
         return Ok(Network::default());
     }
-    let connection = match manager.primary_connection_type().await?.as_str() {
+    let text = |key: &str| {
+        all.get(key)
+            .and_then(|v| String::try_from(v.try_clone().ok()?).ok())
+            .unwrap_or_default()
+    };
+    let connection = match text("PrimaryConnectionType").as_str() {
         "802-11-wireless" => "wifi",
         "802-3-ethernet" => "ethernet",
         _ => "other",
     };
-    let path = manager.primary_connection().await?;
+    let Some(path) = all
+        .get("PrimaryConnection")
+        .and_then(|v| OwnedObjectPath::try_from(v.try_clone().ok()?).ok())
+    else {
+        return Ok(Network {
+            connected: true,
+            connection: connection.into(),
+            name: String::new(),
+        });
+    };
     let name = match ActiveConnectionProxy::builder(system)
         .path(path)?
+        .cache_properties(CacheProperties::No)
         .build()
         .await
     {

@@ -128,6 +128,8 @@ struct Watcher {
     /// Remote art that could not be downloaded, and when; it is not tried
     /// again until [`ART_RETRY`] has passed and the player next updates.
     failed_art: HashMap<String, Instant>,
+    /// The last art URL found on disk and its path, so publishing again needs no file lookup.
+    art_found: Option<(String, String)>,
     /// The track whose lyrics are loaded or loading.
     lyrics_query: Option<TrackQuery>,
     /// Numbers each lyrics lookup, so late results and retry timers that
@@ -165,6 +167,7 @@ pub async fn watch(conn: Connection, iface: InterfaceRef<MediaService>) -> anyho
         events,
         downloading_art: None,
         failed_art: HashMap::new(),
+        art_found: None,
         lyrics_query: None,
         lyrics_lookup: 0,
         lyrics_failures: 0,
@@ -291,7 +294,10 @@ impl Watcher {
             .and_then(|v| string(v))
             .unwrap_or_default();
 
-        let mut changed = properties.receive_properties_changed().await?;
+        // Only the player's own properties: Identity and the like are read once, above.
+        let mut changed = properties
+            .receive_properties_changed_with_args(&[(0, PLAYER_INTERFACE)])
+            .await?;
         let mut seeked = player.receive_seeked().await?;
         let events = self.events.clone();
         let listener = tokio::spawn(async move {
@@ -412,6 +418,8 @@ impl Watcher {
     }
 
     async fn publish(&mut self) {
+        let art_url = self.active().map(|entry| entry.snapshot.art_url.clone());
+        let art_path = art_url.map(|url| self.art_path(url)).unwrap_or_default();
         let (now_playing, active) = match self.active() {
             Some(entry) => {
                 let s = &entry.snapshot;
@@ -423,7 +431,7 @@ impl Watcher {
                     title: s.title.clone(),
                     artist: s.artist.clone(),
                     album: s.album.clone(),
-                    art_path: art::local_path(&s.art_url).unwrap_or_default(),
+                    art_path,
                     length_us: s.length_us,
                     position_us: s.position_us,
                     sampled_at_ms: s.sampled_at_ms,
@@ -473,6 +481,20 @@ impl Watcher {
                 warn!("could not publish now playing: {err}");
             }
         }
+    }
+
+    /// Where the art at `url` is on disk, or empty while it is not (yet).
+    fn art_path(&mut self, url: String) -> String {
+        if let Some((found, path)) = &self.art_found
+            && *found == url
+        {
+            return path.clone();
+        }
+        let Some(path) = art::local_path(&url) else {
+            return String::new();
+        };
+        self.art_found = Some((url, path.clone()));
+        path
     }
 
     /// Publishes again at `at`, when a gap between songs stops being bridged.
