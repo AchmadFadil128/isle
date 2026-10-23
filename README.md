@@ -305,18 +305,18 @@ your last use of Codex.
 ## Resource usage
 
 Isle is built to run all day unnoticed. Measured on Ubuntu 24.04 with
-GNOME 46 (version 0.7.3):
+GNOME 46 (version 0.8.1):
 
 | Part | Memory | CPU when idle |
 |---|---|---|
-| `isled` (background service) | about 10 MB resident, of which about 3 MB its own | 0% (no polling: it wakes for real events and deadlines only) |
+| `isled` (background service) | about 9 MB resident, of which about 1.5 MB its own | 0% (no polling: it wakes for real events and deadlines only) |
 | Extension, inside GNOME Shell | about 10 MB more for the shell, flat over hours of use | 0% when nothing moves |
-| `isle-shelf` (drag and drop) | about 45 MB (GTK 4, drawn on the CPU); only while the files tray is open, and 20 seconds after | 0% |
+| `isle-shelf` (drag and drop) | about 43 MB (GTK 4, drawn on the CPU, no GPU driver loaded); only while the files tray is open, and 20 seconds after | 0% |
 | Voice assistant | the AI and speech recognition only while it works on a request | 0% between requests |
 
 | On disk | Size |
 |---|---|
-| Programs (`isled` 8.5 MB, `isle-shelf` 1.9 MB) | 10.4 MB |
+| Programs (`isled` 6.1 MB, `isle-shelf` 0.7 MB) | 6.8 MB |
 | Speech recognition (`isle-whisper` 29 MB, most of it GPU code; the `small` model 265 MB), only once set up | 294 MB |
 | Extension | 0.5 MB |
 | Inter typeface | 0.9 MB |
