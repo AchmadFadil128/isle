@@ -26,6 +26,17 @@ fn main() -> glib::ExitCode {
     if env::var_os("GSK_RENDERER").is_none() {
         // SAFETY: as above.
         unsafe { env::set_var("GSK_RENDERER", "cairo") };
+        // Nor are OpenGL and Vulkan loaded, which the CPU renderer never uses (GDK_DEBUG before
+        // GTK 4.16, GDK_DISABLE since), unless the user set them.
+        let (variable, value) = if gtk::minor_version() < 16 {
+            ("GDK_DEBUG", "gl-disable,vulkan-disable")
+        } else {
+            ("GDK_DISABLE", "gl,vulkan")
+        };
+        if env::var_os(variable).is_none() {
+            // SAFETY: as above.
+            unsafe { env::set_var(variable, value) };
+        }
     }
 
     // The bus name is owned by hand (not through GApplication) so the

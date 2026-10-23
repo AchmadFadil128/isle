@@ -419,7 +419,7 @@ hovering opens the Notifications page.
   locked.
 - The assistant's AI and speech recognition run only while a request is worked on, at a lower
   priority, in a process group of their own that is killed whole; transcribing uses at most half the
-  cores. The files tray's helper quits a minute after the tray closes.
+  cores. The files tray's helper quits 20 seconds after the tray closes.
 - Animations run on the display's frame clock only while a spring moves.
 - The open island ticks only the visible page (scrubber 4×/s, timer 1×/s).
 - Calls are found from the shell's own audio events, never polled. The

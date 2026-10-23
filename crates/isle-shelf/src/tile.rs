@@ -320,6 +320,20 @@ fn copy(file: &gio::File, content_type: Option<&str>, widget: &gtk::Widget) {
         clipboard.set_content(Some(&as_file)).ok();
         return;
     };
+    // A PNG is offered as its own bytes, never decoded. Other kinds are offered as PNG too, which
+    // apps that take no other format need, so they go through a texture.
+    if content_type == Some("image/png") {
+        glib::spawn_future_local(async move {
+            let content = match gio::spawn_blocking(move || std::fs::read(path)).await {
+                Ok(Ok(png)) => {
+                    gdk::ContentProvider::for_bytes("image/png", &glib::Bytes::from_owned(png))
+                }
+                _ => as_file,
+            };
+            clipboard.set_content(Some(&content)).ok();
+        });
+        return;
+    }
     glib::spawn_future_local(async move {
         match gio::spawn_blocking(move || gdk::Texture::from_filename(path)).await {
             Ok(Ok(texture)) => clipboard.set_texture(&texture),

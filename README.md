@@ -311,7 +311,7 @@ GNOME 46 (version 0.7.3):
 |---|---|---|
 | `isled` (background service) | about 10 MB resident, of which about 3 MB its own | 0% (no polling: it wakes for real events and deadlines only) |
 | Extension, inside GNOME Shell | about 10 MB more for the shell, flat over hours of use | 0% when nothing moves |
-| `isle-shelf` (drag and drop) | about 45 MB (GTK 4, drawn on the CPU); only while the files tray is open, and a minute after | 0% |
+| `isle-shelf` (drag and drop) | about 45 MB (GTK 4, drawn on the CPU); only while the files tray is open, and 20 seconds after | 0% |
 | Voice assistant | the AI and speech recognition only while it works on a request | 0% between requests |
 
 | On disk | Size |

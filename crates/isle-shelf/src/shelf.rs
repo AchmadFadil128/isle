@@ -21,7 +21,7 @@ const SHELF_ICON: &[u8] = include_bytes!("../../../gnome-extension/icons/isle-sh
 /// isled keeps this many files; a full shelf turns drops away.
 const CAPACITY: usize = 6;
 /// Hidden this long, the helper quits, its memory freed; the extension's next Show starts it again.
-const IDLE_QUIT_SECS: u32 = 60;
+const IDLE_QUIT_SECS: u32 = 20;
 
 /// One file on the shelf, as isled describes it.
 #[derive(Debug, Clone, Deserialize)]
@@ -275,7 +275,9 @@ impl ShelfWindow {
                     let proxy = values[0].get::<gio::DBusProxy>().ok()?;
                     if let Some(inner) = weak.upgrade() {
                         inner.items.replace(items(&proxy));
-                        ShelfWindow(inner).render();
+                        let shelf = ShelfWindow(inner);
+                        shelf.render_tiles(true);
+                        shelf.render();
                     }
                     None
                 });
@@ -316,10 +318,14 @@ impl ShelfWindow {
         set_class(&inner.stack, "over", inner.over.get());
         set_class(&inner.stack, "full", dragging && full);
 
-        self.render_tiles(true);
-        if dragging && !full && count > 0 {
-            // Where the file will land: the newest file comes first.
-            inner.tiles.prepend(&inner.slot);
+        // Where the file will land: the newest file comes first. The tiles stay as they are.
+        let slot = dragging && !full && count > 0;
+        if slot != inner.slot.parent().is_some() {
+            if slot {
+                inner.tiles.prepend(&inner.slot);
+            } else {
+                inner.tiles.remove(&inner.slot);
+            }
         }
 
         let (title, hint) = if dragging {
@@ -341,7 +347,7 @@ impl ShelfWindow {
     }
 
     /// Lays out a tile per file, newest first, reusing the tiles of files
-    /// already shown. With `mark_new`, tiles for new files fade in.
+    /// already shown. With `mark_new`, tiles for new files fade in. Then `render` adds the slot back.
     fn render_tiles(&self, mark_new: bool) {
         let inner = &self.0;
         while let Some(child) = inner.tiles.first_child() {
