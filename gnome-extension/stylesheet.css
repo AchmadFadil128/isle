@@ -273,68 +273,53 @@
 .isle-voice-undo-text { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
 .isle-voice-undo-button { font-size: 12px; padding: 3px 10px; }
 
-/* The command card, made like a small terminal: a title and what to know, the command coloured as a shell
-   would, its last lines while it runs, and Deny or Run with their keys. */
+/* The command card, made like a small terminal: the sign and what it is for, the command coloured as a shell
+   would, then what to know on the left and Deny or Run on the right. */
 .isle-card {
-    margin-top: 8px;
-    padding: 11px 12px 12px 12px;
-    spacing: 9px;
+    margin-top: 10px;
+    padding: 12px;
+    spacing: 10px;
     border-radius: 16px;
-    background-color: rgba(255, 255, 255, 0.055);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.07);
 }
-.isle-card-ended { padding: 8px 12px; spacing: 6px; background-color: rgba(255, 255, 255, 0.035); }
-.isle-card-top { spacing: 9px; }
+.isle-card-ended { padding: 9px 12px; spacing: 7px; background-color: rgba(255, 255, 255, 0.04); }
+.isle-card-head { spacing: 10px; }
 .isle-card-glyph {
-    width: 22px;
-    height: 22px;
-    border-radius: 7px;
-    color: rgba(255, 255, 255, 0.85);
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.9);
     background-color: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.08);
 }
-.isle-card-ended .isle-card-glyph { width: 18px; height: 18px; border-radius: 6px; color: rgba(255, 255, 255, 0.6); }
+.isle-card-ended .isle-card-glyph { width: 22px; height: 22px; border-radius: 6px; color: rgba(255, 255, 255, 0.6); }
 .isle-card-title { font-size: 13px; font-weight: 600; }
-.isle-card-chips { spacing: 5px; }
-.isle-card-chip { spacing: 4px; padding: 2px 8px 2px 7px; border-radius: 999px; color: #ffb340; background-color: rgba(255, 179, 64, 0.13); }
-.isle-card-chip-removes { color: #ff6961; background-color: rgba(255, 105, 97, 0.13); }
-.isle-card-chip-text { font-size: 11px; font-weight: 600; }
-.isle-card-terminal {
-    padding: 9px 11px 9px 11px;
-    spacing: 5px;
-    border-radius: 10px;
-    background-color: rgba(0, 0, 0, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-}
-.isle-card-ended .isle-card-terminal { padding: 6px 10px; background-color: rgba(0, 0, 0, 0.35); }
+.isle-card-subtitle { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-top: 1px; font-feature-settings: "tnum"; }
+.isle-card-terminal { padding: 9px 12px; spacing: 5px; border-radius: 10px; background-color: rgba(0, 0, 0, 0.5); }
+.isle-card-ended .isle-card-terminal { padding: 6px 10px; background-color: rgba(0, 0, 0, 0.3); }
 .isle-card-command { font-family: monospace; font-size: 12px; }
 .isle-card-output { font-family: monospace; font-size: 11px; color: rgba(255, 255, 255, 0.42); }
 .isle-card-output-failed { color: #ff6961; }
 .isle-card-sweep { margin-top: 2px; }
-.isle-card-detail { font-size: 12px; color: rgba(255, 255, 255, 0.55); }
-.isle-card-end { spacing: 8px; }
-.isle-card-button { padding: 5px 7px 5px 13px; }
-.isle-card-button-plain { padding: 5px 13px; }
-.isle-card-button-box { spacing: 7px; }
+.isle-card-foot { spacing: 8px; }
+.isle-card-risks { spacing: 6px; }
+.isle-card-risk { spacing: 6px; color: #ffb340; }
+.isle-card-risk-removes { color: #ff6961; }
+.isle-card-risk-text { font-size: 12px; font-weight: 500; }
+.isle-card-button { padding: 5px 8px 5px 14px; }
+.isle-card-button-plain { padding: 5px 14px; }
+.isle-card-button-box { spacing: 8px; }
 .isle-card-button-label { font-size: 12px; font-weight: 600; }
-.isle-card-key {
-    font-size: 10px;
-    font-weight: 600;
-    min-width: 12px;
-    padding: 1px 5px;
-    border-radius: 5px;
-    text-align: center;
-}
+.isle-card-key { font-size: 11px; font-weight: 500; padding: 0 1px; }
 .isle-card-ghost { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
-.isle-card-ghost:hover { background-color: rgba(255, 255, 255, 0.17); }
-.isle-card-ghost .isle-card-key { color: rgba(255, 255, 255, 0.6); background-color: rgba(255, 255, 255, 0.1); }
+.isle-card-ghost:hover { background-color: rgba(255, 255, 255, 0.16); }
+.isle-card-ghost .isle-card-key { color: rgba(255, 255, 255, 0.45); }
 .isle-card-run, .isle-pill-white { color: #000000; background-color: #ffffff; }
 .isle-card-run:hover, .isle-pill-white:hover { background-color: rgba(255, 255, 255, 0.86); }
 .isle-card-run:active, .isle-pill-white:active { background-color: rgba(255, 255, 255, 0.72); }
-.isle-card-run .isle-card-key { color: rgba(0, 0, 0, 0.55); background-color: rgba(0, 0, 0, 0.09); }
+.isle-card-run .isle-card-key { color: rgba(0, 0, 0, 0.45); }
 .isle-card-status { spacing: 5px; }
 .isle-card-status-text { font-size: 12px; font-weight: 600; font-feature-settings: "tnum"; }
-.isle-card-running { color: rgba(255, 255, 255, 0.55); }
 .isle-card-done { color: #30d158; }
 .isle-card-failed { color: #ff453a; }
 .isle-card-denied { color: rgba(255, 255, 255, 0.5); }

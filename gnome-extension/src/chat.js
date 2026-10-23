@@ -23,9 +23,9 @@ const TIME_GAP_MS = 5 * 60000;
 const BUBBLE_MAX = 300;
 /** What a risk badge says, and its icon (see `risksOf` in isled). */
 const RISKS = {
-    root: ['isle-lock-symbolic', 'Password'],
-    internet: ['isle-link', 'Script from the web'],
-    removes: ['isle-trash', 'Removes things'],
+    removes: ['isle-trash', 'Removes files or apps'],
+    internet: ['isle-link', 'Runs a script from the web'],
+    root: ['isle-lock-symbolic', 'Needs your password'],
 };
 const STATUS = {
     done: ['isle-check-symbolic', 'Done', 'isle-card-done'],
@@ -163,9 +163,10 @@ function keyButton(text, key, styleClass, onClick) {
     return button;
 }
 
-// The card for one command, made like a small terminal. Waiting: what it is for, the command coloured as a
-// shell would, what to know first (chips), and Deny or Run (Esc or Enter). Running: its last lines as they
-// print, how long, light sweeping along, and Stop. Ended: one line, done, failed (its error), denied or stopped.
+// The card for one command, made like a small terminal. Waiting: the terminal's sign beside what it is for and
+// a line on it, the command coloured as a shell would, then what to know (a password, a script from the web) on
+// the left and Deny or Run (Esc, Enter) on the right. Running: how long, its last lines as they print, and Stop.
+// Ended: a single line, done, failed (with the error), denied or stopped.
 export const CommandCard = GObject.registerClass({
     Signals: {
         // Run (true) or Deny (false), pressed.
@@ -176,23 +177,27 @@ export const CommandCard = GObject.registerClass({
     _init() {
         super._init({...VERTICAL, style_class: 'isle-card', x_expand: true});
         this.set_pivot_point(0.5, 0.5);
-        const top = new St.BoxLayout({style_class: 'isle-card-top'});
-        // The terminal's own sign, in a small tile, so the card reads as a command at a glance.
+
+        // The head: the sign, what it is for and a line under it, and once ended how it went.
+        const head = new St.BoxLayout({style_class: 'isle-card-head'});
         this._glyph = new St.Bin({style_class: 'isle-card-glyph', y_align: Clutter.ActorAlign.CENTER,
-            child: new St.Icon({gicon: icon('isle-terminal-symbolic'), icon_size: 12})});
-        top.add_child(this._glyph);
-        this._title = label('', 'isle-card-title', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+            child: new St.Icon({gicon: icon('isle-terminal-symbolic'), icon_size: 13})});
+        head.add_child(this._glyph);
+        const titles = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        this._title = label('', 'isle-card-title');
         this._title.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-        this._chips = new St.BoxLayout({style_class: 'isle-card-chips', y_align: Clutter.ActorAlign.CENTER});
+        this._subtitle = label('', 'isle-card-subtitle');
+        this._subtitle.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        titles.add_child(this._title);
+        titles.add_child(this._subtitle);
+        head.add_child(titles);
         this._status = new St.BoxLayout({style_class: 'isle-card-status', y_align: Clutter.ActorAlign.CENTER});
         this._statusIcon = new St.Icon({icon_size: 11, y_align: Clutter.ActorAlign.CENTER});
         this._statusText = label('', 'isle-card-status-text', {y_align: Clutter.ActorAlign.CENTER});
         this._status.add_child(this._statusIcon);
         this._status.add_child(this._statusText);
-        top.add_child(this._title);
-        top.add_child(this._chips);
-        top.add_child(this._status);
-        this.add_child(top);
+        head.add_child(this._status);
+        this.add_child(head);
 
         // The terminal: the command, then what it prints.
         this._terminal = new St.BoxLayout({...VERTICAL, style_class: 'isle-card-terminal'});
@@ -207,20 +212,17 @@ export const CommandCard = GObject.registerClass({
         this._terminal.add_child(this._sweep);
         this.add_child(this._terminal);
 
-        this._detail = label('', 'isle-card-detail');
-        wrapLines(this._detail);
-        this.add_child(this._detail);
-
-        this._end = new St.BoxLayout({style_class: 'isle-card-end'});
-        this._end.add_child(new St.Widget({x_expand: true}));
+        // The foot: what to know on the left, the buttons on the right.
+        this._foot = new St.BoxLayout({style_class: 'isle-card-foot'});
+        this._risks = new St.BoxLayout({style_class: 'isle-card-risks', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        this._foot.add_child(this._risks);
         this._stopButton = keyButton('Stop', null, 'isle-card-ghost', () => this.emit('stop'));
         this._deny = keyButton('Deny', 'esc', 'isle-card-ghost', () => this.decide(false));
-        this._run = keyButton('Run', '⏎', 'isle-card-run', () => this.decide(true));
+        this._run = keyButton('Run', '↩', 'isle-card-run', () => this.decide(true));
         for (const button of [this._stopButton, this._deny, this._run])
-            this._end.add_child(button);
-        this.add_child(this._end);
+            this._foot.add_child(button);
+        this.add_child(this._foot);
         this._state = null;
-        this._lines = [];
         this.connect('destroy', () => (this._destroyed = true));
     }
 
@@ -235,47 +237,44 @@ export const CommandCard = GObject.registerClass({
         const running = card.status === 'running';
         const ended = !waiting && !running;
         this._title.text = card.why;
+        // Waiting, the line under the title says what to know; running, how long it has been at it.
+        this._subtitle.text = waiting ? card.detail ?? '' : running ? `Running · ${elapsed(card.seconds ?? 0)}` : '';
+        this._subtitle.visible = Boolean(this._subtitle.text);
         this._command.clutter_text.set_markup(shellMarkup(card.command));
         // Waiting, the whole command shows; once on its way, a line of it is enough.
         this._command.clutter_text.line_wrap = waiting;
         this._command.clutter_text.ellipsize = waiting ? Pango.EllipsizeMode.NONE : Pango.EllipsizeMode.END;
 
-        this._chips.destroy_all_children();
+        this._risks.destroy_all_children();
         if (waiting) {
-            for (const risk of card.risks ?? []) {
-                const [iconName, text] = RISKS[risk] ?? [];
-                if (!text)
-                    continue;
-                const chip = new St.BoxLayout({style_class: `isle-card-chip isle-card-chip-${risk}`});
-                chip.add_child(new St.Icon({gicon: icon(iconName), icon_size: 10, y_align: Clutter.ActorAlign.CENTER}));
-                chip.add_child(label(text, 'isle-card-chip-text', {y_align: Clutter.ActorAlign.CENTER}));
-                this._chips.add_child(chip);
+            // One is enough beside the buttons: the most telling (see RISKS), removing before the web before a password.
+            const risk = Object.keys(RISKS).find(key => card.risks?.includes(key));
+            if (risk) {
+                const [iconName, text] = RISKS[risk];
+                const row = new St.BoxLayout({style_class: `isle-card-risk isle-card-risk-${risk}`});
+                row.add_child(new St.Icon({gicon: icon(iconName), icon_size: 11, y_align: Clutter.ActorAlign.CENTER}));
+                row.add_child(label(text, 'isle-card-risk-text', {y_align: Clutter.ActorAlign.CENTER}));
+                this._risks.add_child(row);
             }
         }
-        this._chips.visible = this._chips.get_n_children() > 0;
 
         // Its last two lines as they print; on failure, the line that says why, in red.
         const lines = (card.output ?? '').split('\n').map(line => line.trimEnd()).filter(Boolean);
         this._output.text = running ? lines.slice(-2).join('\n') : card.status === 'failed' ? lines.at(-1) ?? '' : '';
-        this._output.clutter_text.single_line_mode = false;
         this._output.visible = Boolean(this._output.text);
         this._output.style_class = card.status === 'failed' ? 'isle-card-output isle-card-output-failed' : 'isle-card-output';
         this._sweep.visible = running;
 
-        this._detail.text = waiting ? card.detail ?? '' : '';
-        this._detail.visible = Boolean(this._detail.text);
-
-        const [iconName, text, styleClass] = running ? ['isle-timer-symbolic', elapsed(card.seconds ?? 0), 'isle-card-running']
-            : STATUS[card.status] ?? [null, '', ''];
-        this._status.visible = !waiting;
-        if (iconName) {
+        const [iconName, text, styleClass] = STATUS[card.status] ?? [null, '', ''];
+        this._status.visible = ended;
+        if (ended) {
             this._statusIcon.gicon = icon(iconName);
-            const time = ended && card.seconds >= 1 ? ` · ${elapsed(card.seconds)}` : '';
+            const time = card.seconds >= 1 ? ` · ${elapsed(card.seconds)}` : '';
             const exit = card.status === 'failed' && card.exit ? ` · exit ${card.exit}` : '';
             this._statusText.text = `${text}${exit}${time}`;
             this._status.style_class = `isle-card-status ${styleClass}`;
         }
-        this._end.visible = waiting || running;
+        this._foot.visible = waiting || running;
         this._deny.visible = this._run.visible = waiting;
         this._stopButton.visible = running;
         // Ended, it steps back: the answer above is what matters now.
