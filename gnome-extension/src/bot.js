@@ -180,7 +180,7 @@ const EXPRESSIONS = {
     curious: {yaw: 16, pitch: -9, roll: -15, split: 16.5, eyes: [{w: 0.24, h: 0.46, tilt: -8, open: 1, curve: 0}, {w: 0.2, h: 0.38, tilt: -8, open: 1, curve: 0}]},
     happy: {yaw: 5, pitch: 9, roll: 0, split: 17, eyes: pair(0.27, 0.17, 14)},
     joy: {yaw: 0, pitch: 8, roll: 0, split: 17.5, eyes: pair(0.34, 0.3, 0, 1, 1)},
-    focused: {yaw: 0, pitch: -7, roll: 0, split: 15.5, eyes: pair(0.23, 0.33)},
+    focused: {yaw: 0, pitch: -6, roll: 0, split: 15.5, eyes: pair(0.23, 0.42, 0, 0.64)},
     confused: {yaw: -14, pitch: 3, roll: 8, split: 16.5, eyes: [{w: 0.2, h: 0.44, tilt: -18, open: 1, curve: 0}, {w: 0.28, h: 0.17, tilt: 14, open: 1, curve: 0}]},
     sad: {yaw: 3, pitch: -13, roll: 0, split: 16, eyes: pair(0.22, 0.4, -28)},
     sleepy: {yaw: 6, pitch: -9, roll: -3, split: 16, eyes: pair(0.2, 0.42, 0, 0.42)},
@@ -213,8 +213,12 @@ const MORPH_RATE = 10;
 const BLINK_S = 0.18;
 const BLINK_CLOSING = 0.45;
 const SMILE_S = 1.6;
-const SURPRISE_S = 0.6;
+const SURPRISE_S = 0.9;
 const SLEEPY_S = 8;
+/** How the eyes move to a new spot: quick, a touch past it, then settled, as eyes do. */
+const SACCADE = {stiffness: 420, damping: 25};
+/** After its smile it reads its answer along, this long (s). */
+const READ_S = 2.4;
 /** A pause this long (s) after it heard you speak earns a small nod: it got that. */
 const HEARD_PAUSE_S = 0.5;
 const RAD = Math.PI / 180;
@@ -256,7 +260,7 @@ export class Bot {
         this._form = 'listening';
         this._formAt = 0;
         this._last = 0;
-        this._gaze = {x: 0, y: 0};
+        this._gaze = {x: 0, y: 0, vx: 0, vy: 0};
         this._glance = {x: 0, y: 0};
         this._jitter = {x: 0, y: 0, next: 0};
         this._nextGlance = 0;
@@ -279,7 +283,13 @@ export class Bot {
 
     /** Whether the form decides where it looks (thinking, reading, …) rather than the pointer. */
     get looksOnItsOwn() {
-        return OWN_GAZE.has(this._form);
+        return OWN_GAZE.has(this._form) || this._reading(this.time);
+    }
+
+    /** Reading its answer along, once it has smiled at you. */
+    _reading(time) {
+        const since = time - this._formAt;
+        return this._form === 'reply' && since > SMILE_S && since < SMILE_S + READ_S;
     }
 
     /** A new shape, morphed to; a blink hides the change. */
@@ -341,11 +351,14 @@ export class Bot {
             this._jitter.y = (Math.random() * 2 - 1) * 0.04;
             this._jitter.next = time + 0.35 + Math.random() * 0.6;
         }
-        // Quick to turn, then settled: a saccade.
-        const follow = 1 - Math.exp(-dt * 16);
+        // Quick to turn, a touch past, then settled: a saccade, on a spring.
         if (Number.isFinite(target.x) && Number.isFinite(target.y)) {
-            this._gaze.x += (target.x + this._jitter.x - this._gaze.x) * follow;
-            this._gaze.y += (target.y + this._jitter.y - this._gaze.y) * follow;
+            const gaze = this._gaze;
+            const {stiffness, damping} = SACCADE;
+            gaze.vx += ((target.x + this._jitter.x - gaze.x) * stiffness - gaze.vx * damping) * dt;
+            gaze.vy += ((target.y + this._jitter.y - gaze.y) * stiffness - gaze.vy * damping) * dt;
+            gaze.x += gaze.vx * dt;
+            gaze.y += gaze.vy * dt;
         }
 
         this._hear(time, dt, level);
@@ -446,6 +459,13 @@ export class Bot {
             return this._set(0.15 * Math.sin(time * 0.8), 0.1);
         case 'confused':
             return this._set(0.12 * Math.sin(time * 1.6), 0);
+        }
+        // Its answer, line by line: along the first, back, along the second.
+        if (this._reading(time)) {
+            const at = (time - this._formAt - SMILE_S) / READ_S * 2;
+            const line = Math.min(1, Math.floor(at));
+            const along = at - Math.floor(at);
+            return this._set(-0.2 + 0.85 * Math.min(1, along / 0.8), 0.18 + 0.22 * line);
         }
         if (time >= this._nextGlance) {
             out.x = (Math.random() * 2 - 1) * 0.8;
@@ -584,7 +604,7 @@ export class Bot {
         }
         const listening = this._form === 'listening' ? 1 + 0.28 * this.level : 1;
         const w = unit * eye.w;
-        const h = unit * eye.h * listening * Math.max(0.12, eye.open) * (0.08 + 0.92 * lid);
+        const h = unit * eye.h * listening * (0.08 + 0.92 * lid);
         const angle = Math.atan2(across[1], across[0]);
         cr.save();
         cr.translate(x, y);
@@ -593,6 +613,12 @@ export class Bot {
         cr.scale(Math.max(0.2, Math.hypot(across[0], across[1])),
             Math.max(0.2, Math.abs(-Math.sin(angle) * up[0] + Math.cos(angle) * up[1])));
         cr.rotate(eye.tilt * RAD);
+        // Sleepy or set on something: an upper lid down over the eye, its bottom still round.
+        const open = Math.max(0.12, Math.min(1, eye.open));
+        if (open < 0.99) {
+            cr.rectangle(-w, h / 2 - h * open, 2 * w, h * open + 1);
+            cr.clip();
+        }
         if (eye.curve < 0.98) {
             const rr = Math.min(w, h) / 2;
             const left = -w / 2 + rr, top = -h / 2 + rr, right = w / 2 - rr, bottom = h / 2 - rr;
