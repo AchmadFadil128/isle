@@ -81,6 +81,16 @@ impl Ai {
         }
     }
 
+    /// Where Isle's hooks are: Codex's hooks.json, or its config.toml's `notify` for an older Codex.
+    fn hooks_file(self) -> PathBuf {
+        match self {
+            Ai::Codex if json_hooks::hooked(&codex::hooks_path(), &codex::SPEC) => {
+                codex::hooks_path()
+            }
+            _ => self.config(),
+        }
+    }
+
     fn found(self) -> bool {
         match self {
             Ai::Claude => Provider::Claude.program().is_some(),
@@ -468,22 +478,45 @@ async fn watch_configs(
         .collect();
     // Where their programs land when installed (npm, nvm, volta, bun, pnpm, the installers), as the
     // assistant looks for them: a new one is found at once. A new Node under nvm is watched in turn.
+    // A folder not there yet (a new user's ~/.local/bin, nvm before its first Node): its nearest parent
+    // that is, for the next folder down to appear, and then all is watched again.
     let home = dirs::home_dir().unwrap_or_default();
+    let mut ahead: Vec<(inotify::WatchDescriptor, std::ffi::OsString)> = Vec::new();
+    let mut watch_or_ahead = |dir: &Path, mask: WatchMask| {
+        if watches.add(dir, mask | WatchMask::MASK_ADD).is_ok() {
+            return;
+        }
+        let mut below = dir;
+        while let Some(parent) = below.parent() {
+            if parent.is_dir() {
+                let appear = WatchMask::CREATE | WatchMask::MOVED_TO | WatchMask::MASK_ADD;
+                if let (Ok(wd), Some(name)) = (watches.add(parent, appear), below.file_name()) {
+                    ahead.push((wd, name.to_owned()));
+                }
+                break;
+            }
+            below = parent;
+        }
+    };
     for dir in crate::assistant::install_dirs(&home)
         .into_iter()
         .chain([PathBuf::from("/usr/bin")])
+        .filter(|dir| dir.starts_with(&home) || dir.is_dir())
     {
-        watches
-            .add(
-                &dir,
-                WatchMask::CREATE | WatchMask::MOVED_TO | WatchMask::DELETE,
-            )
-            .ok();
+        watch_or_ahead(
+            &dir,
+            WatchMask::CREATE | WatchMask::MOVED_TO | WatchMask::DELETE,
+        );
     }
+    let nvm_nodes = std::env::var_os("NVM_DIR")
+        .filter(|dir| !dir.is_empty())
+        .map_or_else(|| home.join(".nvm"), PathBuf::from)
+        .join("versions/node");
+    watch_or_ahead(&nvm_nodes, WatchMask::CREATE | WatchMask::MOVED_TO);
     let nodes = watches
         .add(
-            home.join(".nvm/versions/node"),
-            WatchMask::CREATE | WatchMask::MOVED_TO,
+            &nvm_nodes,
+            WatchMask::CREATE | WatchMask::MOVED_TO | WatchMask::MASK_ADD,
         )
         .ok();
     let mut watched = false;
@@ -530,7 +563,10 @@ async fn watch_configs(
                 let gone = EventMask::DELETE_SELF | EventMask::MOVE_SELF | EventMask::IGNORED | EventMask::Q_OVERFLOW;
                 let named = event.name.as_deref().is_some_and(|name| names.contains(&name));
                 let new_node = nodes.as_ref() == Some(&event.wd);
-                if event.mask.intersects(gone) || new_node || (named && event.mask.contains(EventMask::ISDIR)) {
+                let appeared = ahead
+                    .iter()
+                    .any(|(wd, name)| *wd == event.wd && event.name.as_deref() == Some(name.as_os_str()));
+                if event.mask.intersects(gone) || new_node || appeared || (named && event.mask.contains(EventMask::ISDIR)) {
                     again = true;
                 } else if !named {
                     continue;
@@ -561,7 +597,7 @@ pub fn report() -> String {
         .into_iter()
         .map(|ai| {
             let state = match (ai.found(), ai.hooked()) {
-                (_, true) => format!("on ({})", ai.config().display()),
+                (_, true) => format!("on ({})", ai.hooks_file().display()),
                 (true, false) => "off".to_owned(),
                 (false, false) => "off (not installed)".to_owned(),
             };
