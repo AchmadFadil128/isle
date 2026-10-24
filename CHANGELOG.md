@@ -161,6 +161,23 @@ All notable changes to Isle are listed here. The format follows
 - With the island on another display, GNOME's clock in the top bar opens its calendar again instead of
   closing it the moment it opens.
 - Turning Isle off, or leaving Super+V to GNOME, no longer undoes another extension's own Super+V calendar.
+- The next alert after one that grew under a resting pointer, or one updated in place under it, runs out
+  as it should instead of staying until the pointer moves (or for good, once the island shrank from under
+  it), and the assistant's answer closes on its own when the pill grew under a pointer that never moved.
+- With animations turned off, and when Isle starts again after unlocking, an island that appears or grows
+  under a resting pointer no longer counts as hovered: an alert no longer opened the island ("open on
+  hover") or stayed until the pointer moved. A pointer resting on the island as Isle starts again after
+  unlocking opens it once it moves, instead of only after leaving it and coming back.
+- Notifications still waiting their turn (behind an alert, or while the island was open) no longer pop up
+  once Do Not Disturb is on, as when a focus session starts from the open island; they stay unread in the
+  list, as those that come in Do Not Disturb do.
+- With animations turned off, the open island no longer closes when it narrows from under a resting
+  pointer (leaving the music page's lyrics for the Call tab); it waits for the pointer to move, as with
+  animations on.
+- Clicking the alert with the assistant's answer (or "Isle restarted", or a command's end) opens the
+  assistant without that alert coming back once the assistant closes.
+- Locking the screen while the assistant's command waits for Run or Deny in an alert no longer shows the
+  notification waiting behind it as the screen locks, marking it read with its sound, unseen.
 
 ## [1.0.6] - 2026-10-24
 

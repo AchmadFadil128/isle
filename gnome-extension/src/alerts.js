@@ -231,6 +231,11 @@ function unseen(item) {
     return !withdrawn.has(item) && !item.acknowledged;
 }
 
+/** Whether GNOME would show `item`'s banner now: not in Do Not Disturb, nor with its app's banners turned off. */
+function bannersOn(item) {
+    return item.source?.policy?.showBanners ?? true;
+}
+
 /** A GNOME notification, shown in place of GNOME's own banner; `onShown` once it is on screen, `onWithdrawn(key)`
  * once its app takes it back. While the screen is `shared`, only who it is from shows. */
 export function notification(item, urgent, {onShown, onWithdrawn}, shared = false) {
@@ -280,7 +285,8 @@ export function notification(item, urgent, {onShown, onWithdrawn}, shared = fals
         // When its turn comes: gone if withdrawn or read meanwhile, else as it reads now (an app may have
         // updated it) and as the screen is shared now.
         fresh: sharedNow => {
-            if (withdrawn.has(item) || (item.acknowledged && !alert.shown))
+            // Do Not Disturb turned on while it waited: it stays unread in the list, never popping up.
+            if (withdrawn.has(item) || (!alert.shown && (item.acknowledged || (!urgent && !bannersOn(item)))))
                 return null;
             const redone = notification(item, urgent, {onShown, onWithdrawn}, sharedNow);
             if (redone.title === alert.title && redone.subtitle === alert.subtitle &&
@@ -581,7 +587,7 @@ export function notificationsSummary(items) {
         onShown: () => [...items].filter(unseen).at(-1)?.playSound?.(),
         // Those read or withdrawn meanwhile no longer count.
         fresh: () => {
-            const left = new Set([...items].filter(unseen));
+            const left = new Set([...items].filter(item => unseen(item) && bannersOn(item)));
             return left.size === count ? alert : left.size ? notificationsSummary(left) : null;
         },
     };

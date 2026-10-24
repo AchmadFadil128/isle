@@ -279,6 +279,9 @@ export class Controller {
         this._syncVoiceEnabled();
         this._syncUsage();
         this._syncEventAlerts();
+        // The pointer met while it was still being built (after unlocking, at rest on it) is told now.
+        if (this._island.hovered)
+            this._onHoverChanged();
         this._render();
         this._later('warm', WARM_START_MS, () => this._warmUp(true));
         this._daemon.release();
@@ -895,10 +898,23 @@ export class Controller {
 
     // Pointer
 
+    /** Whether the pointer is on the island as a hover: not one it grew under that has not moved since. */
+    get _pointerOn() {
+        return this._island.hovered && !this._hoverUnmoved;
+    }
+
     _onHoverChanged(moved = false) {
         const unmoved = this._hoverUnmoved;
         this._hoverUnmoved = false;
         this._cancel('hover');
+        // Grown under a still pointer is no hover yet: it counts once the pointer moves (see `_hoverOnMove`).
+        if (this._island.hovered && !moved && this._island.changedUnderPointer && !this._expandWanted) {
+            this._hoverUnmoved = true;
+            this._hoverOnMove(global.get_pointer());
+            return;
+        }
+        if (!this._island.hovered && unmoved && !this._expandWanted)
+            return;
         // An answer stays while the pointer is on it, and as long again once it leaves.
         if (this._voiceOpen) {
             if (this._island.hovered)
@@ -907,14 +923,6 @@ export class Controller {
                 this._scheduleVoiceClose(Math.min(this._voiceCloseMs, VOICE_LEAVE_MS));
             return;
         }
-        // Grown under a still pointer is no hover yet: it counts once the pointer moves (see `_hoverOnMove`).
-        if (this._island.hovered && !moved && this._island.grewUnderPointer && !this._expandWanted) {
-            this._hoverUnmoved = true;
-            this._hoverOnMove(global.get_pointer());
-            return;
-        }
-        if (!this._island.hovered && unmoved && !this._expandWanted)
-            return;
         // An alert waits while the pointer is on it, as a notification should; not the volume's.
         if (this._alert && !this._alert.transient && this._presentation === 'peek') {
             if (this._island.hovered)
@@ -935,7 +943,7 @@ export class Controller {
             if (!this._expandWanted || this._keyboardGrab)
                 return;
             // Shrinking under a still pointer is no reason to close: wait until it moves.
-            if (this._island.morphing)
+            if (this._island.changedUnderPointer)
                 this._collapseOnMove(global.get_pointer());
             else
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
@@ -1000,6 +1008,8 @@ export class Controller {
     _openFromClosed() {
         // Clicking a notification opens it, like GNOME's banner did.
         if (!this._expandWanted && this._alert?.onActivate) {
+            // Done with: the assistant it may open puts it back in line no more.
+            this._alert.answered = true;
             this._alert.onActivate();
             this._dismissAlert(true);
             return Clutter.EVENT_STOP;
@@ -1312,7 +1322,7 @@ export class Controller {
         if (!alert)
             return;
         // Not while someone reads it (see `_onHoverChanged`), nor while no one is there for a sticky one.
-        if ((this._island.hovered && !alert.transient) || (alert.sticky && this._compact.idle)) {
+        if ((this._pointerOn && !alert.transient) || (alert.sticky && this._compact.idle)) {
             this._cancel('alert');
             return;
         }
@@ -1932,7 +1942,7 @@ export class Controller {
         // An action may have closed it already; an open conversation stays until put away.
         if (!this._voiceOpen || this._voice.chatOpen)
             return;
-        if (this._voiceAnswered && !this._island.hovered)
+        if (this._voiceAnswered && !this._pointerOn)
             this._later('voice-close', ms, () => this.collapse());
     }
 
@@ -2044,6 +2054,8 @@ export class Controller {
         }
         // Turned off (the screen locks too): agents waiting on an answer here ask in their terminals at once.
         this._passAgentAsks();
+        // What waits goes with Isle, never shown (a notification marked read, its sound played) as it goes.
+        this._queue = [];
         global.display.get_selection().disconnect(this._primaryChanged);
         global.display.disconnect(this._focusChanged);
         global.display.disconnect(this._focusMonitorChanged);
