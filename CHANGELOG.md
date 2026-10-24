@@ -165,6 +165,9 @@ All notable changes to Isle are listed here. The format follows
   when the shelf's helper starts before GNOME has told it the display's scale: it is set to match.
 - On a 200% display without fractional scaling, the calendar writes the month whole ("OCTOBER", not
   "OCTOB…").
+- A password a password manager clears again also leaves the clipboard history when you pasted it into
+  another app (the manager clears it on a timer, with that app in front), and copying blank text no
+  longer takes the last copy out of the history.
 
 ## [1.0.6] - 2026-10-24
 
