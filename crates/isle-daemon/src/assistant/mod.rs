@@ -26,7 +26,7 @@ mod system;
 mod tasks;
 mod whisper;
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::time::Duration;
 
 use chrono::NaiveDate;
@@ -842,7 +842,9 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
     session.conversation = Some(talk.chat.conversation.clone()).filter(|id| !id.is_empty());
     show_history(&iface, &talk.chat).await;
     new_day(&mut session, &mut pruned);
-    look_after_tasks(&iface).await;
+    // The ids of the commands followed until they end and are told (see `Command::Settled`).
+    let mut following = HashSet::new();
+    look_after_tasks(&iface, &mut following).await;
     loop {
         let cool = cool_at;
         let cooling = async move {
@@ -915,7 +917,7 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 session.resume(today());
                 session.adopt(*context);
                 session.open = true;
-                turn(
+                let interrupted = turn(
                     &iface,
                     &data,
                     &mut session,
@@ -924,7 +926,9 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                     &mut commands,
                     &mut later,
                 )
-                .await
+                .await;
+                look_after_tasks(&iface, &mut following).await;
+                interrupted
             }
             Command::Ask(text, context) => {
                 if talk.end_if_over(&mut session, Keep::parse(&context.keep_chat)) {
@@ -933,7 +937,7 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 session.resume(today());
                 session.adopt(*context);
                 session.open = true;
-                turn(
+                let interrupted = turn(
                     &iface,
                     &data,
                     &mut session,
@@ -942,7 +946,10 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                     &mut commands,
                     &mut later,
                 )
-                .await
+                .await;
+                // A command it ran and stopped following (Cancel, or out of time) is followed on.
+                look_after_tasks(&iface, &mut following).await;
+                interrupted
             }
             Command::NewChat => {
                 // The old one waits for Undo; the AI starts the new one afresh.
@@ -1001,6 +1008,10 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 talk.chat.push(Item::command(&task.command, status, now));
                 talk.chat.push(Item::answer(&text, now));
                 talk.save(&session);
+                // Told only now, so a restart before this follows it again.
+                following.remove(&task.id);
+                tasks::forget(&task);
+                tasks::clean(&task);
                 show_history(&iface, &talk.chat).await;
                 if let Err(err) = AssistantService::notice(iface.signal_emitter(), &text, ok).await
                 {
@@ -1536,25 +1547,34 @@ async fn fail(
     None
 }
 
-/// Commands that were running when isled stopped: those over are told now; those still running are
-/// followed until they end, then told (see `Command::Settled`).
-async fn look_after_tasks(iface: &InterfaceRef<AssistantService>) {
+/// Commands nobody follows (they ran when isled stopped, or their request was cancelled): those over
+/// are told now; those still running are followed until they end, then told (see `Command::Settled`).
+async fn look_after_tasks(iface: &InterfaceRef<AssistantService>, following: &mut HashSet<String>) {
     let mut store = tasks::store();
     let running = store.load();
-    if running.tasks.is_empty() {
+    // Only Isle's own: a log in its folder, for a unit of its own.
+    let (own, other): (Vec<_>, Vec<_>) = running.tasks.into_iter().partition(tasks::is_own);
+    if !other.is_empty() {
+        if own.is_empty() {
+            store.remove();
+        } else {
+            store.save_now(&tasks::Running { tasks: own.clone() });
+        }
+    }
+    if own.iter().all(|task| following.contains(&task.id)) {
         return;
     }
     let sender = iface.get().await.commands.clone();
-    store.remove();
-    // Only Isle's own: a log in its folder, for a unit of its own.
-    for task in running.tasks.into_iter().filter(tasks::is_own) {
+    for task in own {
+        if !following.insert(task.id.clone()) {
+            continue;
+        }
         let sender = sender.clone();
         tokio::spawn(async move {
             let (ended, output) = match tasks::settled(&task).await {
                 Some(over) => over,
                 None => tasks::follow(&task, |_| {}).await,
             };
-            tasks::clean(&task);
             sender
                 .send(Command::Settled(Box::new(task), ended, output))
                 .ok();
