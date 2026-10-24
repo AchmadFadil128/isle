@@ -20,6 +20,8 @@ All notable changes to Isle are listed here. The format follows
   left open last time, and no longer switches to typing once it answers.
 - The assistant reopened at work from the closed island closes again with Esc or a click elsewhere, and
   Enter or Esc answer a command waiting there for Run or Deny.
+- With Isle's service stopped or refusing a request, the assistant says so and closes instead of showing
+  "Listening…" or "Thinking…" forever with the keyboard taken.
 
 ## [1.0.6] - 2026-10-24
 

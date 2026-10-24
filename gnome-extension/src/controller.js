@@ -1486,7 +1486,20 @@ export class Controller {
             json = JSON.stringify({...aiSettings(this._settings), actions: actionTypes()});
         }
         if (this._voiceOpen && request === this._listenRequest)
-            this._daemon.call('assistant', 'Ask', text, json);
+            this._sendRequest(request, 'Ask', text, json);
+    }
+
+    // Sends a request to isled; not running (or refusing it), it would never answer, so the island says so
+    // rather than listen or think forever.
+    async _sendRequest(request, method, ...args) {
+        const {result, error} = await this._daemon.attempt('assistant', method, ...args);
+        if (result || !this._voiceOpen || request !== this._listenRequest)
+            return;
+        const why = error || (this._daemon.running ? 'Isle couldn’t take that' : 'Isle’s service isn’t running');
+        this._voice.setState({phase: 'error', error: why, hint: this._askAgainHint});
+        this._setKeyboard(false);
+        this._render();
+        this._scheduleVoiceClose(VOICE_ERROR_MS);
     }
 
     /** Shows the assistant again as it is (at work, or with the answer it came to), without listening. */
@@ -1564,7 +1577,7 @@ export class Controller {
         }
         // Closed, or asked to listen again, meanwhile.
         if (this._voiceOpen && request === this._listenRequest)
-            this._daemon.call('assistant', 'Listen', json);
+            this._sendRequest(request, 'Listen', json);
     }
 
     _onAssistant() {
