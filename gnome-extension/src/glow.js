@@ -9,8 +9,8 @@ const STOPS = 24;
 
 // Light from the edge inside a box (`left`, `right`, `top`, corner `radius`) `height` tall.
 // `time` (s) moves it, `level` (0..1, the voice) swells it, `strength` fades it in and out; `cache`
-// keeps the rising mask while the box's height stays.
-export function paintRim(cr, {left, right, top, radius}, height, colors, {time, level}, strength, cache = {}) {
+// keeps the rising mask while the box's height stays. `scale` sizes its strokes: the shell's `uiScale`.
+export function paintRim(cr, {left, right, top, radius}, height, colors, {time, level}, strength, cache = {}, scale = 1) {
     const r = Math.max(0, radius);
     const sides = () => traceSides(cr, left, right, top, height, r);
     cr.pushGroup();
@@ -19,12 +19,12 @@ export function paintRim(cr, {left, right, top, radius}, height, colors, {time, 
     const STEPS = 3;
     cr.setSource(flow(colors, left, right, time, (0.1 + 0.08 * level) * strength));
     for (let i = 0; i < STEPS; i++) {
-        cr.setLineWidth((22 + 16 * level) * (1 - i / STEPS));
+        cr.setLineWidth((22 + 16 * level) * (1 - i / STEPS) * scale);
         sides();
         cr.stroke();
     }
     // A haze along the bottom, deeper as it swells, with two brighter streaks passing each other.
-    const rise = Math.min(52, Math.max(0, height - top) * 0.5) * (0.75 + 0.5 * level);
+    const rise = Math.min(52 * scale, Math.max(0, height - top) * 0.5) * (0.75 + 0.5 * level);
     const haze = new Cairo.LinearGradient(0, height - rise, 0, height);
     haze.addColorStopRGBA(0, 0, 0, 0, 0);
     haze.addColorStopRGBA(1, 0, 0, 0, 1);
@@ -32,7 +32,7 @@ export function paintRim(cr, {left, right, top, radius}, height, colors, {time, 
     cr.mask(haze);
     // A crisp line of light at the very edge.
     cr.setSource(flow(colors, left, right, time * 1.4, (0.46 + 0.3 * level) * strength, time + 3));
-    cr.setLineWidth(2.5);
+    cr.setLineWidth(2.5 * scale);
     sides();
     cr.stroke();
     cr.popGroupToSource();

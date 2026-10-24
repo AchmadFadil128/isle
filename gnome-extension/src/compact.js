@@ -11,16 +11,17 @@ import St from 'gi://St';
 
 import {paletteFor} from './bot.js';
 import {BotIcon} from './botIcon.js';
+import {onUiScale, px, uiScale} from './compat.js';
 import * as Format from './format.js';
 import * as Palette from './palette.js';
 import * as Playback from './playback.js';
 import {watchClock} from './wallClock.js';
 import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon} from './widgets.js';
 
-/** Sizes hanging below the top bar, and inside it with smaller text. */
 /** The assistant at work, in the right slot. */
 const ASSISTANT_SIZE = 18;
 
+/** Sizes hanging below the top bar, and inside it with smaller text, in CSS pixels. */
 const SIZES = {
     hanging: {clock: 164, activities: 256, art: 24, artRadius: 6, ring: 20, bars: 16, moon: 13, call: 15},
     inBar: {clock: 144, activities: 232, art: 22, artRadius: 6, ring: 18, bars: 14, moon: 12, call: 14},
@@ -132,6 +133,8 @@ export const CompactView = GObject.registerClass({
         this._tickClock();
         this._stopClock = watchClock(() => this._tickClock());
         this._refresh();
+        // Another scale: the sides are measured again.
+        onUiScale(this, () => this._refresh(), {now: false});
         this.connect('destroy', () => this._onDestroy());
     }
 
@@ -139,7 +142,7 @@ export const CompactView = GObject.registerClass({
     get preferredWidth() {
         const size = SIZES[this._inBar ? 'inBar' : 'hanging'];
         const privacy = this._privacyWidth();
-        return (this._left.child || this._right.child ? size.activities : size.clock) + privacy + 2 * this._secondExtra;
+        return px(this._left.child || this._right.child ? size.activities : size.clock) + privacy + 2 * this._secondExtra;
     }
 
     _secondPart(sign, styleClass) {
@@ -205,7 +208,7 @@ export const CompactView = GObject.registerClass({
         this._inBar = inBar;
         const size = SIZES[inBar ? 'inBar' : 'hanging'];
         this._art.resize(size.art, size.artRadius);
-        this._ring.set_size(size.ring, size.ring);
+        this._ring.resize(size.ring);
         this._bars.maxHeight = this._secondBars.maxHeight = size.bars;
         this._moon.icon_size = size.moon;
         this._phone.icon_size = this._micOff.icon_size = this._secondPhone.icon_size = size.call;
@@ -338,10 +341,11 @@ export const CompactView = GObject.registerClass({
         const time = right === this._secondTimer || right === this._secondCall;
         // Measured only on the stage; off it, the next refresh there does it.
         const width = time && this.get_stage() ? Math.ceil(right.get_preferred_width(-1)[1]) : 0;
-        const slot = SIZES[this._inBar ? 'inBar' : 'hanging'].art;
+        const slot = px(SIZES[this._inBar ? 'inBar' : 'hanging'].art);
         const spacing = width ? this._row.get_theme_node().get_length('spacing') : 0;
         this._secondExtra = width ? Math.max(0, width - slot) : 0;
-        this._right.style = width ? `width: ${width}px;` : null;
+        // CSS, which St scales: measured in stage pixels, it is set in CSS ones.
+        this._right.style = width ? `width: ${width / uiScale()}px;` : null;
         this._secondBalance.visible = this._secondExtra > spacing;
         this._secondBalance.width = Math.max(0, this._secondExtra - spacing);
     }

@@ -9,14 +9,14 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {vividColorOfFile} from '../colors.js';
-import {VERTICAL} from '../compat.js';
+import {VERTICAL, onUiScale, px} from '../compat.js';
 import * as Format from '../format.js';
 import * as Playback from '../playback.js';
 import {Art, Bars, Slider, fence, icon, iconButton, label, ownIcon, restsAt, setButtonIcon, setEnabled, smallCover, coverKey} from '../widgets.js';
 import {LyricsPane} from './lyrics.js';
 import {Page} from './page.js';
 
-/** The cover beside the player: as tall as its column. */
+/** The cover beside the player: as tall as its column. Sizes in CSS pixels (see `px`). */
 const ART_SIZE = 104;
 /** The island widens to this while lyrics are shown. */
 const LYRICS_WIDTH = 720;
@@ -75,7 +75,7 @@ class MediaPage extends Page {
     }
 
     get preferredWidth() {
-        return this._shown('lyrics') ? LYRICS_WIDTH : null;
+        return this._shown('lyrics') ? px(LYRICS_WIDTH) : null;
     }
 
     get tint() {
@@ -108,11 +108,10 @@ class MediaPage extends Page {
             y_expand: true,
             x_align: Clutter.ActorAlign.END,
             y_align: Clutter.ActorAlign.END,
-            // Sits over the corner, half outside it, like on a Mac.
-            translation_x: 5,
-            translation_y: 5,
             visible: false,
         });
+        // Sits over the corner, half outside it, like on a Mac.
+        onUiScale(badge, scale => badge.set_translation(5 * scale, 5 * scale, 0));
         this._badges.push({badge, icon: badgeIcon});
 
         // The badge expands to reach the corner; kept from spreading to the box, which would then take a

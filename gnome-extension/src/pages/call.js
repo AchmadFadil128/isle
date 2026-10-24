@@ -10,11 +10,12 @@ import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
-import {VERTICAL} from '../compat.js';
+import {VERTICAL, onUiScale, px, uiScale} from '../compat.js';
 import * as Format from '../format.js';
 import {icon, label, setEnabled} from '../widgets.js';
 import {Page} from './page.js';
 
+/** Sizes in CSS pixels (see `px`). */
 const PREVIEW_HEIGHT = 128;
 /** The preview takes the window's shape within these widths, cropping what is wider. */
 const PREVIEW_MIN_WIDTH = 168;
@@ -41,8 +42,6 @@ class WindowPreview extends St.Widget {
         super._init({
             style_class: 'isle-call-preview',
             layout_manager: new Clutter.BinLayout(),
-            width: PLACEHOLDER_WIDTH,
-            height: PREVIEW_HEIGHT,
             clip_to_allocation: true,
             // Its parts expand to fill it; kept from spreading to the row, which would widen it.
             x_expand: false,
@@ -80,6 +79,11 @@ class WindowPreview extends St.Widget {
         for (const child of [this._view, this._placeholder, this._corners, this._hover])
             this.add_child(child);
         this.connect('destroy', () => this._detach());
+        onUiScale(this, scale => {
+            this.set_size(this._width * scale, PREVIEW_HEIGHT * scale);
+            if (this._clone)
+                this._layout();
+        });
     }
 
     /** Shows `window` live, or else `gicon` with an optional `hint`. */
@@ -139,31 +143,36 @@ class WindowPreview extends St.Widget {
         const width = Math.min(PREVIEW_MAX_WIDTH, Math.max(PREVIEW_MIN_WIDTH,
             Math.round(PREVIEW_HEIGHT * frame.width / frame.height)));
         this._setWidth(width);
-        const scale = Math.max(width / frame.width, PREVIEW_HEIGHT / frame.height);
+        // On the stage, in its pixels, as the window's frame is.
+        const [stageWidth, stageHeight] = [px(width), px(PREVIEW_HEIGHT)];
+        const scale = Math.max(stageWidth / frame.width, stageHeight / frame.height);
         this._clone.set_size(Math.round(buffer.width * scale), Math.round(buffer.height * scale));
         this._clone.set_position(
-            Math.round((buffer.x - frame.x) * scale - (frame.width * scale - width) / 2),
-            Math.round((buffer.y - frame.y) * scale - (frame.height * scale - PREVIEW_HEIGHT) / 2));
+            Math.round((buffer.x - frame.x) * scale - (frame.width * scale - stageWidth) / 2),
+            Math.round((buffer.y - frame.y) * scale - (frame.height * scale - stageHeight) / 2));
     }
 
+    /** Sets the width, in CSS pixels. */
     _setWidth(width) {
         if (width === this._width)
             return;
         this._width = width;
-        this.width = width;
+        this.width = px(width);
     }
 
     _repaintCorners(area) {
         const cr = area.get_context();
         const [width, height] = area.get_surface_size();
+        const scale = uiScale();
+        const radius = PREVIEW_RADIUS * scale, edge = scale / 2;
         cr.rectangle(0, 0, width, height);
-        roundedRect(cr, 0, 0, width, height, PREVIEW_RADIUS);
+        roundedRect(cr, 0, 0, width, height, radius);
         cr.setFillRule(Cairo.FillRule.EVEN_ODD);
         cr.setSourceRGBA(0, 0, 0, 1);
         cr.fill();
-        roundedRect(cr, 0.5, 0.5, width - 1, height - 1, PREVIEW_RADIUS - 0.5);
+        roundedRect(cr, edge, edge, width - 2 * edge, height - 2 * edge, radius - edge);
         cr.setSourceRGBA(1, 1, 1, 0.1);
-        cr.setLineWidth(1);
+        cr.setLineWidth(scale);
         cr.stroke();
         cr.$dispose();
     }
@@ -174,10 +183,11 @@ class CallPage extends Page {
     _init(daemon, call, privacy, settings, {height}) {
         super._init(daemon, {
             style_class: 'isle-page isle-call',
-            // St's `spacing` only reaches St.BoxLayout, so it is set here.
-            layout_manager: new Clutter.BoxLayout({spacing: 22}),
+            // St's `spacing` only reaches St.BoxLayout, so it is set here, scaled as St would.
+            layout_manager: new Clutter.BoxLayout(),
             height,
         });
+        onUiScale(this, scale => (this.layout_manager.spacing = 22 * scale));
         this.name = 'call';
         this._call = call;
         this._privacy = privacy;

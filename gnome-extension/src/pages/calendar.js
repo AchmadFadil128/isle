@@ -12,13 +12,13 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-import {VERTICAL} from '../compat.js';
+import {VERTICAL, onUiScale, px} from '../compat.js';
 import * as Format from '../format.js';
 import {icon, iconButton, label} from '../widgets.js';
 import {Page} from './page.js';
 import {onHover} from './tasks.js';
 
-/** The month grid's height, shared by its rows. */
+/** The month grid's height, shared by its rows; sizes in CSS pixels (see `px`). */
 const GRID_HEIGHT = 108;
 const MAX_ROW_HEIGHT = 21;
 /** Events of the desktop's calendars (blue), and Isle's own (orange), as RGB. */
@@ -69,10 +69,11 @@ export const CalendarPage = GObject.registerClass({
     _init(daemon, {height}) {
         super._init(daemon, {
             style_class: 'isle-page isle-calendar',
-            layout_manager: new Clutter.BoxLayout({spacing: 24}),
+            layout_manager: new Clutter.BoxLayout(),
             height,
         });
         this.name = 'calendar';
+        onUiScale(this, scale => (this.layout_manager.spacing = 24 * scale));
         this._today = startOfDay(new Date());
         /** The day whose events are listed. */
         this._selected = this._today;
@@ -94,6 +95,11 @@ export const CalendarPage = GObject.registerClass({
         /** How long before an event its alarm goes, in ms; 0: none. */
         this._alarmLeadMs = 0;
         this._refresh();
+        // Another scale: the month and the day's list are made again at its size.
+        onUiScale(this, () => {
+            this._shownMonth = this._shownAgenda = null;
+            this._refresh();
+        }, {now: false});
     }
 
     /** Minutes before an event with a time that `event-soon` is emitted; 0 turns it off. */
@@ -172,7 +178,7 @@ export const CalendarPage = GObject.registerClass({
         const titleButton = new St.Button({style_class: 'isle-cal-month-title', child: title, can_focus: true, accessible_name: 'Go to today', x_expand: true, x_align: Clutter.ActorAlign.START});
         titleButton.connect('clicked', () => this._goToToday());
         // Its text on the page's edge, as the other pages' titles; the pill it lights on hover reaches past it.
-        titleButton.translation_x = -4;
+        onUiScale(titleButton, scale => (titleButton.translation_x = -4 * scale));
         header.add_child(titleButton);
         header.add_child(iconButton('isle-chevron-left-symbolic', 'isle-button-flat isle-cal-arrow',
             () => this._moveMonth(-1), {size: 11, accessibleName: 'Previous month'}));
@@ -195,7 +201,8 @@ export const CalendarPage = GObject.registerClass({
         });
         column.add_child(weekdays);
 
-        this._grid = new St.BoxLayout({...VERTICAL, style_class: 'isle-cal-grid', height: GRID_HEIGHT, y_align: Clutter.ActorAlign.START});
+        this._grid = new St.BoxLayout({...VERTICAL, style_class: 'isle-cal-grid', y_align: Clutter.ActorAlign.START});
+        onUiScale(this._grid, scale => (this._grid.height = GRID_HEIGHT * scale));
         column.add_child(this._grid);
         return column;
     }
@@ -407,7 +414,7 @@ export const CalendarPage = GObject.registerClass({
         const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
         const lead = (month.getDay() - this._weekStart + 7) % 7;
         const rows = Math.ceil((lead + daysInMonth) / 7);
-        const rowHeight = Math.min(MAX_ROW_HEIGHT, Math.floor(GRID_HEIGHT / rows));
+        const rowHeight = px(Math.min(MAX_ROW_HEIGHT, Math.floor(GRID_HEIGHT / rows)));
 
         this._grid.destroy_all_children();
         this._dayButtons = [];
@@ -533,7 +540,7 @@ export const CalendarPage = GObject.registerClass({
             row.add_child(remove);
         } else if (removable) {
             // As wide as the ×: its icon and padding (see .isle-task-remove).
-            row.add_child(new St.Widget({width: REMOVE_SIZE}));
+            row.add_child(new St.Widget({width: px(REMOVE_SIZE)}));
         }
         return row;
     }

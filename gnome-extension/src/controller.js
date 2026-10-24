@@ -17,7 +17,7 @@ import * as Alerts from './alerts.js';
 import {paletteFor} from './bot.js';
 import {ClipboardHistory} from './clipboard.js';
 import {CompactView} from './compact.js';
-import {grabsKeyboard} from './compat.js';
+import {grabsKeyboard, onUiScale, px, uiScale} from './compat.js';
 import {Daemon} from './daemon.js';
 import {BOTTOM_PADDING, ExpandedView, PAGE_HEIGHT} from './expanded.js';
 import {Island} from './island.js';
@@ -43,7 +43,7 @@ import {ReminderWatcher} from './reminders.js';
 import {GREETING, InstalledApps, UNDO_MS, VoiceView, stopUnit, actionTypes, aiSettings, openSetUp, openSignIn, runActions, signInHint, stopPending, voiceContext} from './voice.js';
 import {TextWriter} from './writer.js';
 
-/** While the pointer rests before the island opens (Settings: hover-delay), it moves at most this far. */
+/** While the pointer rests before the island opens (Settings: hover-delay), it moves at most this far (CSS px). */
 const REST_DISTANCE_PX = 10;
 /** The views and pages are laid out ahead this long after starting, a step at a time (see `_warmUp`). */
 const WARM_START_MS = 3000;
@@ -92,7 +92,7 @@ const MAX_QUEUED_NOTIFICATIONS = 3;
 const IDLE_MS = 60 * 1000;
 const IDLE_ON_BATTERY_MS = 15 * 1000;
 
-// Corner and shoulder ("ear") radii per presentation; the shoulders grow with the island.
+// Corner and shoulder ("ear") radii per presentation, in CSS pixels (see `px`); the shoulders grow with the island.
 // The compact island hangs 30 px by default, with a 16 px corner and a 10 px shoulder.
 const COMPACT_RADIUS = 16;
 const COMPACT_SHOULDER = 10;
@@ -422,6 +422,8 @@ export class Controller {
             return Clutter.EVENT_PROPAGATE;
         });
         this._monitorsChanged = Main.layoutManager.connect('monitors-changed', () => this._updateGeometry());
+        // Another scale (display settings, a display of another one): every size is laid out again.
+        onUiScale(island, () => this._updateGeometry(), {now: false});
 
         const daemon = this._daemon;
         daemon.connect('changed', (_daemon, key) => {
@@ -549,7 +551,7 @@ export class Controller {
         this._island.topInset = this._blendsIn ? this._topBar.height : 0;
         this._island.monitor = this._monitor;
         // Without a top bar (another display) the open island's header is its own.
-        this._expanded.topInset = this._onBar ? this._topBar.height : HEADER_WITHOUT_BAR;
+        this._expanded.topInset = this._onBar ? this._topBar.height : px(HEADER_WITHOUT_BAR);
         this._topBar.clockShown = !this._onBar;
         this._render();
     }
@@ -714,7 +716,9 @@ export class Controller {
         this._presentation = presentation;
         if (presentation !== 'compact')
             this._putAwayWarm();
-        // A display without the top bar: the island hangs from its top edge.
+        // A display without the top bar: the island hangs from its top edge. Sizes are in stage pixels; the
+        // CSS ones (padding) are divided by `scale` again, as St multiplies them.
+        const scale = uiScale();
         const top = this._onBar ? this._topBar.height : 0;
         const inBar = this._onBar && this._settings.get_boolean('island-in-top-bar');
         // Before measuring it: inside the bar it is smaller.
@@ -727,36 +731,38 @@ export class Controller {
         case 'expanded':
             size = {
                 width: this._expanded.preferredWidth,
-                height: (this._onBar ? top : HEADER_WITHOUT_BAR) + PAGE_HEIGHT + BOTTOM_PADDING,
-                radius: EXPANDED_RADIUS,
-                shoulder: EXPANDED_SHOULDER,
+                height: (this._onBar ? top : HEADER_WITHOUT_BAR * scale) + (PAGE_HEIGHT + BOTTOM_PADDING) * scale,
+                radius: EXPANDED_RADIUS * scale,
+                shoulder: EXPANDED_SHOULDER * scale,
             };
             view = this._expanded;
             break;
         case 'voice': {
             // Like an alert, it hangs below the bar (or near the top of the screen).
-            const inset = this._blendsIn ? top : PEEK_TOP_GLASS;
-            size = {width: this._voice.preferredWidth, height: inset + this._voice.fit(), radius: VOICE_RADIUS, shoulder: PEEK_SHOULDER};
+            const inset = this._blendsIn ? top : PEEK_TOP_GLASS * scale;
+            size = {width: this._voice.preferredWidth, height: inset + this._voice.fit(), radius: VOICE_RADIUS * scale,
+                shoulder: PEEK_SHOULDER * scale};
             view = this._voice;
-            view.style = `padding-top: ${inset}px;`;
+            view.style = `padding-top: ${inset / scale}px;`;
             break;
         }
         case 'peek': {
-            const inset = this._blendsIn ? top : PEEK_TOP_GLASS;
-            size = {width: this._peek.preferredWidth, height: inset + this._peek.preferredHeight, radius: PEEK_RADIUS, shoulder: PEEK_SHOULDER};
+            const inset = this._blendsIn ? top : PEEK_TOP_GLASS * scale;
+            size = {width: this._peek.preferredWidth, height: inset + this._peek.preferredHeight, radius: PEEK_RADIUS * scale,
+                shoulder: PEEK_SHOULDER * scale};
             view = this._peek;
-            view.style = `padding-top: ${inset}px;`;
+            view.style = `padding-top: ${inset / scale}px;`;
             break;
         }
         default:
             size = {
                 width: this._compact.preferredWidth,
-                height: inBar ? top : top + this._settings.get_int('notch-depth'),
-                radius: inBar ? IN_BAR_RADIUS : COMPACT_RADIUS,
-                shoulder: inBar ? IN_BAR_SHOULDER : COMPACT_SHOULDER,
+                height: inBar ? top : top + this._settings.get_int('notch-depth') * scale,
+                radius: (inBar ? IN_BAR_RADIUS : COMPACT_RADIUS) * scale,
+                shoulder: (inBar ? IN_BAR_SHOULDER : COMPACT_SHOULDER) * scale,
             };
             view = this._compact;
-            view.style = inBar ? null : `padding-top: ${top}px;`;
+            view.style = inBar ? null : `padding-top: ${top / scale}px;`;
         }
         view.set_size(size.width, size.height);
         if (this._onBar)
@@ -927,9 +933,10 @@ export class Controller {
                 return;
             const [nowX, nowY] = global.get_pointer();
             // The assistant still at work: its progress, rather than the pages (as a click does).
-            if (Math.hypot(nowX - x, nowY - y) <= REST_DISTANCE_PX && this._voiceWorking)
+            const rested = Math.hypot(nowX - x, nowY - y) <= px(REST_DISTANCE_PX);
+            if (rested && this._voiceWorking)
                 this._reopenVoice();
-            else if (Math.hypot(nowX - x, nowY - y) <= REST_DISTANCE_PX)
+            else if (rested)
                 this.expand();
             else if (this._island.hovered)
                 this._expandOnRest();
@@ -940,7 +947,7 @@ export class Controller {
     _collapseOnMove([x, y], waited = 0) {
         this._later('collapse', MOVE_CHECK_MS, () => {
             const [nowX, nowY] = global.get_pointer();
-            if (Math.hypot(nowX - x, nowY - y) > 2 || waited >= STILL_OUTSIDE_MS)
+            if (Math.hypot(nowX - x, nowY - y) > px(2) || waited >= STILL_OUTSIDE_MS)
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
             else
                 this._collapseOnMove([x, y], waited + MOVE_CHECK_MS);

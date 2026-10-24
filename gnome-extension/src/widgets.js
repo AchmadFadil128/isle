@@ -10,6 +10,8 @@ import Gio from 'gi://Gio';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
+import {onUiScale, px, uiScale} from './compat.js';
+
 let iconDir = null;
 /** Icons by name, made once: a GIcon never changes, and looking for the file is a disk access. */
 const icons = new Map();
@@ -194,10 +196,9 @@ export const Ring = GObject.registerClass({
     _init({size, lineWidth = 2.5, color = [1, 1, 1], trackOpacity = 0.18, child = null}) {
         super._init({
             layout_manager: new Clutter.BinLayout(),
-            width: size,
-            height: size,
             y_align: Clutter.ActorAlign.CENTER,
         });
+        this._size = size;
         this._progress = 0;
         this._lineWidth = lineWidth;
         this._color = color;
@@ -217,6 +218,13 @@ export const Ring = GObject.registerClass({
         }
         // The innermost part that animates is mapped last: ease() skips actors not yet mapped.
         (child ?? this._area).connect('notify::mapped', () => this._onMapped());
+        onUiScale(this, scale => this.set_size(this._size * scale, this._size * scale));
+    }
+
+    /** Makes the ring `size` CSS pixels wide. */
+    resize(size) {
+        this._size = size;
+        this.set_size(px(size), px(size));
     }
 
     get progress() {
@@ -315,9 +323,10 @@ export const Ring = GObject.registerClass({
     _repaint(area) {
         const cr = area.get_context();
         const [width, height] = area.get_surface_size();
-        const radius = Math.min(width, height) / 2 - this._lineWidth / 2;
+        const lineWidth = px(this._lineWidth);
+        const radius = Math.min(width, height) / 2 - lineWidth / 2;
         const [r, g, b] = this._color;
-        cr.setLineWidth(this._lineWidth);
+        cr.setLineWidth(lineWidth);
         cr.setLineCap(1); // round
 
         cr.setSourceRGBA(r, g, b, this._trackOpacity);
@@ -338,7 +347,7 @@ export const Ring = GObject.registerClass({
 export const Bars = GObject.registerClass(
 class Bars extends St.BoxLayout {
     _init({height = 14, count = 4} = {}) {
-        super._init({style_class: 'isle-bars', y_align: Clutter.ActorAlign.CENTER, height});
+        super._init({style_class: 'isle-bars', y_align: Clutter.ActorAlign.CENTER});
         this._maxHeight = height;
         this._playing = false;
         this._bars = [];
@@ -346,7 +355,7 @@ class Bars extends St.BoxLayout {
         this._bounces = [];
         for (let i = 0; i < count; i++) {
             // Full height, scaled about its middle: a scale moves below a pixel and lays nothing out again.
-            const bar = new St.Widget({style_class: 'isle-bar', y_align: Clutter.ActorAlign.CENTER, height});
+            const bar = new St.Widget({style_class: 'isle-bar', y_align: Clutter.ActorAlign.CENTER});
             bar.set_pivot_point(0.5, 0.5);
             bar.scale_y = this._rest(i);
             // A bar's bounce pauses off screen. Each bar is watched itself: the box maps a moment before them.
@@ -360,13 +369,15 @@ class Bars extends St.BoxLayout {
         this._clock.connect('new-frame', () => this._step());
         this._now = 0;
         this.connect('destroy', () => this._onDestroy());
+        onUiScale(this, () => (this.maxHeight = this._maxHeight));
     }
 
-    /** The tallest a bar gets, in pixels. */
+    /** The tallest a bar gets, in CSS pixels. */
     set maxHeight(height) {
         this._maxHeight = height;
-        this.height = height;
-        this._bars.forEach(bar => (bar.height = height));
+        const stageHeight = px(height);
+        this.height = stageHeight;
+        this._bars.forEach(bar => (bar.height = stageHeight));
     }
 
     _rest(index) {
@@ -624,10 +635,9 @@ export const Art = GObject.registerClass({
     _init({size, radius}) {
         super._init({
             style_class: 'isle-art',
-            width: size,
-            height: size,
             y_align: Clutter.ActorAlign.CENTER,
         });
+        this._size = size;
         this._radius = radius;
         this._path = null;
         /** `coverKey` of the cover shown: a player may write the next song's under the same name. */
@@ -639,6 +649,7 @@ export const Art = GObject.registerClass({
             style_class: 'isle-art-placeholder',
         });
         this.setPath('');
+        onUiScale(this, scale => this.set_size(this._size * scale, this._size * scale));
         this.connect('destroy', () => {
             this._destroyed = true;
             // Not a child while a cover shows.
@@ -647,9 +658,10 @@ export const Art = GObject.registerClass({
         });
     }
 
-    /** Resizes the art; `radius` is its new corner radius. */
+    /** Resizes the art to `size` CSS pixels; `radius` is its new corner radius. */
     resize(size, radius) {
-        this.set_size(size, size);
+        this._size = size;
+        this.set_size(px(size), px(size));
         this._placeholder.icon_size = Math.round(size * 0.42);
         this._radius = radius;
         this._key = null;
@@ -775,13 +787,17 @@ export function playMotion(actor, motion, {delay = 0} = {}) {
         return;
     actor.set_pivot_point(0.5, 0.5);
     if (motion === 'rise')
-        actor.set({translation_y: 4, opacity: 0});
+        actor.set({translation_y: px(4), opacity: 0});
     const run = () => {
+        const scale = uiScale();
         const next = i => {
             if (i >= steps.length)
                 return;
             const [values, duration, mode] = steps[i];
-            actor.ease({...values, duration, delay: i === 0 ? delay : 0, mode: Clutter.AnimationMode[mode],
+            // Distances are in CSS pixels.
+            const scaled = Object.fromEntries(Object.entries(values).map(([key, value]) =>
+                [key, key.startsWith('translation_') ? value * scale : value]));
+            actor.ease({...scaled, duration, delay: i === 0 ? delay : 0, mode: Clutter.AnimationMode[mode],
                 onComplete: () => next(i + 1)});
         };
         next(0);
@@ -894,12 +910,12 @@ class LevelBar extends St.Widget {
     _init({width, styleClass = ''}) {
         super._init({
             style_class: `isle-level ${styleClass}`,
-            width,
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._fill = new St.Widget({style_class: 'isle-level-fill', width: 0});
         this.add_child(this._fill);
-        this._width = width;
+        /** Its width in stage pixels, from `width` in CSS pixels. */
+        this._width = 0;
         this._level = 0;
         /** The delay of a grow waiting for the bar to be on screen; see `growTo`. */
         this._pendingGrow = null;
@@ -907,6 +923,14 @@ class LevelBar extends St.Widget {
         this._fill.connect('notify::mapped', () => {
             if (this._fill.mapped && this._pendingGrow !== null)
                 this._grow();
+        });
+        onUiScale(this, scale => {
+            this._width = width * scale;
+            this.width = this._width;
+            if (this._pendingGrow === null) {
+                this._fill.remove_transition('width');
+                this._fill.width = Math.round(this._width * this._level);
+            }
         });
     }
 
@@ -1028,13 +1052,13 @@ export const Slider = GObject.registerClass({
     vfunc_allocate(box) {
         this.set_allocation(box);
         const [width, height] = [box.get_width(), box.get_height()];
-        const trackHeight = 4;
+        const trackHeight = px(4);
         const y = Math.round((height - trackHeight) / 2);
         this._width = width;
         this._filled = Math.round(width * this._value);
         allocateAt(this._track, 0, y, width, trackHeight);
         allocateAt(this._fill, 0, y, this._filled, trackHeight);
-        const knob = 12;
+        const knob = px(12);
         allocateAt(this._knob, Math.round(width * this._value - knob / 2), Math.round((height - knob) / 2), knob, knob);
     }
 
