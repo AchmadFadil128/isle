@@ -16,6 +16,8 @@ All notable changes to Isle are listed here. The format follows
 - Maximizing and arranging windows by voice no longer logs warnings on GNOME 49 and later.
 - The .deb, .rpm and AUR instructions turn Isle on after logging out and back in, not before: until
   then GNOME Shell does not know the new extension, so `gnome-extensions enable` failed and Isle stayed off.
+- Installing Isle again after uninstalling it turns it on: the uninstaller left it on GNOME's list of
+  turned-off extensions, which outranks the list of turned-on ones, so it stayed off with no word why.
 
 ## [1.0.6] - 2026-10-24
 

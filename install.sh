@@ -148,6 +148,10 @@ fi
 # A running GNOME Shell on Wayland does not know a new extension until the
 # next login, so add it to the enabled list directly when enabling fails.
 if ! gnome-extensions enable "$UUID" 2>/dev/null; then
+    # On the disabled list (turned off before an uninstall), it would stay off whatever the enabled one says.
+    current=$(gsettings get org.gnome.shell disabled-extensions)
+    updated=$(printf '%s' "$current" | sed -e "s/, '$UUID'//" -e "s/'$UUID', //" -e "s/\['$UUID'\]/@as []/")
+    [ "$updated" = "$current" ] || gsettings set org.gnome.shell disabled-extensions "$updated"
     current=$(gsettings get org.gnome.shell enabled-extensions)
     case "$current" in
         *"'$UUID'"*) ;;

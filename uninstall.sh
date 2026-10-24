@@ -12,10 +12,13 @@ SYSTEM=0
 
 if [ "$SYSTEM" = 0 ]; then
     gnome-extensions disable "$UUID" 2>/dev/null
-    # Also drop it from the enabled list, in case GNOME Shell never loaded it.
-    current=$(gsettings get org.gnome.shell enabled-extensions)
-    updated=$(printf '%s' "$current" | sed -e "s/, '$UUID'//" -e "s/'$UUID', //" -e "s/\['$UUID'\]/@as []/")
-    [ "$updated" != "$current" ] && gsettings set org.gnome.shell enabled-extensions "$updated"
+    # Drop it from the enabled list, in case GNOME Shell never loaded it, and from the disabled
+    # one, where disabling put it: left there, it would keep a later install off.
+    for key in enabled-extensions disabled-extensions; do
+        current=$(gsettings get org.gnome.shell "$key")
+        updated=$(printf '%s' "$current" | sed -e "s/, '$UUID'//" -e "s/'$UUID', //" -e "s/\['$UUID'\]/@as []/")
+        [ "$updated" != "$current" ] && gsettings set org.gnome.shell "$key" "$updated"
+    done
 fi
 systemctl --user disable --now isled.service 2>/dev/null
 pkill -x isle-shelf 2>/dev/null
