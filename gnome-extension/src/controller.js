@@ -908,7 +908,7 @@ export class Controller {
             return;
         }
         // Grown under a still pointer is no hover yet: it counts once the pointer moves (see `_hoverOnMove`).
-        if (this._island.hovered && !moved && this._island.morphing && !this._expandWanted) {
+        if (this._island.hovered && !moved && this._island.grewUnderPointer && !this._expandWanted) {
             this._hoverUnmoved = true;
             this._hoverOnMove(global.get_pointer());
             return;
@@ -969,7 +969,7 @@ export class Controller {
     _hoverOnMove([x, y]) {
         this._later('hover', MOVE_CHECK_MS, () => {
             const [nowX, nowY] = global.get_pointer();
-            if (Math.hypot(nowX - x, nowY - y) > REST_DISTANCE_PX)
+            if (Math.hypot(nowX - x, nowY - y) > px(REST_DISTANCE_PX))
                 this._onHoverChanged(true);
             else
                 this._hoverOnMove([x, y]);

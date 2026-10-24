@@ -65,6 +65,7 @@ export const Island = GObject.registerClass({
         this._hovered = false;
         this._monitor = null;
         this._view = null;
+        this._pointerAtMorph = null;
         this._views = [];
         this._tint = null;
         this._tintStyle = 'wash';
@@ -232,6 +233,7 @@ export const Island = GObject.registerClass({
     morph(size, view) {
         // Content travels with the shape: out with it as it grows, in from it as it shrinks.
         const growing = size.height + size.width > this._height.target + this._width.target;
+        this._pointerAtMorph = global.get_pointer();
         this._width.setTarget(size.width);
         this._height.setTarget(size.height);
         this._radius.setTarget(size.radius);
@@ -274,6 +276,14 @@ export const Island = GObject.registerClass({
     /** Whether the island is still changing shape. */
     get morphing() {
         return this._driver?.running ?? false;
+    }
+
+    /** Whether the island is changing shape under a pointer that hasn't moved since it began to. */
+    get grewUnderPointer() {
+        if (!this.morphing || !this._pointerAtMorph)
+            return false;
+        const [x, y] = global.get_pointer();
+        return x === this._pointerAtMorph[0] && y === this._pointerAtMorph[1];
     }
 
     /** Adds a view, hidden. All views are added up front so they are always on the stage. */
