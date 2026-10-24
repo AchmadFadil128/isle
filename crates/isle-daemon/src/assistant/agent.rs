@@ -320,7 +320,17 @@ async fn run_command(
     ran: &mut Vec<(String, String)>,
 ) -> String {
     let asked = action["command"].as_str().unwrap_or_default().trim();
-    let (command, root) = tasks::without_sudo(asked, action["root"].as_bool().unwrap_or(false));
+    let (command, root) = match tasks::without_sudo(
+        asked,
+        action["root"].as_bool().unwrap_or(false),
+    ) {
+        Ok(found) => found,
+        Err(why) => {
+            return format!(
+                "run `{asked}` was not offered: {why}. Offer the terminal (typed in for the user) instead."
+            );
+        }
+    };
     if command.is_empty() {
         return "run: no command was given.".into();
     }
@@ -367,8 +377,12 @@ async fn run_command(
         // polkit says so too, so this goes first): either way the user chose not to.
         let no_password = report.text.contains("password was not given");
         let denied = !no_password && report.text.contains("run failed: denied");
+        // Nobody pressed Run or Deny in time: not run, and not refused either.
+        let unanswered = report.text.contains("run failed: no answer in time");
         let status = if denied || no_password {
             "denied"
+        } else if unanswered {
+            "stopped"
         } else {
             "failed"
         };
@@ -377,6 +391,11 @@ async fn run_command(
         ran.push((shown.clone(), status.into()));
         return if denied {
             format!("run `{shown}`: the user denied it. Do not run it; offer another way, or stop.")
+        } else if unanswered {
+            format!(
+                "run `{shown}` was not run: nobody pressed Run or Deny within 10 minutes. Say so, and offer \
+                 it again if they still want it."
+            )
         } else if no_password {
             format!(
                 "run `{shown}` did not start: the password dialog was closed without the password ({}). \

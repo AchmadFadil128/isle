@@ -459,20 +459,64 @@ pub fn refused(command: &str) -> Option<&'static str> {
     None
 }
 
-/// `command` as the AI may write it, with `sudo` (or pkexec) at its start: the command without it, and
-/// whether it needs root.
-pub fn without_sudo(command: &str, root: bool) -> (String, bool) {
-    let trimmed = command.trim();
-    for prefix in ["sudo -E ", "sudo ", "pkexec "] {
-        if let Some(rest) = trimmed.strip_prefix(prefix) {
-            return (rest.trim().to_owned(), true);
+/// `command` as the AI may write it, with `sudo` (or pkexec) before its commands: the command without them,
+/// and whether it needs root (then the whole line runs as root). Only a sudo where a command starts counts,
+/// outside quotes (`grep sudo log` keeps its word); one with options but -E (`sudo -u postgres …`) asks for
+/// what Isle can't do: Err with why.
+pub fn without_sudo(command: &str, root: bool) -> Result<(String, bool), &'static str> {
+    let chars: Vec<char> = command.trim().chars().collect();
+    let word_at = |i: usize| -> String {
+        chars[i..]
+            .iter()
+            .take_while(|c| !c.is_whitespace())
+            .collect()
+    };
+    let mut out = String::with_capacity(chars.len());
+    let mut needs_root = root;
+    let (mut single, mut double, mut escaped, mut starts) = (false, false, false, true);
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if starts && !single && !double && !c.is_whitespace() {
+            let word = word_at(i);
+            if word == "sudo" || word == "pkexec" {
+                needs_root = true;
+                i += word.chars().count();
+                // Its own options: -E (keep the environment) is harmless here; any other is refused.
+                loop {
+                    while i < chars.len() && chars[i].is_whitespace() {
+                        i += 1;
+                    }
+                    if i >= chars.len() || !chars[i].eq(&'-') {
+                        break;
+                    }
+                    let option = word_at(i);
+                    if !matches!(option.as_str(), "-E" | "--preserve-env") {
+                        return Err(
+                            "sudo with options (another user, a login shell) can't run from Isle",
+                        );
+                    }
+                    i += option.chars().count();
+                }
+                continue;
+            }
+            starts = false;
         }
+        if escaped {
+            escaped = false;
+        } else if c == '\\' && !single {
+            escaped = true;
+        } else if c == '\'' && !double {
+            single = !single;
+        } else if c == '"' && !single {
+            double = !double;
+        } else if !single && !double && matches!(c, ';' | '|' | '&' | '(' | '\n') {
+            starts = true;
+        }
+        out.push(c);
+        i += 1;
     }
-    // `sudo` further in (`apt update && sudo apt install x`): the whole line runs as root, each sudo dropped.
-    if trimmed.contains("sudo ") {
-        return (trimmed.replace("sudo -E ", "").replace("sudo ", ""), true);
-    }
-    (trimmed.to_owned(), root)
+    Ok((out.trim().to_owned(), needs_root))
 }
 
 /// The card the island shows for a task: JSON for the extension.
@@ -563,22 +607,46 @@ mod tests {
 
     #[test]
     fn takes_sudo_off_and_runs_as_root() {
+        let ok = |command: &str, root| without_sudo(command, root).unwrap();
         assert_eq!(
-            without_sudo("sudo apt install -y vlc", false),
+            ok("sudo apt install -y vlc", false),
             ("apt install -y vlc".into(), true)
         );
         assert_eq!(
-            without_sudo("apt update && sudo apt install -y vlc", false),
+            ok("apt update && sudo apt install -y vlc", false),
             ("apt update && apt install -y vlc".into(), true)
         );
         assert_eq!(
-            without_sudo("npm i -g x", false),
-            ("npm i -g x".into(), false)
+            ok("sudo -E apt upgrade", false),
+            ("apt upgrade".into(), true)
         );
         assert_eq!(
-            without_sudo("apt install x", true),
-            ("apt install x".into(), true)
+            ok("pkexec systemctl restart x", false),
+            ("systemctl restart x".into(), true)
         );
+        assert_eq!(ok("npm i -g x", false), ("npm i -g x".into(), false));
+        assert_eq!(ok("apt install x", true), ("apt install x".into(), true));
+        // Only where a command starts, and not in quotes: its word stays.
+        assert_eq!(
+            ok("grep sudo /var/log/auth.log", false),
+            ("grep sudo /var/log/auth.log".into(), false)
+        );
+        assert_eq!(
+            ok("cd x && sudo usermod -aG sudo kz", false),
+            ("cd x && usermod -aG sudo kz".into(), true)
+        );
+        assert_eq!(ok("visudo -c", false), ("visudo -c".into(), false));
+        assert_eq!(
+            ok("echo 'a; sudo b'", false),
+            ("echo 'a; sudo b'".into(), false)
+        );
+        assert_eq!(
+            ok("echo pseudo code", false),
+            ("echo pseudo code".into(), false)
+        );
+        // Run as someone else, or a login shell: not something Isle can do.
+        assert!(without_sudo("sudo -u postgres createdb x", false).is_err());
+        assert!(without_sudo("sudo -i", false).is_err());
     }
 
     #[test]
