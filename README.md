@@ -477,8 +477,9 @@ timer settings stay in `~/.local/share/isle` until you delete them.
 
 Remove Isle this way, not with the Extensions app's Remove button, which
 deletes only the extension and leaves `isled` and its hooks behind. For a
-system-wide package, each user runs `isled --unhook-all` first, then remove
-it with `sudo apt remove isle`, `sudo dnf remove isle` or
+system-wide package, each user runs `isled --unhook-all` first (and
+`isle-charge-limit 100` if the assistant set a battery charge limit), then
+remove it with `sudo apt remove isle`, `sudo dnf remove isle` or
 `sudo pacman -R isle-bin`.
 
 ## How it works

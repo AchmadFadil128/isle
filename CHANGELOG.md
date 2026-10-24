@@ -191,6 +191,8 @@ All notable changes to Isle are listed here. The format follows
   meant, until the charger is plugged in; it warned again at every dip.
 - Waking the computer no longer brings an "Offline" alert while Wi-Fi reconnects (with the screen not
   locked on suspend): the connection going with sleep is not one lost.
+- The guides say to lift a battery charge limit the assistant set (`isle-charge-limit 100`) before
+  removing a .deb, .rpm or AUR package: the limit stayed, with nothing of Isle left to lift it.
 
 ## [1.0.6] - 2026-10-24
 

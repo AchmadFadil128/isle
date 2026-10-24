@@ -182,10 +182,12 @@ package's then takes over, with your settings and data kept.
 
 Before removing the package itself, each user who ran Isle takes its alert
 hooks out of Claude Code's and Codex's settings, which would otherwise call
-an `isled` that is gone:
+an `isled` that is gone. A battery charge limit set with the assistant
+stays after the package goes, so lift it first too:
 
 ```sh
 isled --unhook-all
+isle-charge-limit 100       # only if the assistant set a charge limit
 sudo apt remove isle        # or: sudo dnf remove isle, sudo pacman -R isle-bin
 ```
 
