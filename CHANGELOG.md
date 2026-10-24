@@ -8,6 +8,8 @@ All notable changes to Isle are listed here. The format follows
 
 ### Changed
 
+- With AI usage on, Isle's service no longer reads Codex's logs every minute while the screen is locked;
+  it reads them again as it unlocks.
 - A typed request that cuts listening short lets the speech model go at once, rather than keeping it in
   memory until the island closes.
 - While the assistant runs a command, Isle's service sends its state to GNOME Shell only when something
