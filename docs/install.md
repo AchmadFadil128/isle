@@ -118,6 +118,10 @@ hooks out of Claude Code's and Codex's settings. Your tasks,
 calendar events, clipboard history and timer settings stay in
 `~/.local/share/isle`; delete it too to remove everything.
 
+Remove Isle this way, not with the Extensions app's Remove button: that
+deletes only the extension, and leaves `isled`, its service and its hooks.
+A system-wide package is removed as [below](#both-a-package-and-the-one-line-install).
+
 ## Without internet on the computer
 
 Download `isle-<version>-x86_64-linux.tar.gz` from
@@ -170,9 +174,16 @@ makepkg -si
 A copy installed with `get.sh`, in your home folder, takes precedence for
 you over a system-wide package: GNOME Shell, D-Bus and systemd all look in
 your home folder first. Run `isle-uninstall` to remove your own copy; the
-package's then takes over, with your settings and data kept. Remove the
-package itself with `sudo apt remove isle`, `sudo dnf remove isle` or
-`sudo pacman -R isle-bin`.
+package's then takes over, with your settings and data kept.
+
+Before removing the package itself, each user who ran Isle takes its alert
+hooks out of Claude Code's and Codex's settings, which would otherwise call
+an `isled` that is gone:
+
+```sh
+isled --unhook-all
+sudo apt remove isle        # or: sudo dnf remove isle, sudo pacman -R isle-bin
+```
 
 ### Checking a download
 

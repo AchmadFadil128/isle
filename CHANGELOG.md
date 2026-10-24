@@ -20,6 +20,9 @@ All notable changes to Isle are listed here. The format follows
   turned-off extensions, which outranks the list of turned-on ones, so it stayed off with no word why.
 - `isle-setup-voice base` (or another model named) also picks that model in Settings: before, it was
   downloaded but the assistant went on asking for the one chosen there. Settings offer Tiny (44 MB) too.
+- The guide says to run `isled --unhook-all` before removing a .deb, .rpm or AUR package (the AUR
+  package says so too), so Claude Code and Codex are not left calling a removed `isled`, and to remove
+  Isle with `isle-uninstall` rather than the Extensions app's Remove button.
 
 ## [1.0.6] - 2026-10-24
 

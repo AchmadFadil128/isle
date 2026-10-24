@@ -471,6 +471,12 @@ limit Isle set; it also takes Isle's hooks out of Claude Code's and Codex's
 settings. Your tasks, calendar events, clipboard history, shelf and
 timer settings stay in `~/.local/share/isle` until you delete them.
 
+Remove Isle this way, not with the Extensions app's Remove button, which
+deletes only the extension and leaves `isled` and its hooks behind. For a
+system-wide package, each user runs `isled --unhook-all` first, then remove
+it with `sudo apt remove isle`, `sudo dnf remove isle` or
+`sudo pacman -R isle-bin`.
+
 ## How it works
 
 ```
