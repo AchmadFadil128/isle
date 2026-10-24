@@ -398,11 +398,12 @@ class TasksPage extends Page {
                 this._renaming = null;
             if (save && text && text !== task.title)
                 this.daemon.call('todo', 'Rename', task.id, text);
-            // After this event: it may come as focus moves, and the entry must outlive the move.
+            // After this event: it may come as focus moves, and the entry must outlive the move. Kept as the page
+            // goes (a click outside closes it): its title must come back in place of the field.
             this.later('renamed', 0, () => {
                 this._update();
                 this._releaseKeyboard();
-            });
+            }, {keep: true});
         };
         entry.clutter_text.connect('activate', () => finish(true));
         // Clicking elsewhere keeps the new name, as in Files.
