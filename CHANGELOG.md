@@ -171,6 +171,9 @@ All notable changes to Isle are listed here. The format follows
 - Notifications still waiting their turn (behind an alert, or while the island was open) no longer pop up
   once Do Not Disturb is on, as when a focus session starts from the open island; they stay unread in the
   list, as those that come in Do Not Disturb do.
+- With animations turned off, the open island no longer closes when it narrows from under a resting
+  pointer (leaving the music page's lyrics for the Call tab); it waits for the pointer to move, as with
+  animations on.
 
 ## [1.0.6] - 2026-10-24
 

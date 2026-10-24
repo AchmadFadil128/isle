@@ -278,9 +278,9 @@ export const Island = GObject.registerClass({
         return this._driver?.running ?? false;
     }
 
-    /** Whether the pointer hasn't moved since the island last changed shape: not while it grows only, as with
+    /** Whether the pointer hasn't moved since the island last changed shape: not only while it changes, as with
      * animations off (or on its first showing) it takes its new shape at once and the pointer is met after. */
-    get grewUnderPointer() {
+    get changedUnderPointer() {
         if (!this._pointerAtMorph)
             return false;
         const [x, y] = global.get_pointer();

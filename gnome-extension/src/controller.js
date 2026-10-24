@@ -908,7 +908,7 @@ export class Controller {
         this._hoverUnmoved = false;
         this._cancel('hover');
         // Grown under a still pointer is no hover yet: it counts once the pointer moves (see `_hoverOnMove`).
-        if (this._island.hovered && !moved && this._island.grewUnderPointer && !this._expandWanted) {
+        if (this._island.hovered && !moved && this._island.changedUnderPointer && !this._expandWanted) {
             this._hoverUnmoved = true;
             this._hoverOnMove(global.get_pointer());
             return;
@@ -943,7 +943,7 @@ export class Controller {
             if (!this._expandWanted || this._keyboardGrab)
                 return;
             // Shrinking under a still pointer is no reason to close: wait until it moves.
-            if (this._island.morphing)
+            if (this._island.changedUnderPointer)
                 this._collapseOnMove(global.get_pointer());
             else
                 this._later('collapse', COLLAPSE_DELAY_MS, () => this._collapseUnlessHeld());
