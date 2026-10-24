@@ -178,6 +178,9 @@ All notable changes to Isle are listed here. The format follows
   assistant without that alert coming back once the assistant closes.
 - Locking the screen while the assistant's command waits for Run or Deny in an alert no longer shows the
   notification waiting behind it as the screen locks, marking it read with its sound, unseen.
+- The assistant opened (Super+I) over its answer's alert no longer brings that alert back once it closes,
+  and clicking an answer that is over opens the conversation instead of an empty assistant that never
+  closed.
 
 ## [1.0.6] - 2026-10-24
 

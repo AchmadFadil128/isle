@@ -1541,7 +1541,7 @@ export class Controller {
         this._cancel('expand');
         this._cancel('collapse');
         this._expandWanted = false;
-        this._shelveAlert();
+        this._shelveAnswer();
         this._voiceOpen = true;
         this._voiceInBackground = false;
         this._voiceTurn = this._daemon.state.assistant?.turn ?? 0;
@@ -1625,15 +1625,28 @@ export class Controller {
         this._scheduleVoiceClose(VOICE_ERROR_MS);
     }
 
+    // As the assistant opens: an answer of its own on show has been seen, so it goes rather than come back
+    // once the assistant closes; any other alert waits its turn.
+    _shelveAnswer() {
+        if (this._alert?.key === 'assistant')
+            this._alert.answered = true;
+        this._shelveAlert();
+    }
+
     /** Shows the assistant again as it is (at work, or with the answer it came to), without listening. */
     _reopenVoice() {
         const state = this._daemon.state.assistant;
         if (!this._voiceBound || !state)
             return;
+        // Ended since (another request, or isled restarted), there is nothing to show again: the conversation.
+        if (!['reply', 'error', ...VOICE_WORKING].includes(state.phase)) {
+            this._openVoice({typing: true});
+            return;
+        }
         this._cancel('expand');
         this._cancel('collapse');
         this._expandWanted = false;
-        this._shelveAlert();
+        this._shelveAnswer();
         this._voiceOpen = true;
         this._voiceInBackground = false;
         this._voiceTarget = global.display.focus_window;
