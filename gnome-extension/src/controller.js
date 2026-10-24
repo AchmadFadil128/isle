@@ -2054,6 +2054,8 @@ export class Controller {
         }
         // Turned off (the screen locks too): agents waiting on an answer here ask in their terminals at once.
         this._passAgentAsks();
+        // What waits goes with Isle, never shown (a notification marked read, its sound played) as it goes.
+        this._queue = [];
         global.display.get_selection().disconnect(this._primaryChanged);
         global.display.disconnect(this._focusChanged);
         global.display.disconnect(this._focusMonitorChanged);

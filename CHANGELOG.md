@@ -176,6 +176,8 @@ All notable changes to Isle are listed here. The format follows
   animations on.
 - Clicking the alert with the assistant's answer (or "Isle restarted", or a command's end) opens the
   assistant without that alert coming back once the assistant closes.
+- Locking the screen while the assistant's command waits for Run or Deny in an alert no longer shows the
+  notification waiting behind it as the screen locks, marking it read with its sound, unseen.
 
 ## [1.0.6] - 2026-10-24
 
