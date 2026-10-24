@@ -40,9 +40,10 @@ function hostOf(url) {
     }
 }
 
-/** Whether `item` matches the search `query` (already lower case). */
-function matches(item, query) {
-    if (!query)
+/** Whether `item` matches the search `query` (already lower case): its app's name or what the card shows, or,
+ * as isled found (`found`, ids), any of its text. */
+function matches(item, query, found) {
+    if (!query || found?.has(item.id))
         return true;
     const app = appFor(item.app_id)?.get_name() ?? '';
     return `${item.preview}\n${app}`.toLowerCase().includes(query);
@@ -59,8 +60,16 @@ export const ClipsView = GObject.registerClass({
         this._daemon = daemon;
         this._kind = null;
         this._pending = 0;
-        this.connect('destroy', () => this._cancelPending());
+        this.connect('destroy', () => {
+            this._destroyed = true;
+            this._cancelPending();
+        });
         this._query = '';
+        /** The items isled found holding `_query` in their whole text (cards show only its start). */
+        this._found = null;
+        /** A search isled is still answering, and how many were asked for. */
+        this._searching = null;
+        this._searches = 0;
         this._selected = 0;
         this._keyboard = false;
         /** Every item, pinned first; the cards of those that match `kind` and `query` show. */
@@ -116,15 +125,42 @@ export const ClipsView = GObject.registerClass({
     }
 
     set query(query) {
-        this._query = query.trim().toLowerCase();
-        this._selected = 0;
-        this._filter();
+        query = query.trim().toLowerCase();
+        if (query === this._query && !this._searching)
+            return;
+        this._search(query, {reset: true});
     }
 
     /** Empties the search without showing the cards it hid yet: the next `update` does. */
     clearQuery() {
+        this._searches++;
+        this._searching = null;
         this._query = '';
+        this._found = null;
         this._selected = 0;
+    }
+
+    // Asks isled which items hold `query` in their whole text. The cards change once it answers, from the last
+    // search's straight to this one's, so none blink out and back while typing; without isled, by what they show.
+    _search(query, {reset = false} = {}) {
+        const search = ++this._searches;
+        if (!query) {
+            this._searching = null;
+            [this._query, this._found] = ['', null];
+            if (reset)
+                this._selected = 0;
+            this._filter();
+            return;
+        }
+        this._searching = this._daemon.call('clipboard', 'Search', query).then(result => {
+            if (search !== this._searches || this._destroyed)
+                return;
+            this._searching = null;
+            [this._query, this._found] = [query, result ? new Set(result[0]) : null];
+            if (reset)
+                this._selected = 0;
+            this._filter();
+        });
     }
 
     /** Redraws the cards; `off` means clipboard history is switched off, `hidden` that the screen is
@@ -161,13 +197,16 @@ export const ClipsView = GObject.registerClass({
         }
         this.refreshAges();
         this._filter();
+        // A new copy may hold the words searched for too.
+        if (this._query)
+            this._search(this._query);
     }
 
     /** Shows the cards of the items that match `kind` and `query`, drawing those not drawn yet. */
     _filter() {
         const items = this._all
             .filter(item => !this._kind || item.kind === this._kind)
-            .filter(item => matches(item, this._query));
+            .filter(item => matches(item, this._query, this._found));
         this._shown = items.slice(0, MAX_CARDS);
         this._selected = Math.min(this._selected, Math.max(0, this._shown.length - 1));
         const ids = new Set(this._shown.map(item => item.id));
@@ -274,6 +313,13 @@ export const ClipsView = GObject.registerClass({
 
     /** Chooses the selected card, as Enter does. */
     activateSelected() {
+        // Enter typed right after the words: on what they find.
+        if (this._destroyed)
+            return;
+        if (this._searching) {
+            this._searching.then(() => this.activateSelected());
+            return;
+        }
         const item = this._shown[this._selected];
         if (item)
             this.emit('activated', item, true);

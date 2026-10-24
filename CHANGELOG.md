@@ -186,6 +186,7 @@ All notable changes to Isle are listed here. The format follows
 - A password a password manager clears again also leaves the clipboard history when you pasted it into
   another app (the manager clears it on a timer, with that app in front), and copying blank text no
   longer takes the last copy out of the history.
+- Searching the clipboard history finds words anywhere in a copied text, not only near its start.
 
 ## [1.0.6] - 2026-10-24
 

@@ -6,7 +6,7 @@ properties holding JSON, with `PropertiesChanged` emitted on every change.
 Timestamps are milliseconds since the Unix epoch; durations are
 milliseconds unless the name says `_us` (microseconds).
 
-Methods that read what the user copied (`Clipboard1.GetText`), steer the
+Methods that read what the user copied (`Clipboard1.GetText` and `Search`), steer the
 assistant (every `Assistant1` method but `ClearChat`), answer an AI agent
 (`Agents1.Resolve`) or change an AI's settings (`Agents1.SetHooked`) answer
 GNOME Shell only, where the extension runs; any other caller gets
@@ -111,6 +111,7 @@ of the app copied from, or `""`.
 | `AddImage(ay png, s app_id) → t id` | | A copied PNG image, at most 16 MiB. |
 | `AddFiles(as uris, s app_id) → t id` | | Copied files; only `file://` URIs. |
 | `GetText(t id) → s` | | The full content to copy back: the text, the URIs one per line, or the path of an image's PNG. GNOME Shell only. |
+| `Search(s query) → at ids` | | The items whose whole text (or files' names) holds `query`, ignoring case, in the list's order; images match nothing. Only ids, never the text. GNOME Shell only. |
 | `Touch(t id)` | | Move to the top, as copied again (e.g. from the history). |
 | `SetPinned(t id, b pinned)` | | At most 10 items are pinned; pinning an eleventh fails with `LimitsExceeded`. |
 | `Remove(t id)` | | |

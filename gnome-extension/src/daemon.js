@@ -68,6 +68,7 @@ const INTERFACES = {
             <method name="AddImage"><arg name="png" type="ay" direction="in"/><arg name="app_id" type="s" direction="in"/><arg type="t" direction="out"/></method>
             <method name="AddFiles"><arg name="uris" type="as" direction="in"/><arg name="app_id" type="s" direction="in"/><arg type="t" direction="out"/></method>
             <method name="GetText"><arg name="id" type="t" direction="in"/><arg type="s" direction="out"/></method>
+            <method name="Search"><arg name="query" type="s" direction="in"/><arg type="at" direction="out"/></method>
             <method name="Touch"><arg name="id" type="t" direction="in"/></method>
             <method name="SetPinned"><arg name="id" type="t" direction="in"/><arg name="pinned" type="b" direction="in"/></method>
             <method name="Remove"><arg name="id" type="t" direction="in"/></method>

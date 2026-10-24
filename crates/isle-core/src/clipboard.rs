@@ -116,6 +116,16 @@ impl Clip {
         }
     }
 
+    /// Whether the whole of it (a text, or a files item's names) holds `query`, which is lower case
+    /// already; an image holds none.
+    pub fn contains(&self, query: &str) -> bool {
+        match self {
+            Self::Text { text } | Self::Link { text } => text.to_lowercase().contains(query),
+            Self::Files { .. } => self.preview().to_lowercase().contains(query),
+            Self::Image { .. } => false,
+        }
+    }
+
     /// The content hash of an image item.
     pub fn image_hash(&self) -> Option<&str> {
         match self {
@@ -564,6 +574,22 @@ mod tests {
         assert_eq!(preview.chars().count(), PREVIEW_CHARS);
         assert!(preview.ends_with('🙂'));
         assert_eq!(image("aa").preview(), "");
+    }
+
+    #[test]
+    fn finds_words_past_the_preview_ignoring_case() {
+        let long = text(&format!(
+            "{} Needle at the end",
+            "x".repeat(PREVIEW_CHARS * 2)
+        ));
+        assert!(!long.preview().to_lowercase().contains("needle"));
+        assert!(long.contains("needle"));
+        assert!(text("Grüße aus Köln").contains("grüße"));
+        assert!(!text("hello").contains("world"));
+        assert!(!image("aa").contains(""));
+        let files = Clip::from_uris(vec!["file:///home/a/My%20notes.txt".into()]).unwrap();
+        assert!(files.contains("my notes"));
+        assert!(!files.contains("home"));
     }
 
     #[test]
