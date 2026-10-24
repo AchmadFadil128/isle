@@ -8,6 +8,9 @@ All notable changes to Isle are listed here. The format follows
 
 ### Changed
 
+- Opening the island on a song with synced lyrics no longer eases each lyric line behind the player
+  before its first frame, and lyrics out of sight no longer wake Isle at every line: they are set as
+  they show.
 - The closed island no longer runs fades to the opacity its music bars and clock already have each time
   a song, the timer or a call changes.
 

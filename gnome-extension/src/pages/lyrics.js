@@ -101,7 +101,9 @@ class LyricsPane extends St.Widget {
         this._manualUntil = 0;
         // Hidden (island closed, or the player shown), it has no layout to scroll; it catches up when shown.
         this.connect('notify::mapped', () => {
-            if (this.mapped)
+            if (this.mapped && this._synced)
+                this.follow({shown: true});
+            else if (this.mapped)
                 this._scrollTo(this._current);
         });
 
@@ -224,13 +226,19 @@ class LyricsPane extends St.Widget {
         return row;
     }
 
-    /** Highlights the line being sung and glides it into place. */
-    follow() {
+    /** Highlights the line being sung and glides it into place; `shown` (just on screen) puts it there at once. */
+    follow({shown = false} = {}) {
         if (!this._synced || !this._lines.length)
             return;
+        // Out of sight (the player shown, or closed) nothing is eased or timed: opening eased each line changed
+        // meanwhile, before its first frame. They are set as they show.
+        if (!this.mapped) {
+            this._page.cancel('lyric');
+            return;
+        }
         const {nowPlaying} = this._page.daemon.state;
         const index = Playback.lineIndexAt(this._lines, Playback.positionMs(nowPlaying));
-        if (index !== this._current) {
+        if (index !== this._current || shown) {
             this._current = index;
             this._rows.forEach((row, i) => {
                 const current = i === index;
@@ -242,18 +250,25 @@ class LyricsPane extends St.Widget {
                 if (opacity !== this._opacities[i] || scale !== this._scales[i]) {
                     this._opacities[i] = opacity;
                     this._scales[i] = scale;
-                    row.ease({
-                        opacity,
-                        scale_x: scale,
-                        scale_y: scale,
-                        duration: LINE_EASE_MS,
-                        mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
-                    });
+                    // As ease() would off screen: there at once.
+                    if (shown) {
+                        row.remove_all_transitions();
+                        row.opacity = opacity;
+                        row.set_scale(scale, scale);
+                    } else {
+                        row.ease({
+                            opacity,
+                            scale_x: scale,
+                            scale_y: scale,
+                            duration: LINE_EASE_MS,
+                            mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+                        });
+                    }
                 }
                 if (row instanceof PauseDots)
                     row.breathing = current && Playback.isPlaying(nowPlaying);
             });
-            if (Date.now() > this._manualUntil)
+            if (shown || Date.now() > this._manualUntil)
                 this._scrollTo(index);
         }
         const wait = Playback.isPlaying(nowPlaying) ? Playback.msUntilLine(nowPlaying, this._lines, index) : null;
