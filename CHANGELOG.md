@@ -164,6 +164,10 @@ All notable changes to Isle are listed here. The format follows
 - The next alert after one that grew under a resting pointer, or one updated in place under it, runs out
   as it should instead of staying until the pointer moves (or for good, once the island shrank from under
   it), and the assistant's answer closes on its own when the pill grew under a pointer that never moved.
+- With animations turned off, and when Isle starts again after unlocking, an island that appears or grows
+  under a resting pointer no longer counts as hovered: an alert no longer opened the island ("open on
+  hover") or stayed until the pointer moved. A pointer resting on the island as Isle starts again after
+  unlocking opens it once it moves, instead of only after leaving it and coming back.
 
 ## [1.0.6] - 2026-10-24
 

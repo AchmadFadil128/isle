@@ -279,6 +279,9 @@ export class Controller {
         this._syncVoiceEnabled();
         this._syncUsage();
         this._syncEventAlerts();
+        // The pointer met while it was still being built (after unlocking, at rest on it) is told now.
+        if (this._island.hovered)
+            this._onHoverChanged();
         this._render();
         this._later('warm', WARM_START_MS, () => this._warmUp(true));
         this._daemon.release();
