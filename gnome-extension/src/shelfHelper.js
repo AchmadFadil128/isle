@@ -5,6 +5,7 @@
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Meta from 'gi://Meta';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
@@ -50,6 +51,17 @@ const DRAG_PROXIMITY = 120;
 const RECHECK_MS = 24;
 /** A drag that opened the shelf and then goes this far off closes it again. */
 const DRAG_AWAY = 260;
+/** What a drag of files offers; browsers' tabs and bookmarks carry a URI list too, and are left alone. */
+const FILE_TYPES = ['text/uri-list', 'x-special/gnome-copied-files'];
+const NOT_FILES = /tab|x-moz-place/;
+
+/** Whether the drag under way carries files; null while it offers nothing yet. */
+function dragCarriesFiles() {
+    const types = global.display.get_selection().get_mimetypes(Meta.SelectionType.SELECTION_DND);
+    if (types.length === 0)
+        return null;
+    return types.some(type => FILE_TYPES.includes(type)) && !types.some(type => NOT_FILES.test(type));
+}
 
 // Signals: `drag-near`, `drag-over` (over the shelf or not), `drag-files` (the URIs over it), `drag-away` (went elsewhere),
 // `drag-end` (a drag in or out ended; whether it ended over the shelf), `available-changed`.
@@ -274,9 +286,15 @@ export class ShelfHelper extends Signals.EventEmitter {
         this._dragNear = false;
         this._dragSeen = false;
         this._dragOver = false;
+        /** Whether the drag under way carries files; null until it is known. */
+        this._dragFiles = null;
         this._dndPosition = this._dnd.connect('dnd-position-change', (_dnd, x, y) => {
             // Not for a file carried out of the shelf itself.
             if (this._dragging || !this._proxy)
+                return;
+            // Only files (or links): a browser tab or text moved about near the island is left alone.
+            this._dragFiles ??= dragCarriesFiles();
+            if (!this._dragFiles)
                 return;
             this._setDragOver(this._dragNear && this._over(x, y));
             if (!this._dragSeen) {
@@ -299,6 +317,7 @@ export class ShelfHelper extends Signals.EventEmitter {
         });
         this._dndLeave = this._dnd.connect('dnd-leave', () => {
             this._dragSeen = false;
+            this._dragFiles = null;
             if (this._dragNear) {
                 // Quietly: the drop's end says where it was let go.
                 const over = this._dragOver;

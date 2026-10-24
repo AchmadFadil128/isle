@@ -14,6 +14,8 @@ All notable changes to Isle are listed here. The format follows
   go anywhere on the island still lands on the shelf, and the island's tabs keep their clicks.
 - In the Activities overview the Files tab shows its files instead of an empty tray.
 - Maximizing and arranging windows by voice no longer logs warnings on GNOME 49 and later.
+- Moving a browser's tabs, or text, near the island no longer opens the shelf and takes the drop:
+  only a drag of files (or links) does.
 
 ## [1.0.6] - 2026-10-24
 
