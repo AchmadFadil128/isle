@@ -1821,6 +1821,9 @@ export class Controller {
         }
         this._voiceInBackground = false;
         this._syncAssistantBusy();
+        // Closed as it turned what was said into text, and nothing was: there is nothing to tell.
+        if (state.phase === 'error' && state.heard_nothing)
+            return;
         this._post(Alerts.assistant({...state, hint: this._voice.withShortcut(state.hint ?? '')}, () => this._reopenVoice()));
     }
 

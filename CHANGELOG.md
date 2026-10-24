@@ -183,6 +183,8 @@ All notable changes to Isle are listed here. The format follows
   closed.
 - A request typed and sent just before the assistant was closed (its AI still starting) is answered as
   an alert and its actions run, instead of being worked on unseen and its answer dropped.
+- Closing the assistant while it turns what was said into text no longer brings a "Didn't catch that"
+  alert when nothing was said.
 
 ## [1.0.6] - 2026-10-24
 
