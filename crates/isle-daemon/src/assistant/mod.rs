@@ -1082,6 +1082,8 @@ async fn turn(
                 state.actions.clear();
                 state.error.clear();
                 state.hint.clear();
+                state.draft.clear();
+                state.card = Value::Null;
             })
             .await;
             let audio = match record(iface, commands, later).await {
@@ -1524,8 +1526,11 @@ async fn fail(
         state.model = failure.model;
         state.heard_nothing = heard_nothing;
         state.activity.clear();
+        state.draft.clear();
         state.reply.clear();
         state.actions.clear();
+        // The last request's card would show under this error, glad it worked.
+        state.card = Value::Null;
     })
     .await;
     None
