@@ -28,6 +28,8 @@ const OWN_COLOR = [255, 159, 10];
 const PILL_ALPHA = 0.18;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** An event's ×: a 10 px icon and 3 px around it. */
+const REMOVE_SIZE = 16;
 
 /** "2026-10-21" for a local Date. */
 function dayKey(date) {
@@ -484,13 +486,15 @@ export const CalendarPage = GObject.registerClass({
             this._scroll.vadjustment.value = 0;
         this._listedDay = day;
         const now = new Date();
+        // With Isle's own events (×) among them, the others keep the ×'s room, so all their times line up.
+        const removable = events.some(event => event.ownId !== null);
         for (const event of events)
-            this._list.add_child(this._eventRow(event, now));
+            this._list.add_child(this._eventRow(event, now, removable));
         this._noEvents.visible = events.length === 0;
         this._scroll.visible = events.length > 0;
     }
 
-    _eventRow(event, now) {
+    _eventRow(event, now, removable) {
         // Only Isle's own events take the pointer (for ×); the desktop's calendars' are to read, not open.
         const row = new St.BoxLayout({style_class: 'isle-cal-event', reactive: event.ownId !== null});
         const [r, g, b] = event.color;
@@ -523,10 +527,13 @@ export const CalendarPage = GObject.registerClass({
                     removing = true;
                     this.daemon.call('calendar', 'Remove', event.ownId);
                 }
-            }, {size: 10, accessibleName: 'Remove event'});
+            }, {size: REMOVE_SIZE - 6, accessibleName: 'Remove event'});
             remove.opacity = 0;
             onHover(row, hovered => remove.ease({opacity: hovered ? 255 : 0, duration: 120}));
             row.add_child(remove);
+        } else if (removable) {
+            // As wide as the ×: its icon and padding (see .isle-task-remove).
+            row.add_child(new St.Widget({width: REMOVE_SIZE}));
         }
         return row;
     }

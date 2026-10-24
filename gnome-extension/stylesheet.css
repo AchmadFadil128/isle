@@ -243,7 +243,7 @@
 .isle-voice-orb { border-radius: 999px; }
 .isle-voice-heard { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-bottom: 2px; }
 .isle-voice-text { font-size: 15px; font-weight: 500; letter-spacing: -0.1px; }
-.isle-voice-text-dim { color: rgba(255, 255, 255, 0.6); font-weight: 600; }
+.isle-voice-text-dim { color: rgba(255, 255, 255, 0.6); }
 .isle-voice-text-long { font-size: 14px; font-weight: 400; color: rgba(255, 255, 255, 0.92); }
 .isle-voice-hint { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-top: 4px; }
 .isle-voice-steps { spacing: 3px; padding-top: 5px; }
@@ -326,6 +326,8 @@
 .isle-chat-command { spacing: 8px; }
 .isle-chat-command-glyph { color: rgba(255, 255, 255, 0.45); }
 .isle-chat-command-text { font-family: monospace; font-size: 11px; padding: 5px 9px; border-radius: 8px; background-color: rgba(255, 255, 255, 0.06); }
+/* As wide whatever it says, so the command beside it keeps its width. */
+.isle-chat-command-status { min-width: 56px; }
 .isle-chat-command-status .isle-card-status-text { font-size: 11px; }
 
 /* The round button at the row's end: 32 px with any of its icons (see ACTION_SIZE in voice.js). */
@@ -360,7 +362,8 @@
 #isleIsland .isle-voice-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.45) !important; }
 .isle-compact-assistant { color: #8f66ff; }
 .isle-compact-warning { color: #ff453a; }
-.isle-header-mic { padding: 4px; color: rgba(255, 255, 255, 0.75); }
+.isle-header-mic { padding: 4px; color: rgba(255, 255, 255, 0.6); }
+.isle-header-mic:hover { color: #ffffff; }
 
 /* ── Expanded: frame ──────────────────────────────────── */
 
@@ -579,8 +582,10 @@
 .isle-stepper-button { padding: 6px; border-radius: 999px; color: rgba(255, 255, 255, 0.8); }
 .isle-stepper-button:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
 
+/* Reset as tall as Start beside it. */
 .isle-timer-controls { spacing: 8px; }
-.isle-start-pill { padding: 9px 18px; border-radius: 999px; color: #ffffff; background-color: #2c2c2e; }
+.isle-timer-controls .isle-button-round { padding: 10px; }
+.isle-start-pill { padding: 8px 18px; border-radius: 999px; color: #ffffff; background-color: #2c2c2e; }
 .isle-start-pill:hover { background-color: #3a3a3c; }
 .isle-start-pill-box { spacing: 7px; }
 .isle-start-pill-label { font-size: 14px; font-weight: 600; }
@@ -929,7 +934,7 @@
 .isle-usage-line { spacing: 10px; }
 .isle-usage-window { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.9); }
 .isle-usage-reset { font-size: 11px; color: rgba(255, 255, 255, 0.55); }
-.isle-usage-percent { font-size: 13px; font-weight: 700; min-width: 34px; text-align: right; }
+.isle-usage-percent { font-size: 13px; font-weight: 700; min-width: 40px; text-align: right; }
 .isle-usage-percent.critical { color: #ff453a; }
 .isle-usage-track { height: 5px; border-radius: 3px; background-color: rgba(255, 255, 255, 0.1); }
 .isle-usage-fill { height: 5px; border-radius: 3px; }

@@ -35,6 +35,8 @@ const TABS = {
 };
 /** How bright a tab's icon is: open, under the pointer, otherwise. */
 const TAB_OPACITY = {open: 255, hover: 230, idle: 140};
+/** The settings icon's, as bright as the sparkle's colour (0.6) beside it. */
+const SETTINGS_OPACITY = 153;
 
 /** The music bars' opacity while the song is paused, as on the closed island. */
 const PAUSED_BARS_OPACITY = 110;
@@ -163,8 +165,12 @@ export const ExpandedView = GObject.registerClass({
         clock.add_child(this._date);
         clock.add_child(this._time);
         status.add_child(clock);
-        status.add_child(iconButton('isle-settings', 'isle-button-flat isle-header-settings',
-            () => this.emit('settings-requested'), {size: 14, accessibleName: 'Settings'}));
+        const settings = iconButton('isle-settings', 'isle-button-flat isle-header-settings',
+            () => this.emit('settings-requested'), {size: 15, accessibleName: 'Settings'});
+        // Its icon is an image, which takes no CSS colour: dimmed as the sparkle beside it, lit under the pointer.
+        settings.child.opacity = SETTINGS_OPACITY;
+        settings.connect('notify::hover', () => settings.child.ease({opacity: settings.hover ? 255 : SETTINGS_OPACITY, duration: 120}));
+        status.add_child(settings);
         header.add_child(status);
         return header;
     }

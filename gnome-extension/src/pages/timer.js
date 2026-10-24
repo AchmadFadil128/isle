@@ -63,7 +63,7 @@ class TimerPage extends Page {
         // Reset only once started; then Start, Pause or Resume.
         const controls = new St.BoxLayout({style_class: 'isle-timer-controls', x_expand: true,
             x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.CENTER});
-        this._reset = iconButton('isle-reset', 'isle-button-round isle-button-small',
+        this._reset = iconButton('isle-reset', 'isle-button-round',
             () => daemon.call('pomodoro', 'Stop'), {size: 14, accessibleName: 'Reset the timer'});
         this._reset.y_align = Clutter.ActorAlign.CENTER;
         controls.add_child(this._reset);

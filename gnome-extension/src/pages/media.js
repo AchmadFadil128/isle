@@ -144,7 +144,7 @@ class MediaPage extends Page {
     _progress() {
         const row = new St.BoxLayout({style_class: 'isle-player-progress'});
         const elapsed = label('0:00', 'isle-time');
-        const remaining = label('-0:00', 'isle-time isle-time-end');
+        const remaining = label('\u22120:00', 'isle-time isle-time-end');
         const scrubber = new Slider();
         scrubber.connect('released', (_slider, fraction) => {
             const length = this.daemon.state.nowPlaying?.length_us ?? 0;
@@ -447,7 +447,8 @@ class MediaPage extends Page {
         const position = Playback.positionMs(nowPlaying);
         const length = Playback.lengthMs(nowPlaying);
         const elapsed = Format.duration(position);
-        const remaining = length > 0 ? `-${Format.duration(length - position)}` : '';
+        // A minus sign, not a hyphen, as a Mac's player shows it.
+        const remaining = length > 0 ? `\u2212${Format.duration(length - position)}` : '';
         this._elapsed.forEach(text => (text.text = elapsed));
         this._remaining.forEach(text => (text.text = remaining));
         for (const scrubber of this._scrubbers)
