@@ -354,7 +354,7 @@ export function meeting(event, link, join) {
     const at = date => Format.timeOfDay(GLib.DateTime.new_from_unix_local(Math.floor(date.getTime() / 1000)));
     const span = event.end_ms ? `${at(start)} – ${at(new Date(event.end_ms))}` : at(start);
     const service = link ? meetingService(link) : null;
-    return {
+    const alert = {
         key: `meeting:${event.id ?? event.title}:${event.start_ms}`,
         icon: link ? 'isle-video-symbolic' : 'isle-calendar',
         motion: 'bounce',
@@ -365,7 +365,18 @@ export function meeting(event, link, join) {
         // Its time only runs while someone is there to see it, as a reminder's.
         sticky: true,
         action: link ? {label: 'Join', callback: join, primary: true} : null,
+        // When its turn comes: the minutes left then, and gone once the event is over (an hour without an end).
+        fresh: () => {
+            if (Date.now() >= (event.end_ms || event.start_ms + 3600e3))
+                return null;
+            const redone = meeting(event, link, join);
+            if (redone.title === alert.title)
+                return alert;
+            redone.shown = alert.shown;
+            return redone;
+        },
     };
+    return alert;
 }
 
 const AGENT_NAMES = {claude: 'Claude', codex: 'Codex'};

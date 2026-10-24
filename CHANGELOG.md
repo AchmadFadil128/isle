@@ -31,6 +31,8 @@ All notable changes to Isle are listed here. The format follows
   once; Codex waited nearly ten minutes.
 - A notification keeps text in angle brackets, as GNOME shows it: "Ann <ann@example.com>",
   "Vec<String>" and "a < b > c" lost those words in the island.
+- A calendar event's alert that waited (the island open, or a fullscreen window) says how many minutes
+  are left when it shows, not "in 5 min" from when it was due, and no longer shows once the event is over.
 
 ## [1.0.6] - 2026-10-24
 
