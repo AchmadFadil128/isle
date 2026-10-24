@@ -118,6 +118,8 @@ All notable changes to Isle are listed here. The format follows
   (with "open on hover"), nor stays on screen until the pointer moves: it counts once the pointer moves.
 - Notifications opened by asking the assistant close with Esc or a click elsewhere, as with Super+V,
   instead of staying open until the pointer went over the island and away.
+- On a touchscreen a tap on the island does what a click does (opens it, or an alert's notification),
+  and a tap elsewhere closes it; before, taps did nothing and the clock under it could not be reached.
 
 ## [1.0.6] - 2026-10-24
 

@@ -8,6 +8,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
+import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
@@ -344,6 +345,7 @@ export class Controller {
         // A new theme or text size restyles every view: laid out ahead again at the next warm-up.
         island.connect('style-changed', () => (this._viewsWarm = false));
         island.connect('button-release-event', (_actor, event) => this._onClick(event));
+        island.connect('touch-event', (_actor, event) => this._onTap(event));
         island.connect('scroll-event', (_actor, event) => this._onAlertScroll(event));
         island.connect('geometry-changed', () => this._shelfHelper.sync());
 
@@ -1051,7 +1053,23 @@ export class Controller {
         return Clutter.EVENT_STOP;
     }
 
-    _onClick(event) {
+    /** A tap is a primary click, but for a button's own; opened by one, a tap elsewhere closes it. */
+    _onTap(event) {
+        if (event.type() !== Clutter.EventType.TOUCH_END)
+            return Clutter.EVENT_PROPAGATE;
+        for (let actor = global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, ...event.get_coords());
+            actor && actor !== this._island; actor = actor.get_parent()) {
+            if (actor instanceof St.Button)
+                return Clutter.EVENT_PROPAGATE;
+        }
+        const wasOpen = this._expandWanted;
+        const result = this._onClick(event, Clutter.BUTTON_PRIMARY);
+        if (!wasOpen && this._expandWanted && !this._keyboardGrab)
+            this._holdOpen();
+        return result;
+    }
+
+    _onClick(event, button = event.get_button()) {
         // A click puts an answer away; the face and the Sign in button take their own clicks.
         if (this._voiceOpen) {
             if (!this._voiceAnswered || this._voice.chatOpen)
@@ -1059,7 +1077,7 @@ export class Controller {
             this.collapse();
             return Clutter.EVENT_STOP;
         }
-        switch (event.get_button()) {
+        switch (button) {
         case Clutter.BUTTON_PRIMARY:
             return this._openFromClosed();
         case Clutter.BUTTON_MIDDLE:
@@ -1180,7 +1198,8 @@ export class Controller {
             // Clicking anywhere else ends typing and closes the island.
             this._stageCapture = global.stage.connect('captured-event', (_stage, event) => {
                 // The shelf helper's window lies over the island: inside too.
-                if (event.type() === Clutter.EventType.BUTTON_PRESS && !this._shelfHelper.containsPointer() &&
+                const press = [Clutter.EventType.BUTTON_PRESS, Clutter.EventType.TOUCH_BEGIN].includes(event.type());
+                if (press && !this._shelfHelper.containsPointer() &&
                     !this._island.contains(global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, ...event.get_coords()))) {
                     this.collapse();
                 }
