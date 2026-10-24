@@ -124,6 +124,10 @@ gnome-extensions enable isle@zickrian.github.io
 **Arch Linux.** [`packaging/aur`](packaging/aur) has a `PKGBUILD` for
 `isle-bin`, made from the release tarball: run `makepkg -si` in that folder.
 
+To update a package, install the new release's package the same way (or run
+`makepkg -si` again with the updated `PKGBUILD`); don't also run the command
+above, which would add a second copy in your home folder.
+
 A copy installed with the command above, in your home folder, takes
 precedence over a system-wide package; `isle-uninstall` removes it and the
 package's takes over. Releases can be checked with
@@ -393,7 +397,7 @@ GNOME 46 (version 1.0.0):
 
 | Part | Memory | CPU when idle |
 |---|---|---|
-| `isled` (background service) | about 7.5 MB resident, of which under 1 MB its own | 0% (no polling: it wakes for real events and deadlines only) |
+| `isled` (background service) | about 10 MB resident, of which under 1 MB its own | 0% (no polling: it wakes for real events and deadlines only) |
 | Extension, inside GNOME Shell | about 10 MB more for the shell, flat over hours of use | 0% when nothing moves |
 | `isle-shelf` (drag and drop) | about 43 MB (GTK 4, drawn on the CPU, no GPU driver loaded); only while the files tray is open, and 20 seconds after | 0% |
 | Voice assistant | the AI only while it works and for 3 minutes after, so a follow-up starts at once (Claude Code about 290 MB, Codex about 160 MB); speech recognition only while the island listens | 0% between requests |
