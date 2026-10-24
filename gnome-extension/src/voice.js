@@ -1175,6 +1175,7 @@ const ACTIONS = {
     open_folder: ({path}) => openFolder(path ?? ''),
     brightness: ({level, command}) => setBrightness(level, command),
     dark_mode: ({on}) => setDarkMode(on !== false),
+    power_mode: ({mode}) => setPowerMode(mode),
     night_light: ({on}) => new Gio.Settings({schema_id: 'org.gnome.settings-daemon.plugins.color'})
         .set_boolean('night-light-enabled', on !== false),
     settings: ({panel}) => /^[a-z-]+$/.test(panel ?? '') && spawn(['gnome-control-center', panel]),
@@ -1472,6 +1473,40 @@ function whenOnBus(name, ms, callback) {
         giveUp();
     };
     pending.add(entry);
+}
+
+/** Runs `argv` to its end: {ok, output} (its error output when it failed). */
+function finish(argv) {
+    return new Promise(resolve => {
+        let process;
+        try {
+            process = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
+        } catch (e) {
+            resolve({ok: false, output: e.message});
+            return;
+        }
+        process.communicate_utf8_async(null, null, (_process, result) => {
+            try {
+                const [, stdout, stderr] = process.communicate_utf8_finish(result);
+                const ok = process.get_successful();
+                resolve({ok, output: ((ok ? stdout : stderr || stdout) ?? '').trim()});
+            } catch (e) {
+                resolve({ok: false, output: e.message});
+            }
+        });
+    });
+}
+
+/** Sets the power mode (power-profiles-daemon): power-saver, balanced or performance. */
+async function setPowerMode(mode) {
+    if (!['power-saver', 'balanced', 'performance'].includes(mode))
+        return failed('the mode is power-saver, balanced or performance');
+    const program = GLib.find_program_in_path('powerprofilesctl');
+    if (!program)
+        return failed('power-profiles-daemon is not installed, so there are no power modes to switch');
+    const {ok, output} = await finish([program, 'set', mode]);
+    // Not every computer has a performance mode.
+    return ok ? `power mode is now ${mode}` : failed(output.split('\n').at(-1) || 'it did not change');
 }
 
 function spawn(argv) {

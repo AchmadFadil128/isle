@@ -103,6 +103,14 @@ fn eval_provider() -> Provider {
 
 /// A dozen cases covering each kind of job, for AIs whose plan limits a full run would spend.
 const QUICK: &[&str] = &[
+    "laptop aku lagi mode hemat baterai atau performa?",
+    "ganti ke mode performa dong",
+    "wifi aku sering putus putus, kenapa ya?",
+    "menurut kamu mending belajar rust atau go buat backend? aku pemula",
+    "cariin rekomendasi laptop buat coding budget 10 juta",
+    "kenapa pas aku apt install muncul error E: Unable to locate package?",
+    "hai isle, lagi ngapain?",
+    "install obs studio",
     "tolong putar lagu di spotify",
     "remind me to call mom in 2 hours",
     "besok jam 9 pagi ada meeting sama klien tolong catat",
@@ -330,6 +338,61 @@ fn shown(answers: &[Answer], name: &str) -> Result<(), String> {
     ensure(found, &format!("did not show or open {name}"))
 }
 
+/// Whether a check on the way ran one of `commands` (by the start of its words, "nmcli", "journalctl").
+fn checked(answers: &[Answer], commands: &[&str]) -> Result<(), String> {
+    let ran: Vec<&String> = answers.iter().flat_map(|a| &a.checks).collect();
+    ensure(
+        ran.iter()
+            .any(|check| commands.iter().any(|command| check.contains(command))),
+        &format!("did not look with {commands:?} (checked {ran:?})"),
+    )
+}
+
+/// How many checks it ran on the way.
+fn checks(answers: &[Answer]) -> usize {
+    answers.iter().map(|a| a.checks.len()).sum()
+}
+
+/// It never tells the user it may not look: it looks another way.
+fn no_excuse(answer: &Answer) -> Result<(), String> {
+    let say = answer.say.to_lowercase();
+    ensure(
+        ![
+            "tidak diizinkan",
+            "nggak diizinkan",
+            "gak diizinkan",
+            "not allowed",
+            "tidak punya akses",
+            "don't have access",
+            "do not have access",
+            "can't check",
+            "cannot check",
+            "tidak bisa mengecek",
+            "nggak bisa ngecek",
+            "gak bisa ngecek",
+        ]
+        .iter()
+        .any(|excuse| say.contains(excuse)),
+        "said it may not look",
+    )
+}
+
+/// At least `count` words: a real answer, not a brush-off.
+fn at_least(answer: &Answer, count: usize) -> Result<(), String> {
+    let said = answer.say.split_whitespace().count();
+    ensure(said >= count, &format!("only {said} words, {count} wanted"))
+}
+
+/// Whether `say` names at least `count` of `names`.
+fn names(answer: &Answer, names: &[&str], count: usize) -> Result<(), String> {
+    let say = answer.say.to_lowercase();
+    let found = names.iter().filter(|name| say.contains(*name)).count();
+    ensure(
+        found >= count,
+        &format!("named {found} of {names:?}, {count} wanted"),
+    )
+}
+
 fn tomorrow() -> String {
     (chrono::Local::now().date_naive() + chrono::Days::new(1))
         .format("%Y-%m-%d")
@@ -352,6 +415,204 @@ fn cases() -> Vec<Case> {
         time: "13:40".into(),
     };
     vec![
+        // An expert about this computer: it looks before it answers, and never says it may not.
+        case(
+            &["laptop aku lagi mode hemat baterai atau performa?"],
+            |a| {
+                checked(a, &["powerprofilesctl", "platform_profile"])?;
+                let a = last(a);
+                no_excuse(a)?;
+                names(
+                    a,
+                    &[
+                        "hemat",
+                        "seimbang",
+                        "balanced",
+                        "performa",
+                        "performance",
+                        "power-saver",
+                        "power saver",
+                    ],
+                    1,
+                )?;
+                indonesian(a)
+            },
+        ),
+        case(&["ganti ke mode performa dong"], |a| {
+            let mode = a
+                .iter()
+                .flat_map(|a| &a.actions)
+                .find(|action| action["type"] == "power_mode")
+                .ok_or("no power_mode action")?;
+            ensure(text(mode, "mode") == "performance", "wrong mode")?;
+            indonesian(last(a))
+        }),
+        case(&["kesehatan baterai laptop aku gimana?"], |a| {
+            checked(a, &["upower", "power_supply"])?;
+            let a = last(a);
+            no_excuse(a)?;
+            at_least(a, 15)?;
+            indonesian(a)
+        }),
+        case(&["wifi aku sering putus putus, kenapa ya?"], |a| {
+            checked(a, &["nmcli", "journalctl", "ip ", "iw ", "rfkill", "dmesg"])?;
+            ensure(checks(a) >= 2, "looked only once")?;
+            let a = last(a);
+            no_excuse(a)?;
+            at_least(a, 25)?;
+            indonesian(a)
+        }),
+        case(&["suara laptop aku ga keluar sama sekali"], |a| {
+            checked(a, &["wpctl", "pactl", "aplay", "systemctl"])?;
+            let a = last(a);
+            no_excuse(a)?;
+            indonesian(a)
+        }),
+        case(&["why is my bluetooth not working?"], |a| {
+            checked(a, &["bluetoothctl", "rfkill", "systemctl", "journalctl"])?;
+            let a = last(a);
+            no_excuse(a)?;
+            english(a)
+        }),
+        case(&["kenapa laptop aku cepet panas?"], |a| {
+            ensure(
+                checked(
+                    a,
+                    &["sensors", "ps ", "thermal", "powerprofilesctl", "cpupower"],
+                )
+                .is_ok()
+                    || used(a, "top_processes").is_ok(),
+                "did not look at what heats it",
+            )?;
+            let a = last(a);
+            no_excuse(a)?;
+            indonesian(a)
+        }),
+        case(
+            &["storage aku kepake apa aja sih? folder apa yang paling gede"],
+            |a| {
+                checked(a, &["du ", "df"])?;
+                let a = last(a);
+                no_excuse(a)?;
+                indonesian(a)
+            },
+        ),
+        case(&["boot laptop aku lama banget, kenapa ya"], |a| {
+            checked(a, &["systemd-analyze", "journalctl"])?;
+            let a = last(a);
+            no_excuse(a)?;
+            indonesian(a)
+        }),
+        // A friend to think with: an opinion with its reasons, explanations, research.
+        case(
+            &["menurut kamu mending belajar rust atau go buat backend? aku pemula"],
+            |a| {
+                let a = last(a);
+                no_actions(a)?;
+                at_least(a, 40)?;
+                names(a, &["rust", "go"], 2)?;
+                indonesian(a)
+            },
+        ),
+        case(
+            &["cariin rekomendasi laptop buat coding budget 10 juta"],
+            |a| {
+                let a = last(a);
+                at_least(a, 40)?;
+                names(
+                    a,
+                    &[
+                        "asus",
+                        "lenovo",
+                        "acer",
+                        "hp ",
+                        "dell",
+                        "msi",
+                        "macbook",
+                        "axioo",
+                        "advan",
+                        "thinkpad",
+                        "vivobook",
+                        "ideapad",
+                        "zenbook",
+                        "aspire",
+                        "swift",
+                        "thinkbook",
+                        "infinix",
+                        "huawei",
+                        "xiaomi",
+                        "redmi",
+                    ],
+                    2,
+                )?;
+                indonesian(a)
+            },
+        ),
+        case(&["apa bedanya apt sama flatpak?"], |a| {
+            let a = last(a);
+            no_actions(a)?;
+            at_least(a, 30)?;
+            names(a, &["apt", "flatpak"], 2)?;
+            indonesian(a)
+        }),
+        case(
+            &["kenapa pas aku apt install muncul error E: Unable to locate package?"],
+            |a| {
+                let a = last(a);
+                at_least(a, 20)?;
+                names(a, &["update", "nama", "name", "repositor"], 1)?;
+                indonesian(a)
+            },
+        ),
+        case(
+            &[
+                "aku lagi bikin startup aplikasi kasir buat warung",
+                "fitur apa yang wajib ada menurutmu?",
+            ],
+            |a| {
+                let a = last(a);
+                no_actions(a)?;
+                at_least(a, 30)?;
+                names(
+                    a,
+                    &[
+                        "stok",
+                        "laporan",
+                        "transaksi",
+                        "struk",
+                        "utang",
+                        "kas",
+                        "qris",
+                        "barang",
+                    ],
+                    2,
+                )?;
+                indonesian(a)
+            },
+        ),
+        case(&["hai isle, lagi ngapain?"], |a| {
+            let a = last(a);
+            no_actions(a)?;
+            ensure(
+                a.say.split_whitespace().count() <= 45,
+                "too long for a hello",
+            )?;
+            indonesian(a)
+        }),
+        case(&["install obs studio"], |a| {
+            let a = last(a);
+            ensure(a.tools.iter().any(|tool| tool == "check"), "did not check")?;
+            match run_command(a) {
+                Ok(command) => ensure(
+                    command.contains("install") && command.contains("obs"),
+                    "wrong command",
+                ),
+                Err(_) => ensure(
+                    installed_already(a),
+                    "neither installed it nor said it is there",
+                ),
+            }
+        }),
         // An agent: it searches this computer itself, then shows what it found.
         case(&["cari tanda tanganku di folder ~/isle-eval-files"], |a| {
             shown(a, "TTD Ana final.png")

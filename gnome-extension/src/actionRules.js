@@ -27,6 +27,7 @@ export function describeActions(actions = []) {
         dnd: turning('Do Not Disturb', first.on),
         dark_mode: turning('dark style', first.on),
         night_light: turning('Night Light', first.on),
+        power_mode: 'Switching the power mode…',
         settings: 'Opening Settings…',
         add_task: 'Adding a to-do…',
         done_task: 'Ticking off the to-do…',

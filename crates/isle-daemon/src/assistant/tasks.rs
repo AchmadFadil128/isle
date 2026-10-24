@@ -314,7 +314,8 @@ pub struct Running {
 }
 
 pub fn store() -> Store<Running> {
-    Store::new("tasks")
+    // Tests (the eval among them) keep their own: never a task the user's isled then finds.
+    Store::new(if cfg!(test) { "tasks-test" } else { "tasks" })
 }
 
 /// Keeps a started task in tasks.json, so isled finds it again after a restart (see `mod.rs`).

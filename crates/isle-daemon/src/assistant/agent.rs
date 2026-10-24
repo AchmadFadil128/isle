@@ -20,8 +20,9 @@ use super::{apps, check, files};
 
 /// The AI may take this many more steps after its first answer before what it says stands.
 const MAX_STEPS: usize = 12;
-/// One answer taking longer than this has failed (its own web searches included; most take 5 to 20 s).
-const ASK_TIMEOUT: Duration = Duration::from_secs(60);
+/// One answer taking longer than this has failed (its own web searches included; most take 5 to 30 s,
+/// research with several searches longer).
+const ASK_TIMEOUT: Duration = Duration::from_secs(120);
 /// The extension reports what desktop actions did within this, plus the time each slow one may wait
 /// (an app's window, a player to start; see voice.js); after it, they count as not done.
 const ACT_TIMEOUT: Duration = Duration::from_secs(20);
@@ -233,6 +234,7 @@ pub async fn think(
     let activity = out.activity;
     let mut answer = ask_in_time(brain, prompt, out).await?;
     let mut used = Vec::new();
+    let mut checks = Vec::new();
     let mut ran = Vec::new();
     for _ in 0..MAX_STEPS {
         let (calls, mut actions): (Vec<Value>, Vec<Value>) =
@@ -243,6 +245,7 @@ pub async fn think(
             actions.retain(|action| !after_close(action));
             if actions.is_empty() {
                 answer.tools = used;
+                answer.checks = checks;
                 answer.ran = ran;
                 return Ok(answer);
             }
@@ -257,6 +260,9 @@ pub async fn think(
         for call in calls {
             activity.send(describe(&call)).ok();
             used.push(call["type"].as_str().unwrap_or_default().to_owned());
+            if call["type"] == "check" {
+                checks.push(call["command"].as_str().unwrap_or_default().to_owned());
+            }
             results.push(run(call).await);
         }
         // A command to run goes on its own, after the rest: asked, then followed to its end.
@@ -271,6 +277,7 @@ pub async fn think(
             if last && report.ok && commands.is_empty() {
                 answer.checked = true;
                 answer.tools = used;
+                answer.checks = checks;
                 answer.ran = ran;
                 return Ok(answer);
             }
@@ -321,6 +328,7 @@ pub async fn think(
         .actions
         .retain(|action| !is_tool(action) && action["type"] != "run");
     answer.tools = used;
+    answer.checks = checks;
     answer.ran = ran;
     Ok(answer)
 }

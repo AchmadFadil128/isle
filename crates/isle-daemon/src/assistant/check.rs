@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! `check`: commands that only look (which Linux, whether a package is installed or available, a
-//! program's version), run at once for the AI without asking the user. Only what is listed here runs, as
-//! a program with its arguments, never through a shell, so nothing in them can chain another command.
+//! `check`: commands that only look (which Linux, what is installed, the battery, power mode, network,
+//! sound, logs, hardware, what runs), run at once for the AI without asking the user, so it can find out
+//! what is wrong before it says. Only the shapes listed here run, as a program with its arguments, never
+//! through a shell, so nothing in them can chain another command, write or change anything.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -17,7 +18,7 @@ use super::child;
 /// A look taking longer than this is stopped.
 const TIMEOUT: Duration = Duration::from_secs(20);
 /// What the AI gets of the output, at most (the end of it, where the answer usually is).
-const MAX_OUTPUT: usize = 4000;
+const MAX_OUTPUT: usize = 8000;
 
 /// What a word after the first may be, for each program `check` runs.
 #[derive(Clone, Copy)]
@@ -28,6 +29,8 @@ enum Rest {
     Names(&'static [&'static str]),
     /// Only these options.
     Options(&'static [&'static str]),
+    /// Names, paths (`~`, `~/x` or `/x`, never going up a folder) and these options.
+    Paths(&'static [&'static str]),
 }
 
 /// The programs `check` runs: the first word that keeps each to looking (empty: none needed), then what
@@ -114,7 +117,17 @@ const ALLOWED: &[(&str, &[&str], Rest)] = &[
     ("python3", &["--version", "-V"], Rest::None),
     (
         "systemctl",
-        &["status", "is-active", "is-enabled", "list-units"],
+        &[
+            "status",
+            "is-active",
+            "is-enabled",
+            "list-units",
+            "list-unit-files",
+            "list-timers",
+            "is-failed",
+            "show",
+            "--failed",
+        ],
         Rest::Names(&["--user", "--no-pager", "--type", "--state", "--all"]),
     ),
     (
@@ -140,6 +153,299 @@ const ALLOWED: &[(&str, &[&str], Rest)] = &[
         Rest::Options(&["--format"]),
     ),
     ("which", &[], Rest::Names(&[])),
+    // Power and battery.
+    (
+        "powerprofilesctl",
+        &["", "get", "list", "version"],
+        Rest::None,
+    ),
+    (
+        "upower",
+        &["-d", "--dump", "-e", "--enumerate", "--version"],
+        Rest::None,
+    ),
+    ("tlp-stat", &["-s", "-b", "-p"], Rest::None),
+    ("cpupower", &["frequency-info", "idle-info"], Rest::None),
+    // Hardware and drivers.
+    ("sensors", &[""], Rest::None),
+    (
+        "lsblk",
+        &["", "-f", "-a", "-o"],
+        Rest::Options(&["-f", "-a", "-o"]),
+    ),
+    ("lsmod", &[""], Rest::None),
+    ("modinfo", &[], Rest::Names(&[])),
+    (
+        "lshw",
+        &["-short", "-businfo"],
+        Rest::Names(&["-C", "-class", "-sanitize"]),
+    ),
+    (
+        "inxi",
+        &[
+            "", "-b", "-F", "-Fxz", "-Fz", "-G", "-Gxx", "-N", "-Nxx", "-A", "-Axx", "-B", "-Bxx",
+            "-S", "-M", "-C", "-Cxx", "-D", "-Dxx", "-n", "-nxx", "-m", "-I", "-E", "-R",
+        ],
+        Rest::Options(&["-z", "-x", "-xx", "-xxx", "-c0"]),
+    ),
+    ("glxinfo", &["-B"], Rest::None),
+    ("vulkaninfo", &["--summary"], Rest::None),
+    ("mokutil", &["--sb-state"], Rest::None),
+    ("ubuntu-drivers", &["list", "devices"], Rest::None),
+    ("prime-select", &["query"], Rest::None),
+    ("dkms", &["status"], Rest::None),
+    ("rfkill", &["", "list"], Rest::None),
+    ("iw", &["dev"], Rest::None),
+    // The system.
+    ("uptime", &["", "-p", "-s"], Rest::None),
+    ("hostnamectl", &["", "status"], Rest::None),
+    ("timedatectl", &["", "status", "show"], Rest::None),
+    ("localectl", &["", "status"], Rest::None),
+    (
+        "loginctl",
+        &[
+            "list-sessions",
+            "show-session",
+            "session-status",
+            "list-users",
+        ],
+        Rest::Names(&["--no-pager"]),
+    ),
+    ("journalctl", &[], Rest::Names(JOURNAL)),
+    (
+        "dmesg",
+        &["", "-T"],
+        Rest::Options(&["-T", "-k", "--level"]),
+    ),
+    (
+        "ps",
+        &["aux", "-ef", "-e", "-A", "-eo", "axo"],
+        Rest::Options(&["--sort", "--no-headers", "-o"]),
+    ),
+    (
+        "ss",
+        &["-tuln", "-tunl", "-s", "-tulpn", "-tunlp", "-ltn", "-lun"],
+        Rest::None,
+    ),
+    ("findmnt", &["", "-D", "--df", "-l"], Rest::None),
+    ("swapon", &["--show", "-s"], Rest::None),
+    ("zramctl", &[""], Rest::None),
+    (
+        "du",
+        &[],
+        Rest::Paths(&["-sh", "-h", "-s", "-d", "--max-depth", "-c"]),
+    ),
+    ("nproc", &[""], Rest::None),
+    ("whoami", &[""], Rest::None),
+    ("id", &[""], Rest::None),
+    ("groups", &[""], Rest::None),
+    ("ping", &["-c"], Rest::Names(&["-W", "-4", "-6", "-q"])),
+    // What the desktop and apps are set to.
+    ("xdg-settings", &["get"], Rest::Names(&[])),
+    ("xdg-mime", &["query"], Rest::Names(&[])),
+    (
+        "update-alternatives",
+        &["--display", "--query"],
+        Rest::Names(&[]),
+    ),
+    ("fwupdmgr", &["get-devices"], Rest::None),
+    (
+        "docker",
+        &["ps", "images", "info", "version"],
+        Rest::Options(&["-a", "--all"]),
+    ),
+    (
+        "pip",
+        &["list", "show", "--version"],
+        Rest::Names(&["--user", "--outdated"]),
+    ),
+    (
+        "pip3",
+        &["list", "show", "--version"],
+        Rest::Names(&["--user", "--outdated"]),
+    ),
+];
+
+/// What journalctl may be told: which logs, how many lines, since when, how bad. Never a file, a folder,
+/// another machine, following on, or anything that writes (vacuum, rotate, flush, a cursor file).
+const JOURNAL: &[&str] = &[
+    "-b",
+    "--boot",
+    "-0",
+    "-1",
+    "-2",
+    "-3",
+    "-k",
+    "--dmesg",
+    "-p",
+    "--priority",
+    "-u",
+    "--unit",
+    "--user-unit",
+    "--user",
+    "--system",
+    "-n",
+    "--lines",
+    "--since",
+    "--until",
+    "-S",
+    "-U",
+    "--no-pager",
+    "-r",
+    "--reverse",
+    "-x",
+    "-o",
+    "--output",
+    "-g",
+    "--grep",
+    "-q",
+    "--no-hostname",
+];
+
+/// Commands of several words (`nmcli radio wifi`): the program, the words it starts with, and what may
+/// follow them. The longest start that fits counts, so `nmcli radio wifi off` is `radio wifi` and a word
+/// more, which `Rest::None` refuses.
+const SHAPES: &[(&str, &str, Rest)] = &[
+    ("nmcli", "", Rest::None),
+    ("nmcli", "general", Rest::None),
+    ("nmcli", "general status", Rest::None),
+    ("nmcli", "general permissions", Rest::None),
+    ("nmcli", "device", Rest::None),
+    ("nmcli", "device status", Rest::None),
+    ("nmcli", "device show", Rest::Names(&[])),
+    ("nmcli", "device wifi", Rest::None),
+    ("nmcli", "device wifi list", Rest::None),
+    ("nmcli", "dev", Rest::None),
+    ("nmcli", "dev status", Rest::None),
+    ("nmcli", "dev show", Rest::Names(&[])),
+    ("nmcli", "dev wifi", Rest::None),
+    ("nmcli", "dev wifi list", Rest::None),
+    ("nmcli", "connection", Rest::None),
+    ("nmcli", "connection show", Rest::Names(&["--active"])),
+    ("nmcli", "con", Rest::None),
+    ("nmcli", "con show", Rest::Names(&["--active"])),
+    ("nmcli", "radio", Rest::None),
+    ("nmcli", "radio all", Rest::None),
+    ("nmcli", "radio wifi", Rest::None),
+    ("nmcli", "radio wwan", Rest::None),
+    ("nmcli", "networking", Rest::None),
+    ("nmcli", "networking connectivity", Rest::None),
+    ("ip", "a", Rest::None),
+    ("ip", "addr", Rest::None),
+    ("ip", "address", Rest::None),
+    ("ip", "addr show", Rest::Names(&[])),
+    ("ip", "address show", Rest::Names(&[])),
+    ("ip", "link", Rest::None),
+    ("ip", "link show", Rest::Names(&[])),
+    ("ip", "route", Rest::None),
+    ("ip", "route show", Rest::None),
+    ("ip", "r", Rest::None),
+    ("ip", "-br a", Rest::None),
+    ("ip", "-br addr", Rest::None),
+    ("ip", "-br link", Rest::None),
+    ("ip", "-4 addr", Rest::None),
+    ("ip", "-6 addr", Rest::None),
+    ("resolvectl", "", Rest::None),
+    ("resolvectl", "status", Rest::Names(&[])),
+    ("resolvectl", "dns", Rest::None),
+    ("resolvectl", "domain", Rest::None),
+    ("resolvectl", "statistics", Rest::None),
+    ("wpctl", "status", Rest::None),
+    ("wpctl", "inspect", Rest::Names(&[])),
+    ("wpctl", "get-volume", Rest::Names(&[])),
+    ("pactl", "info", Rest::None),
+    ("pactl", "list", Rest::None),
+    ("pactl", "list short", Rest::None),
+    ("pactl", "list sinks", Rest::None),
+    ("pactl", "list sources", Rest::None),
+    ("pactl", "list cards", Rest::None),
+    ("pactl", "list short sinks", Rest::None),
+    ("pactl", "list short sources", Rest::None),
+    ("pactl", "list short cards", Rest::None),
+    ("pactl", "get-default-sink", Rest::None),
+    ("pactl", "get-default-source", Rest::None),
+    ("pactl", "get-sink-volume", Rest::Names(&[])),
+    ("pactl", "get-sink-mute", Rest::Names(&[])),
+    ("pactl", "get-source-volume", Rest::Names(&[])),
+    ("pactl", "get-source-mute", Rest::Names(&[])),
+    ("bluetoothctl", "show", Rest::Names(&[])),
+    ("bluetoothctl", "list", Rest::None),
+    ("bluetoothctl", "devices", Rest::Names(&[])),
+    ("bluetoothctl", "paired-devices", Rest::None),
+    ("bluetoothctl", "info", Rest::Names(&[])),
+    ("bluetoothctl", "--version", Rest::None),
+    ("gsettings", "get", Rest::Names(&[])),
+    ("gsettings", "list-recursively", Rest::Names(&[])),
+    ("gsettings", "list-keys", Rest::Names(&[])),
+    ("gsettings", "range", Rest::Names(&[])),
+    ("gsettings", "describe", Rest::Names(&[])),
+    ("gsettings", "list-schemas", Rest::None),
+    (
+        "gnome-extensions",
+        "list",
+        Rest::Options(&[
+            "--enabled",
+            "--disabled",
+            "--active",
+            "--inactive",
+            "--user",
+            "--system",
+            "--details",
+            "-d",
+        ]),
+    ),
+    ("gnome-extensions", "info", Rest::Names(&[])),
+    ("gnome-extensions", "show", Rest::Names(&[])),
+    ("gnome-extensions", "version", Rest::None),
+    ("systemd-analyze", "", Rest::None),
+    ("systemd-analyze", "time", Rest::None),
+    (
+        "systemd-analyze",
+        "blame",
+        Rest::Options(&["--no-pager", "--user"]),
+    ),
+    (
+        "systemd-analyze",
+        "critical-chain",
+        Rest::Names(&["--no-pager", "--user"]),
+    ),
+];
+
+/// Files `cat` may show: the system's own, never the user's or a secret.
+const CAT_FILES: &[&str] = &[
+    "/etc/os-release",
+    "/etc/lsb-release",
+    "/etc/hostname",
+    "/etc/fstab",
+    "/etc/default/grub",
+    "/etc/resolv.conf",
+    "/etc/hosts",
+    "/etc/apt/sources.list",
+    "/proc/cpuinfo",
+    "/proc/meminfo",
+    "/proc/loadavg",
+    "/proc/uptime",
+    "/proc/version",
+    "/proc/swaps",
+    "/proc/cmdline",
+    "/proc/pressure/cpu",
+    "/proc/pressure/memory",
+    "/proc/pressure/io",
+    "/proc/asound/cards",
+    "/sys/power/mem_sleep",
+];
+
+/// Folders whose files `cat` may show: the hardware's own state (battery, temperatures, brightness, CPU speed).
+const CAT_FOLDERS: &[&str] = &[
+    "/sys/class/power_supply/",
+    "/sys/class/thermal/",
+    "/sys/class/backlight/",
+    "/sys/class/drm/",
+    "/sys/class/net/",
+    "/sys/class/hwmon/",
+    "/sys/devices/system/cpu/",
+    "/sys/module/",
+    "/sys/firmware/acpi/platform_profile",
 ];
 
 /// Options whose value may follow an `=` (and only a plain one: letters, digits, `,.:_-${}%`).
@@ -154,7 +460,43 @@ const VALUED: &[&str] = &[
     "--state",
     "--query-gpu",
     "--format",
+    "-eo",
+    "axo",
+    "-o",
+    "--sort",
+    "--level",
+    "--max-depth",
 ];
+
+/// journalctl's options that take a value (`-p err`); for other programs they may be flags (`uptime -p`).
+const JOURNAL_VALUED: &[&str] = &[
+    "-o",
+    "--output",
+    "-p",
+    "--priority",
+    "-u",
+    "--unit",
+    "--user-unit",
+    "-n",
+    "--lines",
+    "--since",
+    "--until",
+    "-S",
+    "-U",
+    "-g",
+    "--grep",
+];
+
+/// `VALUED` options that are only a flag for this program (lsblk's -f is filesystems, not a format).
+const PLAIN: &[(&str, &str)] = &[("lsblk", "-f")];
+
+/// Whether `option` of `program` takes a value as its next word.
+fn takes_value(program: &str, option: &str) -> bool {
+    if program == "journalctl" {
+        return JOURNAL_VALUED.contains(&option);
+    }
+    VALUED.contains(&option) && !PLAIN.contains(&(program, option))
+}
 
 /// Programs that are never asked their version: what they do, they may do whatever the word.
 const NEVER_RUN: &[&str] = &[
@@ -203,11 +545,11 @@ fn is_option(word: &str, options: &[&str]) -> bool {
         && match value {
             None => true,
             Some(value) => {
-                VALUED.contains(&name)
+                (VALUED.contains(&name) || JOURNAL_VALUED.contains(&name))
                     && !value.contains("%(")
                     && value
                         .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || " ,.:_-${}%\\t\\n".contains(c))
+                        .all(|c| c.is_ascii_alphanumeric() || " ,.:_-${}%@\\t\\n".contains(c))
             }
         }
 }
@@ -241,6 +583,36 @@ pub fn parse(command: &str) -> Result<Vec<String>, String> {
             Err("command -v takes program names".into())
         };
     }
+    if program == "cat" {
+        return cat(&words);
+    }
+    let shapes: Vec<_> = SHAPES.iter().filter(|(name, ..)| name == program).collect();
+    if !shapes.is_empty() {
+        let shown = || {
+            let all: Vec<String> = shapes
+                .iter()
+                .map(|(_, start, _)| format!("{program} {start}").trim_end().to_owned())
+                .collect();
+            format!("{program} may only run as: {}", all.join(" | "))
+        };
+        // The longest start that fits: `nmcli radio wifi off` is `radio wifi` and a word more.
+        let fits = shapes
+            .iter()
+            .filter(|(_, start, _)| {
+                let start: Vec<&str> = start.split_whitespace().collect();
+                args.len() >= start.len() && args.iter().zip(&start).all(|(a, s)| a == s)
+            })
+            .max_by_key(|(_, start, _)| start.split_whitespace().count());
+        let Some((_, start, rest)) = fits else {
+            return Err(shown());
+        };
+        let taken = start.split_whitespace().count();
+        return if rest_fits(program, &args[taken..], *rest) {
+            Ok(words)
+        } else {
+            Err(shown())
+        };
+    }
     let Some((_, first, rest)) = ALLOWED.iter().find(|(name, ..)| name == program) else {
         // Any program may say its version, but only that.
         return if args.len() == 1
@@ -269,39 +641,86 @@ pub fn parse(command: &str) -> Result<Vec<String>, String> {
     let mut rest_args = args;
     if !first.is_empty() {
         match args.first() {
-            Some(arg)
-                if first.contains(&arg.as_str())
-                    || (arg.starts_with("--query-gpu=") && first.contains(&"--query-gpu")) =>
-            {
+            Some(arg) if is_option(arg, first) => {
                 rest_args = &args[1..];
-                if arg.contains('=') && !is_option(arg, first) {
-                    return Err(shape());
+                // `ps -eo pid,comm`: its value as the next word.
+                if takes_value(program, arg) {
+                    let Some(value) = rest_args.first() else {
+                        return Err(shape());
+                    };
+                    if !is_option(&format!("{arg}={value}"), first) {
+                        return Err(shape());
+                    }
+                    rest_args = &rest_args[1..];
                 }
             }
             None if first.contains(&"") => {}
             _ => return Err(shape()),
         }
     }
-    let (options, names) = match rest {
-        Rest::None => (&[][..], false),
-        Rest::Options(options) => (*options, false),
-        Rest::Names(options) => (*options, true),
+    if rest_fits(program, rest_args, *rest) {
+        Ok(words)
+    } else {
+        Err(shape())
+    }
+}
+
+/// Whether `args` are what `rest` lets follow (see `Rest`).
+fn rest_fits(program: &str, args: &[String], rest: Rest) -> bool {
+    let (options, names, paths) = match rest {
+        Rest::None => (&[][..], false, false),
+        Rest::Options(options) => (options, false, false),
+        Rest::Names(options) => (options, true, false),
+        Rest::Paths(options) => (options, true, true),
     };
-    let mut args = rest_args.iter();
+    let mut args = args.iter();
     while let Some(arg) = args.next() {
         if is_option(arg, options) {
             // `--qf '%{VERSION}'`: the value as the next word.
-            if VALUED.contains(&arg.as_str()) {
-                let value = args.next().ok_or_else(shape)?;
+            if takes_value(program, arg) {
+                let Some(value) = args.next() else {
+                    return false;
+                };
                 if !is_option(&format!("{arg}={value}"), options) {
-                    return Err(shape());
+                    return false;
                 }
             }
-        } else if !(names && is_name(arg) && (*program != "which" || !arg.contains('/'))) {
-            return Err(shape());
+        } else if !((names && is_name(arg) && (program != "which" || !arg.contains('/')))
+            || (paths && is_path(arg)))
+        {
+            return false;
         }
     }
-    Ok(words)
+    true
+}
+
+/// A folder or file by its path, from home (`~`, `~/Videos`) or the root, never going up a folder.
+fn is_path(word: &str) -> bool {
+    (word == "~" || word.starts_with("~/") || word.starts_with('/'))
+        && !word.contains("..")
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "/._-+@~ ".contains(c))
+}
+
+/// `cat` of the system's own files only (see `CAT_FILES` and `CAT_FOLDERS`); the user's go through read_text.
+fn cat(words: &[String]) -> Result<Vec<String>, String> {
+    let files = &words[1..];
+    let shown = |file: &str| {
+        CAT_FILES.contains(&file)
+            || (CAT_FOLDERS.iter().any(|folder| file.starts_with(folder))
+                && !file.contains("..")
+                && file
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "/._-:+@".contains(c)))
+    };
+    if !files.is_empty() && files.len() <= 8 && files.iter().all(|file| shown(file)) {
+        Ok(words.to_vec())
+    } else {
+        Err("cat may only show the system's own files (/etc/os-release, /proc/meminfo, /proc/cpuinfo, \
+             /sys/class/power_supply/…, /sys/class/thermal/…); the user's files go through read_text"
+            .into())
+    }
 }
 
 /// Words of `command`, with '…' and "…" quoting kept together.
@@ -377,7 +796,18 @@ pub async fn run(command: &str) -> String {
     let Some(program) = find(&words[0]) else {
         return format!("check `{command}`: {} is not installed", words[0]);
     };
-    match output(&program, &words[1..]).await {
+    // No shell to expand `~` (du ~/Videos).
+    let home = dirs::home_dir().unwrap_or_default();
+    let args: Vec<String> = words[1..]
+        .iter()
+        .map(|word| match word.strip_prefix('~') {
+            Some(rest) if rest.is_empty() || rest.starts_with('/') => {
+                format!("{}{rest}", home.display())
+            }
+            _ => word.clone(),
+        })
+        .collect();
+    match output(&program, &args).await {
         Ok((code, text)) => format!("check `{command}` (exit {code}):\n{text}"),
         Err(why) => format!("check `{command}` failed: {why}"),
     }
@@ -464,6 +894,52 @@ mod tests {
             "which node npm",
             "lsb_release -ds",
             "npm ls -g --depth=0",
+            // Finding out what is wrong: power, battery, network, sound, logs, hardware, what runs.
+            "powerprofilesctl get",
+            "powerprofilesctl",
+            "upower -d",
+            "cat /sys/class/power_supply/BAT0/capacity /sys/class/power_supply/BAT0/status",
+            "cat /proc/meminfo",
+            "cat /sys/firmware/acpi/platform_profile",
+            "nmcli device status",
+            "nmcli radio wifi",
+            "nmcli connection show --active",
+            "nmcli dev wifi list",
+            "ip -br addr",
+            "resolvectl status",
+            "ping -c 3 1.1.1.1",
+            "ping -c 2 -W 2 google.com",
+            "wpctl status",
+            "pactl list short sinks",
+            "pactl get-sink-volume @DEFAULT_SINK@",
+            "bluetoothctl devices Connected",
+            "bluetoothctl info AA:BB:CC:DD:EE:FF",
+            "journalctl -b -p err --no-pager -n 50",
+            "journalctl -b -1 -p warning --no-pager",
+            "journalctl -u NetworkManager --since '1 hour ago' --no-pager",
+            "journalctl --user -u isled -n 30",
+            "journalctl -k -g iwlwifi -n 40",
+            "journalctl --unit=user@1000.service -n 10",
+            "sensors",
+            "lsblk -f",
+            "lsblk -o NAME,SIZE,MOUNTPOINT",
+            "ps aux --sort=-%cpu",
+            "ps -eo pid,comm,%cpu,%mem --sort=-%mem",
+            "du -sh ~/Downloads",
+            "du -h --max-depth=1 ~",
+            "systemctl --failed",
+            "systemctl list-unit-files --state=enabled",
+            "systemd-analyze blame --no-pager",
+            "gsettings get org.gnome.desktop.interface color-scheme",
+            "gnome-extensions list --enabled",
+            "inxi -Fxz",
+            "lshw -short -C network",
+            "mokutil --sb-state",
+            "ubuntu-drivers devices",
+            "uptime -p",
+            "dmesg -T",
+            "xdg-settings get default-web-browser",
+            "ss -tuln",
         ] {
             assert!(parse(ok).is_ok(), "{ok}: {:?}", parse(ok));
         }
@@ -504,6 +980,57 @@ mod tests {
             "apt show -o Dir::Etc=/tmp x",
             "flatpak list --columns=$(id)",
             "uname -a extra",
+            // Anything that changes something, reads the user's secrets, or never ends.
+            "powerprofilesctl set performance",
+            "powerprofilesctl launch -p performance sh",
+            "nmcli radio wifi off",
+            "nmcli connection up home",
+            "nmcli connection delete home",
+            "nmcli connection show --show-secrets home",
+            "nmcli -s connection show home",
+            "nmcli general hostname evil",
+            "nmcli networking off",
+            "nmcli device disconnect wlan0",
+            "nmcli dev wifi connect x password y",
+            "ip addr add 10.0.0.1/24 dev eth0",
+            "ip link set wlan0 down",
+            "ip route del default",
+            "resolvectl dns wlan0 1.2.3.4",
+            "wpctl set-volume @DEFAULT_SINK@ 0",
+            "pactl set-sink-mute @DEFAULT_SINK@ 1",
+            "pactl load-module x",
+            "bluetoothctl remove AA:BB",
+            "bluetoothctl power off",
+            "gsettings set org.gnome.desktop.interface color-scheme default",
+            "gsettings reset-recursively org.gnome.shell",
+            "gnome-extensions disable isle@zickrian.github.io",
+            "journalctl --vacuum-size=1M",
+            "journalctl -f",
+            "journalctl --file=/home/ana/.ssh/x",
+            "journalctl -D /home/ana",
+            "journalctl --rotate",
+            "journalctl --cursor-file=/tmp/x",
+            "cat /etc/shadow",
+            "cat /proc/self/environ",
+            "cat /sys/class/power_supply/../../../home/ana/x",
+            "cat ~/.bashrc",
+            "du -sh ~/../root",
+            "ps aux; reboot",
+            "ping 1.1.1.1",
+            "ping -c 3 1.1.1.1 -i 0.001",
+            "systemctl restart NetworkManager",
+            "systemctl disable gdm",
+            "systemd-analyze plot",
+            "inxi -U",
+            "inxi -W jakarta",
+            "upower --monitor",
+            "docker rm x",
+            "docker run alpine",
+            "pip install x",
+            "rfkill block wifi",
+            "iw dev wlan0 set power_save off",
+            "dmesg -C",
+            "lsblk -p",
         ] {
             assert!(parse(refused).is_err(), "{refused} was let through");
         }
