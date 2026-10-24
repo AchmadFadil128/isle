@@ -806,19 +806,15 @@ fn today() -> NaiveDate {
     chrono::Local::now().date_naive()
 }
 
-/// How often a quiet conversation is checked for being over: a timer counts no time asleep (suspend),
-/// so the clock is read again rather than trusted to reach midnight or the end of a quiet hour.
-const CHECK_CHAT: Duration = Duration::from_secs(60);
-
-/// How long until the next midnight, when the day's conversation is cleared.
-fn until_midnight() -> Duration {
-    let now = chrono::Local::now();
-    let midnight = (today() + chrono::Days::new(1))
-        .and_hms_opt(0, 0, 1)
-        .and_then(|time| time.and_local_timezone(chrono::Local).earliest());
-    midnight
-        .and_then(|midnight| (midnight - now).to_std().ok())
-        .unwrap_or(Duration::from_secs(3600))
+/// When the conversation is next looked at for being over (wall-clock ms): as its quiet time ends, or just
+/// after midnight. Waited for with `clock::wait_until`, which also wakes on resuming from suspend.
+fn chat_check_at(chat: &Chat, keep: Keep) -> Option<i64> {
+    let midnight = crate::clock::next_midnight().map(|ms| ms + 1000);
+    let quiet = match keep {
+        Keep::Idle(quiet) if !chat.is_empty() => Some(chat.last + quiet + 1),
+        _ => None,
+    };
+    [midnight, quiet].into_iter().flatten().min()
 }
 
 /// At a new day (between turns): the conversation starts over and older ones are deleted, once a day
@@ -851,6 +847,8 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
     // The ids of the commands followed until they end and are told (see `Command::Settled`).
     let mut following = HashSet::new();
     look_after_tasks(&iface, &mut following).await;
+    // Nothing wakes the conversation's check but its time (see `chat_check_at`).
+    let never = tokio::sync::Notify::new();
     loop {
         let cool = cool_at;
         let cooling = async move {
@@ -859,12 +857,6 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 None => std::future::pending().await,
             }
         };
-        // With no conversation to end, nothing is looked at before midnight: isled stays asleep.
-        let check_chat = if talk.chat.is_empty() {
-            until_midnight()
-        } else {
-            until_midnight().min(CHECK_CHAT)
-        };
         let undo_at = talk.undo.as_ref().map(|(_, at)| *at);
         let undo_over = async move {
             match undo_at {
@@ -872,6 +864,7 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 None => std::future::pending().await,
             }
         };
+        let check_at = chat_check_at(&talk.chat, keep);
         let command = match next.take().or_else(|| later.pop_front()) {
             Some(command) => command,
             None => tokio::select! {
@@ -879,7 +872,8 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                     Some(command) => command,
                     None => return,
                 },
-                () = tokio::time::sleep(check_chat) => {
+                // Its time (see `chat_check_at`), or waking from suspend.
+                _ = crate::clock::wait_until(check_at, &never) => {
                     if talk.end_if_over(&mut session, keep) {
                         show_history(&iface, &talk.chat).await;
                     }
@@ -1838,8 +1832,17 @@ mod tests {
     }
 
     #[test]
-    fn midnight_is_within_a_day() {
-        assert!(until_midnight() <= Duration::from_secs(24 * 3600 + 1));
+    fn a_quiet_conversation_is_looked_at_as_it_ends_or_at_midnight() {
+        let midnight = crate::clock::next_midnight().unwrap() + 1000;
+        let mut chat = Chat::default();
+        assert_eq!(chat_check_at(&chat, Keep::Idle(60_000)), Some(midnight));
+        chat.last = chat::now_ms();
+        chat.conversation = "id".into();
+        assert_eq!(chat_check_at(&chat, Keep::Day), Some(midnight));
+        let quiet = chat_check_at(&chat, Keep::Idle(60_000)).unwrap();
+        assert_eq!(quiet, (chat.last + 60_001).min(midnight));
+        assert!(!chat.expired(quiet - 1, Keep::Idle(60_000)) || quiet == midnight);
+        assert!(chat.expired(quiet, Keep::Idle(60_000)));
     }
 
     #[tokio::test]
