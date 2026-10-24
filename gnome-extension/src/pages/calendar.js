@@ -169,6 +169,8 @@ export const CalendarPage = GObject.registerClass({
         title.add_child(this._year);
         const titleButton = new St.Button({style_class: 'isle-cal-month-title', child: title, can_focus: true, accessible_name: 'Go to today', x_expand: true, x_align: Clutter.ActorAlign.START});
         titleButton.connect('clicked', () => this._goToToday());
+        // Its text on the page's edge, as the other pages' titles; the pill it lights on hover reaches past it.
+        titleButton.translation_x = -4;
         header.add_child(titleButton);
         header.add_child(iconButton('isle-chevron-left-symbolic', 'isle-button-flat isle-cal-arrow',
             () => this._moveMonth(-1), {size: 11, accessibleName: 'Previous month'}));

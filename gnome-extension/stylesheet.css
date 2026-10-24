@@ -568,7 +568,6 @@
 /* ── Focus ────────────────────────────────────────────── */
 
 /* The Focus page (timer.js): a ring with the time and the phase, steppers for the lengths, and Start. */
-.isle-timer { padding-left: 34px; padding-right: 34px; }
 .isle-timer-time { font-size: 24px; font-weight: 600; letter-spacing: -0.5px; }
 .isle-timer-phase { font-size: 12px; font-weight: 500; color: rgba(255, 255, 255, 0.55); }
 
@@ -598,7 +597,7 @@
 /* Reminders: an orange title and count (as large as the timer's caption beside
  * it), rows of a ring and a title over a hairline. A 24 px header and 24 px rows fill the 144 px page with five
  * whole rows, set close together. */
-.isle-reminders-header { height: 24px; padding: 0 0 0 2px; spacing: 4px; }
+.isle-reminders-header { height: 24px; padding: 0; spacing: 4px; }
 .isle-reminders-title { font-size: 17px; font-weight: 600; color: #ff9f0a; letter-spacing: -0.2px; }
 .isle-reminders-count { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; color: #ff9f0a; padding-right: 2px; }
 .isle-reminders-add { padding: 5px; border-radius: 99px; color: rgba(255, 255, 255, 0.55); }
@@ -606,7 +605,7 @@
 
 /* Lists fade out at an edge that scrolls on, instead of being cut. */
 .isle-reminder-scroll { -st-vfade-offset: 14px; }
-.isle-reminder { min-height: 24px; spacing: 10px; padding-left: 2px; }
+.isle-reminder { min-height: 24px; spacing: 10px; }
 /* The ring by the first line; a wrapped title gets a little air above and below. */
 .isle-reminder .isle-reminder-check { margin-top: 3px; }
 .isle-reminder-new .isle-reminder-check { margin-top: 0; }
@@ -709,7 +708,7 @@
 
 /* The day's events. */
 .isle-cal-agenda { spacing: 6px; }
-.isle-cal-day-header { spacing: 8px; padding-left: 2px; }
+.isle-cal-day-header { spacing: 8px; }
 .isle-cal-day-name { font-size: 14px; font-weight: 600; letter-spacing: -0.1px; }
 
 .isle-cal-today {
@@ -745,7 +744,8 @@
 
 /* ── Notifications ────────────────────────────────────── */
 
-.isle-notifications-bar { spacing: 6px; padding: 0 2px 4px 6px; }
+/* As the rows' insides: the heading over their icons, Clear over their times. */
+.isle-notifications-bar { spacing: 6px; padding: 0 8px 4px 8px; }
 .isle-notifications-heading { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.6); }
 .isle-notifications-clear { font-size: 12px; font-weight: 600; padding: 5px 12px; background-color: #1c1c1e; }
 .isle-notifications-clear:hover { background-color: #2c2c2e; }
@@ -909,7 +909,7 @@
 
 /* One provider at a time (usage.js): its mark, name and plan, then a line and a bar per limit;
  * dots on the right move between providers, as in a widget stack. */
-.isle-usage-content { spacing: 14px; padding: 0 2px 4px 2px; }
+.isle-usage-content { spacing: 14px; padding: 0 0 4px 0; }
 .isle-usage-head { spacing: 8px; }
 .isle-usage-mark { width: 10px; height: 10px; border-radius: 5px; }
 .isle-usage-name { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
