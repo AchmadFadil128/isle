@@ -33,6 +33,8 @@ All notable changes to Isle are listed here. The format follows
   "Vec<String>" and "a < b > c" lost those words in the island.
 - A calendar event's alert that waited (the island open, or a fullscreen window) says how many minutes
   are left when it shows, not "in 5 min" from when it was due, and no longer shows once the event is over.
+- Do Not Disturb also holds back the AI plan usage warnings, new song alerts and the new version alert,
+  as it does the island's other alerts.
 
 ## [1.0.6] - 2026-10-24
 

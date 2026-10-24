@@ -432,8 +432,11 @@ export class Controller {
         daemon.connect('running-changed', () => this._onServiceChanged());
         // Never started at all (a broken install) is the same as stopped.
         this._onServiceChanged();
-        daemon.connect('usage-alert', (_daemon, provider, window, percent, resetsAt) =>
-            this._post(Alerts.usage(provider, window, percent, resetsAt, this._settings.get_int('usage-critical'))));
+        daemon.connect('usage-alert', (_daemon, provider, window, percent, resetsAt) => {
+            // Not in Do Not Disturb, as other alerts.
+            if (!this._notifications.dnd)
+                this._post(Alerts.usage(provider, window, percent, resetsAt, this._settings.get_int('usage-critical')));
+        });
         // isled forgets the settings when it restarts; they are sent again whenever it appears.
         daemon.connect('appeared', (_daemon, name) => {
             if (name === 'usage')
@@ -1323,7 +1326,8 @@ export class Controller {
         const track = Playback.hasTrack(nowPlaying) ? `${nowPlaying.title}\u001f${nowPlaying.artist}` : null;
         const changed = track !== this._lastTrack;
         this._lastTrack = track;
-        if (changed && track && Playback.isPlaying(nowPlaying) && this._settings.get_boolean('track-peek'))
+        if (changed && track && Playback.isPlaying(nowPlaying) && this._settings.get_boolean('track-peek') &&
+            !this._notifications.dnd)
             this._post(Alerts.track(nowPlaying));
     }
 
@@ -1369,10 +1373,10 @@ export class Controller {
         this._daemon.call('updates', 'SetEnabled', this._settings.get_boolean('check-updates'));
     }
 
-    /** A newer Isle is out: said once per version. */
+    /** A newer Isle is out: said once per version; in Do Not Disturb, next time Isle starts. */
     _onLatest() {
         const latest = this._daemon.state.updates;
-        if (!latest || latest === this._settings.get_string('update-shown'))
+        if (!latest || latest === this._settings.get_string('update-shown') || this._notifications.dnd)
             return;
         this._settings.set_string('update-shown', latest);
         this._post(Alerts.update(latest, () => Gio.AppInfo.launch_default_for_uri(UPDATE_HELP,
