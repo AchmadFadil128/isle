@@ -54,8 +54,10 @@ function timeText(date) {
     return Format.timeOfDay(dateTime(date));
 }
 
-/** Its alarm is planned again at least this often, as a sleeping computer stops the time-outs' clock. */
-const ALARM_CHECK_MS = 10 * 60 * 1000;
+/** An alarm's wait is cut into naps this long at most: a sleeping computer stops the time-outs' clock. */
+const ALARM_NAP_MS = 30 * 1000;
+/** The events already alarmed, by id (or title) and start; kept as the screen locks and Isle starts again. */
+const alarmed = new Set();
 
 // Signals: `event-soon` (json): an event with a time starts in `alarmLead` minutes, {id, title, start_ms,
 // end_ms}; `id` is GNOME's (source, event and recurrence, a line each), null for one of Isle's own.
@@ -89,35 +91,27 @@ export const CalendarPage = GObject.registerClass({
         this.connect('destroy', () => this._unbindSource());
         /** How long before an event its alarm goes, in ms; 0: none. */
         this._alarmLeadMs = 0;
-        /** The events already alarmed, by id (or title) and start. */
-        this._alarmed = new Set();
         this._refresh();
     }
 
     /** Minutes before an event with a time that `event-soon` is emitted; 0 turns it off. */
     set alarmLead(minutes) {
         this._alarmLeadMs = Math.max(0, minutes) * 60000;
-        // The desktop's events of this month, to know what comes even if the page never opens.
+        // The desktop's events of today and tomorrow, to know what comes even if the page never opens.
         this._bindSource();
-        this._requestThisMonth();
+        this._requestRange();
         this._scheduleAlarm();
         // Each new day (and month) asked for, opened or not.
         this._scheduleMidnight();
     }
 
-    /** Asks the desktop's calendars for the current month, where today's events are. */
-    _requestThisMonth() {
-        const today = new Date();
-        this._requestRange(new Date(today.getFullYear(), today.getMonth(), 1));
-    }
-
-    /** Asks for the month from `begin` and, for this month, tomorrow too: on its last day, the alarms look
-     * a day ahead. The calendars answer with `changed`. */
-    _requestRange(begin) {
+    /** Asks the desktop's calendars for the month shown, the day picked, and today and tomorrow for the alarms:
+     * GNOME's source keeps only the range asked for last. They answer with `changed`. */
+    _requestRange() {
         const today = startOfDay(new Date());
-        let end = new Date(begin.getFullYear(), begin.getMonth() + 1, 1);
-        if (begin.getFullYear() === today.getFullYear() && begin.getMonth() === today.getMonth())
-            end = new Date(Math.max(end, addDays(today, 2)));
+        const monthEnd = new Date(this._month.getFullYear(), this._month.getMonth() + 1, 1);
+        const begin = new Date(Math.min(this._month, this._selected, today));
+        const end = new Date(Math.max(monthEnd, addDays(this._selected, 1), addDays(today, 2)));
         try {
             this._source?.requestRange(begin, end);
         } catch (e) {
@@ -134,23 +128,24 @@ export const CalendarPage = GObject.registerClass({
         const today = startOfDay(new Date());
         const key = event => `${event.id ?? event.title}@${event.start.getTime()}`;
         // Forget the alarms of events gone by.
-        for (const done of this._alarmed) {
+        for (const done of alarmed) {
             if (Number(done.slice(done.lastIndexOf('@') + 1)) < now)
-                this._alarmed.delete(done);
+                alarmed.delete(done);
         }
         const next = [...this._eventsOn(today), ...this._eventsOn(addDays(today, 1))]
-            .filter(event => !event.allDay && event.start.getTime() > now && !this._alarmed.has(key(event)))
+            .filter(event => !event.allDay && event.start.getTime() > now && !alarmed.has(key(event)))
             .sort((a, b) => a.start - b.start)[0];
         if (!next)
             return;
-        const due = next.start.getTime() - this._alarmLeadMs - now;
+        const at = next.start.getTime() - this._alarmLeadMs;
         // Kept while the page is closed: the alarms are for the desktop, not the page.
-        if (due > ALARM_CHECK_MS) {
-            this.later('alarm', ALARM_CHECK_MS, () => this._scheduleAlarm(), {keep: true});
-            return;
-        }
-        this.later('alarm', Math.max(0, due), () => {
-            this._alarmed.add(key(next));
+        this.later('alarm', Math.min(Math.max(0, at - now), ALARM_NAP_MS), () => {
+            // Not yet: after a nap, planned again from the events as they are now.
+            if (at > Date.now()) {
+                this._scheduleAlarm();
+                return;
+            }
+            alarmed.add(key(next));
             // Late past its start (the computer slept): too late to remind of it.
             if (next.start.getTime() > Date.now()) {
                 this.emit('event-soon', JSON.stringify({id: next.id, title: next.title,
@@ -352,7 +347,7 @@ export const CalendarPage = GObject.registerClass({
     warmUp() {
         this._bindSource();
         this._followToday();
-        this._requestMonth();
+        this._requestRange();
         this._refresh(true);
     }
 
@@ -535,23 +530,18 @@ export const CalendarPage = GObject.registerClass({
         this._selected = day;
         if (day.getMonth() !== this._month.getMonth() || day.getFullYear() !== this._month.getFullYear())
             this._month = new Date(day.getFullYear(), day.getMonth(), 1);
-        this._requestMonth();
+        this._requestRange();
         this._refresh();
     }
 
     _moveMonth(step) {
         this._month = new Date(this._month.getFullYear(), this._month.getMonth() + step, 1);
-        this._requestMonth();
+        this._requestRange();
         this._refresh();
     }
 
     _goToToday() {
         this._select(startOfDay(new Date()));
-    }
-
-    /** Asks the desktop's calendars for the month shown; they answer with `changed`. */
-    _requestMonth() {
-        this._requestRange(this._month);
     }
 
     async _add() {
@@ -576,8 +566,8 @@ export const CalendarPage = GObject.registerClass({
         this.later('midnight', addDays(startOfDay(now), 1) - now + 1000, () => {
             if (!this._followToday())
                 this._refresh();
-            // A new month: its events, for the alarms; the same range answers nothing, so plan anew too.
-            this._requestThisMonth();
+            // A new day: its events, for the alarms; the same range answers nothing, so plan anew too.
+            this._requestRange();
             this._scheduleAlarm();
             this._scheduleMidnight();
         }, {keep: true});
@@ -586,7 +576,7 @@ export const CalendarPage = GObject.registerClass({
     onActivate() {
         this._bindSource();
         if (!this._followToday()) {
-            this._requestMonth();
+            this._requestRange();
             this._refresh();
         }
         this._scheduleMidnight();
@@ -594,8 +584,5 @@ export const CalendarPage = GObject.registerClass({
 
     onDeactivate() {
         this._stopAdding();
-        // Left on another month: the alarms need this one's events.
-        if (this._alarmLeadMs)
-            this._requestThisMonth();
     }
 });
