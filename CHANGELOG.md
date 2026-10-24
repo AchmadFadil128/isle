@@ -6,8 +6,21 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-24
+
+### Added
+
+- The assistant finds out what is wrong with the computer before it answers, as an expert would: it looks
+  at the power mode, battery and its health, Wi-Fi and the network, sound, Bluetooth, logs, temperatures,
+  drivers, disks and what is running (only commands that look, run at once; anything that changes the
+  computer still waits for Run), then says what it found and offers the fix.
+- It can switch the power mode (power saver, balanced, performance).
+
 ### Changed
 
+- The assistant talks things through: explanations, discussions, research and what it found out get a full
+  answer (with short lists, **bold** and `code`) instead of one or two sentences, it gives its own opinion
+  when asked, and it never says it may not look at the computer.
 - The assistant's pill moves more smoothly: what comes into it (its steps, a command card, a hint) fades
   in as the island grows to it instead of showing cut off by the edge, and the answer fades in where its
   steps were rather than replacing them in one frame.
@@ -1078,7 +1091,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/zickrian/isle/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/zickrian/isle/compare/v1.0.6...v1.1.0
 [1.0.6]: https://github.com/zickrian/isle/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/zickrian/isle/compare/v1.0.4...v1.0.5
