@@ -1069,8 +1069,11 @@ export class Controller {
         const target = pageName ?? this._alert?.page ?? this._defaultPage();
         if (target)
             this._expanded.showPage(target, {animate: this._expandWanted});
-        // Opening the island takes over from the alert being shown.
-        this._dismissAlert(false);
+        // Opening the island takes over from the alert being shown; one asking for an answer waits its turn.
+        if (this._alert?.key?.startsWith('agent-ask:') || this._alert?.key?.startsWith('task-ask:'))
+            this._shelveAlert();
+        else
+            this._dismissAlert(false);
         this._expandWanted = true;
         // Closed once it is open, a command still waiting for Run or Deny waits its turn as an alert.
         if (this._voiceOpen)
@@ -1635,14 +1638,19 @@ export class Controller {
         const state = this._daemon.state.assistant;
         if (!state)
             return;
-        // Built again (turned back on after a lock) while a request was at work: it carries on as if asked
-        // with the island closed. A batch of actions isled still waits on runs again; the last one's results were lost.
+        // Built again (turned back on after a lock) while a request was at work: it carries on as if asked with the
+        // island closed. A batch isled still waits on is told as cut short, never run twice (it may have happened).
         if (!this._assistantSeen) {
             this._assistantSeen = true;
             if (!this._voiceOpen && VOICE_WORKING.includes(state.phase)) {
                 this._voiceInBackground = true;
                 this._voiceTurn = state.turn ?? 0;
-                this._voiceStep = state.phase === 'acting' ? -1 : state.step ?? 0;
+                this._voiceStep = state.step ?? 0;
+                if (state.phase === 'acting') {
+                    const detail = 'Isle was restarted (the screen locked) while this ran; it may not have happened';
+                    this._daemon.call('assistant', 'Results', state.step,
+                        JSON.stringify((state.actions ?? []).map(action => ({type: action.type, ok: false, detail}))));
+                }
             }
         }
         const ours = this._voiceOpen || this._voiceInBackground;
