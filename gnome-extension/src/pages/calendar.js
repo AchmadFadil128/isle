@@ -179,13 +179,16 @@ export const CalendarPage = GObject.registerClass({
         const weekdays = new St.BoxLayout({style_class: 'isle-cal-weekdays'});
         this._weekStart = Shell.util_get_week_start();
         this._weekend = Format.weekendDays(GLib.getenv('LC_ALL') || GLib.getenv('LC_TIME') || GLib.getenv('LANG') || '');
-        for (let i = 0; i < 7; i++) {
-            // 4 Jan 1970 was a Sunday.
-            const day = new Date(1970, 0, 4 + (this._weekStart + i) % 7);
-            const letter = dateTime(day).format('%a').slice(0, 1).toUpperCase();
+        // 4 Jan 1970 was a Sunday.
+        const days = [...Array(7).keys()].map(i => new Date(1970, 0, 4 + (this._weekStart + i) % 7));
+        const names = days.map(day => dateTime(day).format('%a'));
+        // A letter each, unless that says too little: two where most days share one ("CN T2 T3" in Vietnamese).
+        const initials = names.map(name => name.slice(0, 1).toUpperCase());
+        const short = new Set(initials).size < 4 ? names.map(name => name.slice(0, 2).toUpperCase()) : initials;
+        days.forEach((day, i) => {
             const weekend = this._weekend.includes(day.getDay());
-            weekdays.add_child(label(letter, `isle-cal-weekday${weekend ? ' weekend' : ''}`, {x_align: Clutter.ActorAlign.CENTER}));
-        }
+            weekdays.add_child(label(short[i], `isle-cal-weekday${weekend ? ' weekend' : ''}`, {x_align: Clutter.ActorAlign.CENTER}));
+        });
         column.add_child(weekdays);
 
         this._grid = new St.BoxLayout({...VERTICAL, style_class: 'isle-cal-grid', height: GRID_HEIGHT, y_align: Clutter.ActorAlign.START});
@@ -380,6 +383,7 @@ export const CalendarPage = GObject.registerClass({
         const events = this._eventsOn(this._selected);
         const agenda = JSON.stringify([
             this._selected.getTime(),
+            Format.uses12Hour(),
             events.map(e => [e.title, +e.start, +e.end, e.allDay, e.ownId, !e.allDay && (e.end ?? e.start) < now]),
         ]);
         if (agenda !== this._shownAgenda) {
@@ -392,7 +396,8 @@ export const CalendarPage = GObject.registerClass({
     _renderMonth(busy) {
         const month = this._month;
         const now = GLib.DateTime.new_local(month.getFullYear(), month.getMonth() + 1, 1, 0, 0, 0);
-        this._monthName.text = now.format('%B').toUpperCase();
+        // The month's name standing alone, as some languages write it apart from a date.
+        this._monthName.text = now.format('%OB').toUpperCase();
         this._year.text = String(month.getFullYear());
 
         const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
@@ -464,8 +469,8 @@ export const CalendarPage = GObject.registerClass({
         this._dayName.text = `${name}, ${dateTime(day).format('%-d %B')}`;
         this._todayButton.visible = offset !== 0 || this._month.getMonth() !== this._today.getMonth() ||
             this._month.getFullYear() !== this._today.getFullYear();
-        // "8:00 pm" or "20:00", as the clock is set.
-        const eight = Format.timeOfDay(GLib.DateTime.new_local(2000, 1, 1, 20, 0, 0)).toLowerCase();
+        // "8:00 PM" or "20:00", as the clock is set; written the way Isle reads it, not the locale's "8:00 p. m.".
+        const eight = Format.uses12Hour() ? '8:00 PM' : '20:00';
         this._entry.hint_text = `Add event · e.g. Dinner ${eight}`;
     }
 
@@ -503,7 +508,7 @@ export const CalendarPage = GObject.registerClass({
             // An event that began on an earlier day shows when it ends.
             const startsToday = event.start >= startOfDay(this._selected);
             when = startsToday ? timeText(event.start) : `until ${timeText(event.end)}`;
-            if (startsToday && event.end && event.end > event.start && event.end - startOfDay(this._selected) < DAY_MS)
+            if (startsToday && event.end && event.end > event.start && event.end < addDays(startOfDay(this._selected), 1))
                 when += ` – ${timeText(event.end)}`;
         }
         row.add_child(label(when, 'isle-cal-event-time'));

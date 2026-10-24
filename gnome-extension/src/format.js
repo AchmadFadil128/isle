@@ -8,7 +8,7 @@ import Gio from 'gi://Gio';
 let interfaceSettings = null;
 
 /** Whether the user prefers a 12-hour clock in GNOME's settings. */
-function uses12Hour() {
+export function uses12Hour() {
     interfaceSettings ??= new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
     return interfaceSettings.get_string('clock-format') === '12h';
 }
