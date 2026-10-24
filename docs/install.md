@@ -244,8 +244,9 @@ log (see **Anything else** below).
 **Music does not show.** Check the background service:
 `systemctl --user status isled`.
 
-**The voice assistant does not answer.** Run `~/.local/bin/isled --doctor`: it says what
-is missing (speech recognition, an AI, or its sign-in) and what to run.
+**The voice assistant does not answer.** Run `~/.local/bin/isled --doctor` (with a .deb, .rpm
+or AUR package, `isled --doctor`): it says what is missing (speech recognition, an AI, or its
+sign-in) and what to run.
 
 **Anything else.** GNOME Shell's log shows extension errors:
 `journalctl -b -o cat /usr/bin/gnome-shell | grep -i isle`. Please

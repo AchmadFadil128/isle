@@ -184,6 +184,8 @@ All notable changes to Isle are listed here. The format follows
 - isled no longer keeps a note of every Claude Code and Codex session it ever heard from, which grew
   for as long as it ran.
 - With no conversation to keep, isled no longer wakes every minute to check whether it is over.
+- The guides give the commands of a .deb, .rpm or AUR install by name (`isled --doctor`,
+  `isle-setup-voice`): the `~/.local/bin/…` they gave is only there with the one-line install.
 
 ## [1.0.6] - 2026-10-24
 
