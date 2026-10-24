@@ -20,7 +20,7 @@ use crate::store::Store;
 
 /// Codex's logs are looked at this often while it is signed in (cheap, local); Claude is asked this
 /// often (one request), and after its server failed ever less often, up to `CLAUDE_BACKOFF`, so it is
-/// never pressed, and not at all while the screen is locked. Off, nothing runs until Settings or the
+/// never pressed. Neither while the screen is locked. Off, nothing runs until Settings or the
 /// page asks.
 const LOCAL_EVERY: Duration = Duration::from_secs(60);
 const CLAUDE_EVERY: Duration = Duration::from_secs(10 * 60);
@@ -218,7 +218,10 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
         } else {
             claude = None;
         }
-        if config.codex {
+        if config.codex && paused && !forced {
+            // Locked, nobody sees them: the last numbers stand until unlocking wakes the loop.
+            providers.extend(codex.last.clone());
+        } else if config.codex {
             // Reading logs is file work: done on a blocking thread, as Claude's request is.
             let mut reader = std::mem::take(&mut codex);
             if let Ok((back, read)) = tokio::task::spawn_blocking(move || {
@@ -250,7 +253,7 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
             claude_wait.saturating_sub(asked_claude.map_or(Duration::ZERO, |at| at.elapsed()))
         });
         next = Some(next_wait(
-            config.codex && codex_signed_in(),
+            config.codex && !paused && codex_signed_in(),
             claude_due_in,
             next_reset(&providers, now_ms()),
         ));

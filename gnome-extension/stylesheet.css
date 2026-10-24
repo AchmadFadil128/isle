@@ -635,7 +635,7 @@
 /* The hairline runs under the text, from the title to the edge. */
 .isle-reminder-line { height: 1px; background-color: rgba(255, 255, 255, 0.1); }
 .isle-reminder-title { font-size: 13.5px; color: #ffffff; transition-duration: 200ms; }
-.isle-reminder.done .isle-reminder-title { color: rgba(255, 255, 255, 0.38); }
+.isle-reminder-title.done { color: rgba(255, 255, 255, 0.38); }
 .isle-reminder-strike { height: 1.5px; background-color: rgba(255, 255, 255, 0.45); }
 .isle-reminder-remove { padding: 3px; border-radius: 99px; color: rgba(255, 255, 255, 0.5); }
 .isle-reminder-remove:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }

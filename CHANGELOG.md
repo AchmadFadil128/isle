@@ -6,8 +6,24 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- With AI usage on, Isle's service no longer reads Codex's logs every minute while the screen is locked;
+  it reads them again as it unlocks.
+- A typed request that cuts listening short lets the speech model go at once, rather than keeping it in
+  memory until the island closes.
+- While the assistant runs a command, Isle's service sends its state to GNOME Shell only when something
+  shows differently: about once a second instead of two or three times, and never the same state twice.
+- Opening the island on a song with synced lyrics no longer eases each lyric line behind the player
+  before its first frame, and lyrics out of sight no longer wake Isle at every line: they are set as
+  they show.
+- The closed island no longer runs fades to the opacity its music bars and clock already have each time
+  a song, the timer or a call changes.
+
 ### Fixed
 
+- Ticking a reminder off no longer drops a frame as its strike draws: only its title and tick box are
+  restyled, not every part of its row.
 - Super+I starts listening at once even while the AI is still starting (Codex from cold): the AI starts
   as you speak, so the first words are no longer lost.
 - Installing Isle again after uninstalling it keeps the top bar look chosen before, instead of resetting it.
@@ -196,7 +212,8 @@ All notable changes to Isle are listed here. The format follows
   endpoint Claude does not document.
 - isled no longer keeps a note of every Claude Code and Codex session it ever heard from, which grew
   for as long as it ran.
-- With no conversation to keep, isled no longer wakes every minute to check whether it is over.
+- isled no longer wakes every minute to check whether the assistant's conversation is over: it waits
+  for the end of its quiet time or for midnight, and looks again on waking from sleep.
 - The guides give the commands of a .deb, .rpm or AUR install by name (`isled --doctor`,
   `isle-setup-voice`): the `~/.local/bin/…` they gave is only there with the one-line install.
 - The installation guide's .deb and .rpm commands match any release's file, not only 1.0.0's.
