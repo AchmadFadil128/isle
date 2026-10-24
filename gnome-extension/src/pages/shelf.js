@@ -277,7 +277,7 @@ export const ShelfPage = GObject.registerClass({
     }
 
     get tintStyle() {
-        return 'siri';
+        return 'aura';
     }
 
     // Updates

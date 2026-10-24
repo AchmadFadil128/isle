@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Calendar like macOS's widget: the month, and the chosen day's events from the desktop's
+// Calendar as a widget shows it: the month, and the chosen day's events from the desktop's
 // calendars (GNOME Shell's event source) and Isle's own (isled, removable).
 
 import Clutter from 'gi://Clutter';
@@ -165,7 +165,7 @@ export const CalendarPage = GObject.registerClass({
     _buildMonth() {
         const column = new St.BoxLayout({...VERTICAL, style_class: 'isle-cal-month', y_align: Clutter.ActorAlign.CENTER});
 
-        // "OCTOBER 2026" in red, like macOS's widget; click it for today.
+        // "OCTOBER 2026" in red; click it for today.
         const header = new St.BoxLayout({style_class: 'isle-cal-month-header'});
         const title = new St.BoxLayout({style_class: 'isle-cal-month-title-box'});
         this._monthName = label('', 'isle-cal-month-name');

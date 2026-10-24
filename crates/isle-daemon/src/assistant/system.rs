@@ -78,7 +78,7 @@ fn read(path: impl AsRef<Path>) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
-/// "Ubuntu 24.04.5 LTS, GNOME, on a ASUSTeK COMPUTER INC. TUF Gaming FX505GT".
+/// "Ubuntu 24.04.5 LTS, GNOME, on a <vendor> <model>".
 fn system() -> String {
     let os = read("/etc/os-release")
         .and_then(|release| {

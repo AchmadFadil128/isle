@@ -59,7 +59,7 @@ export function ago(dateTime) {
         return `${minutes}m`;
     if (minutes < 24 * 60)
         return `${Math.floor(minutes / 60)}h`;
-    // Within the week its day, as macOS does; older, the date ("12 Oct").
+    // Within the week its day; older, the date ("12 Oct").
     return dateTime.format(minutes < 6 * 24 * 60 ? '%a' : '%-d %b');
 }
 

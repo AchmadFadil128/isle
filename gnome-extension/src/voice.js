@@ -52,7 +52,7 @@ const IDEAS = [
 export const UNDO_MS = 5000;
 /** Answers past this many characters are cut, the panel being small. */
 const MAX_REPLY = 360;
-/** Answers longer than this read as a paragraph: set smaller and lighter, as Siri's. */
+/** Answers longer than this read as a paragraph: set smaller and lighter. */
 const LONG_REPLY = 90;
 /** Selected text past this many characters is cut before it goes to the AI. */
 const MAX_SELECTION = 4000;
@@ -367,7 +367,7 @@ export const VoiceView = GObject.registerClass({
         const step = state.phase === 'acting' ? describeActions(state.actions) : state.activity || '';
         this._noteStep(state.phase, step);
         const [top, main, dim] = {
-            // The first time it opens it greets you, as Siri does.
+            // The first time it opens it greets you.
             listening: [this.followUp ?? '', this.greeting ?? 'Listening…', !this.greeting],
             transcribing: [this.followUp ?? '', 'One moment…', true],
             // Its answer as it writes it; else an agent's step as it happens ("Searching ~/Downloads for

@@ -23,7 +23,7 @@ const LOOK = {
     landing: {level: 0.85, breathe: 0, period: 1, speed: 2.2},
     landed: {level: 1, breathe: 0, period: 1, speed: 2.6},
 };
-/** The flare stays this long before it sinks (the island's 'siri' fade-out follows). */
+/** The flare stays this long before it sinks (the island's 'aura' fade-out follows). */
 const FLARE_MS = 320;
 /** A drop let go over the shelf waits this long for the file to show up in isled's list. */
 const LANDING_MS = 1500;

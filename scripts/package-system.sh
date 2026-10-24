@@ -16,7 +16,7 @@ cd "$(dirname "$0")/.."
 umask 022
 UUID="isle@zickrian.github.io"
 MAINTAINER="zickrian <espejodaniel50@gmail.com>"
-SUMMARY="A dynamic island for the GNOME Shell top bar"
+SUMMARY="A notch-style island for the GNOME Shell top bar"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -93,7 +93,7 @@ Section: gnome
 Priority: optional
 Homepage: https://github.com/zickrian/isle
 Description: $SUMMARY
- Isle turns the middle of the GNOME Shell top bar into a dynamic island: music
+ Isle turns the middle of the GNOME Shell top bar into a notch-style island: music
  with synced lyrics, calls, a focus timer, reminders, a calendar, a file shelf,
  charging and system alerts, and an optional voice assistant.
  .
@@ -124,7 +124,7 @@ Recommends: vulkan-loader
 %global __strip /bin/true
 
 %description
-Isle turns the middle of the GNOME Shell top bar into a dynamic island: music
+Isle turns the middle of the GNOME Shell top bar into a notch-style island: music
 with synced lyrics, calls, a focus timer, reminders, a calendar, a file shelf,
 charging and system alerts, and an optional voice assistant.
 

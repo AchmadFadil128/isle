@@ -2,12 +2,12 @@
 
 /* Mirrors the island's Files tab (stylesheet.css), which this window replaces. */
 
-/* See-through: the island beneath is the background. The island's type too:
- * SF Pro where installed, else Inter, which Isle installs. */
+/* See-through: the island beneath is the background. The island's type too: Inter, which Isle
+ * installs. */
 window.isle-shelf {
   background-color: transparent;
   color: #ffffff;
-  font-family: "SF Pro Text", "Inter Variable", "Inter", sans-serif;
+  font-family: "Inter Variable", "Inter", sans-serif;
   font-feature-settings: "tnum";
 }
 

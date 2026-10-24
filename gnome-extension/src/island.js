@@ -24,9 +24,9 @@ const SHAPE_PAD = 1;
 const OUT_OF_REACH = -10000;
 
 /** How long a tint takes to come and go: a wash, and a glow (which lingers out). */
-const TINT_FADE = {wash: [450, 450], glow: [380, 1100], siri: [300, 500]};
+const TINT_FADE = {wash: [450, 450], glow: [380, 1100], aura: [300, 500]};
 
-/** The 'siri' glow is drawn at 1/this of the size and scaled up: it is soft, so it looks the same
+/** The 'aura' glow is drawn at 1/this of the size and scaled up: it is soft, so it looks the same
  * with a quarter of the pixels to paint each frame. */
 const GLOW_SCALE = 2;
 
@@ -35,7 +35,7 @@ const FADE_OUT = 160;
 const FADE_IN = 320;
 /** The incoming view waits for the shape to make room before appearing. */
 const FADE_IN_DELAY = 120;
-/** How far (px) the views slide as the shape grows or shrinks: they travel with it, as on the iPhone. Whole
+/** How far (px) the views slide as the shape grows or shrinks: they travel with it. Whole
  * pixels only, never a scale: a scaled picture or text is resampled every frame and seems to shiver. */
 const VIEW_SHIFT = 8;
 /** Below this shoulder size (px) the corners may climb into the top bar, so the island rounds smoothly. */
@@ -89,7 +89,7 @@ export const Island = GObject.registerClass({
         this._shape = new St.DrawingArea();
         this._shape.connect('repaint', area => this._repaint(area));
         this.add_child(this._shape);
-        // The moving 'siri' light, on a layer of its own: the shape below is only drawn when it changes.
+        // The moving 'aura' light, on a layer of its own: the shape below is only drawn when it changes.
         this._glow = new St.DrawingArea({visible: false});
         this._glow.set_pivot_point(0, 0);
         this._glow.set_scale(GLOW_SCALE, GLOW_SCALE);
@@ -153,15 +153,15 @@ export const Island = GObject.registerClass({
     set tint_strength(value) {
         this._tintStrength = value;
         this.notify('tint-strength');
-        const siri = this._tintStyle === 'siri';
-        this._glow.visible = siri && Boolean(this._tint) && value > 0;
+        const aura = this._tintStyle === 'aura';
+        this._glow.visible = aura && Boolean(this._tint) && value > 0;
         this._queueGlow();
-        if (!siri)
+        if (!aura)
             this._shape.queue_repaint();
     }
 
     // Colours the island with `rgb` (0..1; null fades it): 'wash' rises to the bottom, 'glow' spills
-    // up from the two bottom corners, 'siri' (a list of colours) flows around the edge.
+    // up from the two bottom corners, 'aura' (a list of colours) flows around the edge.
     setTint(rgb, style = 'wash') {
         if (rgb) {
             // The shape draws every style but the glow, so it changes when the style does.
@@ -178,7 +178,7 @@ export const Island = GObject.registerClass({
         });
     }
 
-    /** Moves the 'siri' tint: `time` in seconds, `level` (0..1) swells it. */
+    /** Moves the 'aura' tint: `time` in seconds, `level` (0..1) swells it. */
     setTintMotion(time, level) {
         this._motion.time = time;
         this._motion.level = level;
@@ -401,7 +401,7 @@ export const Island = GObject.registerClass({
         this._outline(cr, height);
         cr.setSourceRGBA(0, 0, 0, 1);
         cr.fillPreserve();
-        if (this._tint && this._tintStrength > 0 && this._tintStyle !== 'siri') {
+        if (this._tint && this._tintStrength > 0 && this._tintStyle !== 'aura') {
             const {left, right, top} = this._outlineBox;
             for (const gradient of this._tintGradients(left, right, top, height)) {
                 cr.setSource(gradient);
@@ -412,7 +412,7 @@ export const Island = GObject.registerClass({
         cr.$dispose();
     }
 
-    // The 'siri' light, inside the shape, on the scaled-down glow layer.
+    // The 'aura' light, inside the shape, on the scaled-down glow layer.
     // A drawing area draws at once when asked, and the glow is asked by the shape and by its motion in the
     // same frame: it is drawn once, just before the frame. Soft light a frame behind the shape is not seen.
     _queueGlow() {

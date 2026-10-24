@@ -713,7 +713,7 @@ const MOTIONS = {
         [{translation_x: 0.6}, 90, 'EASE_IN_OUT_SINE'], [{translation_x: 0, scale_x: 1, scale_y: 1}, 100, 'EASE_OUT_SINE']],
     // Coming up from below: Caps Lock turned on.
     rise: [[{translation_y: 0, opacity: 255}, 260, 'EASE_OUT_BACK']],
-    // Side to side, as macOS answers a wrong password: something stopped.
+    // Side to side, as for a wrong password: something stopped.
     shake: [[{translation_x: -3}, 60, 'EASE_OUT_SINE'], [{translation_x: 3}, 80, 'EASE_IN_OUT_SINE'],
         [{translation_x: -2}, 70, 'EASE_IN_OUT_SINE'], [{translation_x: 0}, 60, 'EASE_OUT_SINE']],
 };
@@ -802,7 +802,7 @@ export function playMotion(actor, motion, {delay = 0} = {}) {
 const WAVE_MS = 180;
 const WAVE_STAGGER_MS = 70;
 
-/** A speaker whose waves come one by one as the volume rises and go as it falls, as macOS's does. */
+/** A speaker whose waves come one by one as the volume rises and go as it falls. */
 export const VolumeGlyph = GObject.registerClass(
 class VolumeGlyph extends St.Widget {
     _init({size = 16} = {}) {
@@ -1085,7 +1085,7 @@ export const Slider = GObject.registerClass({
     }
 });
 
-/** Coloured dots for what is in use, as on iPhone: green camera, orange microphone, blue screen sharing. */
+/** Coloured dots for what is in use: green camera, orange microphone, blue screen sharing. */
 export const PrivacyDots = GObject.registerClass(
 class PrivacyDots extends St.BoxLayout {
     _init() {

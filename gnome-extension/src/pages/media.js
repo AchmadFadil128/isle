@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Now playing, like macOS's: cover on the left; title, artist, scrubber and controls beside it.
+// Now playing: cover on the left; title, artist, scrubber and controls beside it.
 // With lyrics on, a wider island with synced lyrics on the right. See docs/product-spec.md, section 5.
 
 import Clutter from 'gi://Clutter';
@@ -212,7 +212,7 @@ class MediaPage extends Page {
         return player;
     }
 
-    /** The player in a column beside the lyrics, like Apple Music's. */
+    /** The player in a column beside the lyrics. */
     _buildLyricsLayout() {
         const layout = new St.BoxLayout({style_class: 'isle-lyrics-layout', x_expand: true, y_expand: true, visible: false});
 
@@ -242,7 +242,7 @@ class MediaPage extends Page {
         return layout;
     }
 
-    /** Volume, then the outputs to choose from, like macOS's Sound menu. */
+    /** Volume, then the outputs to choose from. */
     _buildAudioLayout() {
         const layout = new St.BoxLayout({...VERTICAL, style_class: 'isle-audio-layout', x_expand: true, y_expand: true, visible: false});
 
@@ -392,7 +392,7 @@ class MediaPage extends Page {
             if (output.detail)
                 texts.add_child(label(output.detail, 'isle-output-detail'));
             row.add_child(texts);
-            // The current output is marked with a check, like macOS.
+            // The current output is marked with a check.
             const check = new St.Icon({gicon: icon('isle-check-symbolic'), icon_size: 14, opacity: output.active ? 255 : 0, y_align: Clutter.ActorAlign.CENTER});
             row.add_child(check);
 

@@ -4,7 +4,6 @@
 // OSD and keyboard state. Everything here is undone in `destroy()`.
 
 import GLib from 'gi://GLib';
-import PangoCairo from 'gi://PangoCairo';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
@@ -22,14 +21,6 @@ const BAR_STYLES = {
 };
 /** Style class giving the glass bar's text a shadow to read on any wallpaper. */
 const GLASS_BAR_CLASS = 'isle-glass-bar';
-/** Style class setting SF Pro instead of Inter; see stylesheet.css. */
-export const SF_PRO_CLASS = 'isle-sf';
-
-/** Whether Apple's SF Pro is installed, to use it instead of Inter. */
-export function hasSfPro() {
-    // Looked up by name, without listing every family the system has.
-    return PangoCairo.FontMap.get_default().get_family('SF Pro Display') !== null;
-}
 /** Style class making the top bar slimmer; see stylesheet.css. */
 const COMPACT_BAR_CLASS = 'isle-compact-bar';
 /** Style class making the top bar as tall as the closed island. */
@@ -105,7 +96,6 @@ export class TopBar extends Signals.EventEmitter {
             [COMPACT_BAR_CLASS]: this._settings.get_boolean('compact-top-bar'),
             [NOTCH_BAR_CLASS]: this._settings.get_boolean('island-in-top-bar'),
             [GLASS_BAR_CLASS]: this._settings.get_string('top-bar-style') === 'glass',
-            [SF_PRO_CLASS]: hasSfPro(),
         });
     }
 
@@ -150,7 +140,7 @@ export class TopBar extends Signals.EventEmitter {
         // No colour of Isle's: the theme's again.
         this._syncColor(null);
         setStyleClasses(Main.panel, {
-            [COMPACT_BAR_CLASS]: false, [NOTCH_BAR_CLASS]: false, [GLASS_BAR_CLASS]: false, [SF_PRO_CLASS]: false,
+            [COMPACT_BAR_CLASS]: false, [NOTCH_BAR_CLASS]: false, [GLASS_BAR_CLASS]: false,
         });
         this._dateMenu.set_width(-1);
         this._dateMenu.opacity = 255;

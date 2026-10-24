@@ -1,21 +1,19 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 
 /* Isle. island.js draws the island black; this styles what sits on it (see docs/product-spec.md).
- * Apple's dark palette: surfaces #1c1c1e #2c2c2e #3a3a3c; accents #30d158 #ff453a #0a84ff #ff9f0a #5e5ce6. */
+ * A dark palette: surfaces #1c1c1e #2c2c2e #3a3a3c; accents #30d158 #ff453a #0a84ff #ff9f0a #5e5ce6. */
 
 /* ── Shared ───────────────────────────────────────────── */
 
-/* Inter (installed with Isle) or SF Pro (`isle-sf`, set by shell.js). St takes a single quoted
- * family only: a list stops it reading the rules that follow. */
+/* Inter, installed with Isle. St takes a single quoted family only: a list stops it reading the
+ * rules that follow. */
 #isleIsland {
   color: #ffffff;
   font-family: "Inter Variable";
 }
 
-#isleIsland.isle-sf { font-family: "SF Pro Display"; }
-
 /* Tabular figures for numbers that change or line up, so they hold still; prose keeps proportional
- * ones, as on macOS ("11:10" and "isle-0.9.1" would space out). */
+ * ones ("11:10" and "isle-0.9.1" would space out). */
 .isle-compact-clock, .isle-compact-second-time, .isle-header-time, .isle-recording-time,
 .isle-timer-time, .isle-stepper-value, .isle-time, .isle-volume-text, .isle-peek-value,
 .isle-call-duration, .isle-reminders-count, .isle-cal-event-time, .isle-cal-day, .isle-usage-percent {
@@ -46,7 +44,7 @@
   transition-duration: 120ms;
 }
 
-/* As macOS's notification buttons: translucent grey, white text, lighter under the pointer. */
+/* Buttons: translucent grey, white text, lighter under the pointer. */
 .isle-pill-small {
   font-size: 12px;
   padding: 6px 14px;
@@ -116,9 +114,7 @@
   font-weight: 500;
 }
 
-#panel.isle-compact-bar.isle-sf { font-family: "SF Pro Text"; }
-
-/* Closed island inside the top bar, like a MacBook's notch: the bar is as tall as the island, so
+/* Closed island inside the top bar, like a notch: the bar is as tall as the island, so
  * maximised windows start below it. Comes after the compact bar's height so it wins. */
 #panel.isle-notch-bar { height: 32px; }
 
@@ -180,7 +176,7 @@
   background-color: #ff453a;
 }
 
-/* A call, in green as on iPhone; a red microphone while muted. */
+/* A call, in green; a red microphone while muted. */
 .isle-call-icon { color: #30d158; }
 .isle-call-muted { color: #ff453a; }
 .isle-compact-call-time { color: #30d158; }
@@ -382,7 +378,7 @@
   transition-duration: 150ms;
 }
 
-/* The open tab sits on a dark grey pill, like NotchNook's; no outlines. */
+/* The open tab sits on a dark grey pill; no outlines. */
 .isle-tab:hover,
 .isle-tab:focus { background-color: rgba(255, 255, 255, 0.05); color: #ffffff; }
 .isle-tab:checked { background-color: rgba(255, 255, 255, 0.09); }
@@ -474,7 +470,7 @@
 .isle-output-name { font-size: 13px; font-weight: 600; }
 .isle-output-detail { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
 
-/* Lyrics, like Apple Music's: the player in a column beside the words. */
+/* Lyrics: the player in a column beside the words. */
 
 .isle-lyrics-layout { spacing: 26px; }
 .isle-lyrics-side { width: 232px; spacing: 8px; }
@@ -599,9 +595,9 @@
 
 /* ── Reminders ────────────────────────────────────────── */
 
-/* As macOS Reminders in dark mode: an orange title and count (as large as the timer's caption beside
+/* Reminders: an orange title and count (as large as the timer's caption beside
  * it), rows of a ring and a title over a hairline. A 24 px header and 24 px rows fill the 144 px page with five
- * whole rows, close as macOS's Reminders widget sets them. */
+ * whole rows, set close together. */
 .isle-reminders-header { height: 24px; padding: 0 0 0 2px; spacing: 4px; }
 .isle-reminders-title { font-size: 17px; font-weight: 600; color: #ff9f0a; letter-spacing: -0.2px; }
 .isle-reminders-count { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; color: #ff9f0a; padding-right: 2px; }
@@ -616,7 +612,7 @@
 .isle-reminder-new .isle-reminder-check { margin-top: 0; }
 .isle-reminder-title-box { padding: 3px 0; }
 
-/* An 18 px ring; ticked, it turns orange with a 10 px dot inside, as on macOS. */
+/* An 18 px ring; ticked, it turns orange with a 10 px dot inside. */
 .isle-reminder-check {
   width: 10px;
   height: 10px;
@@ -632,7 +628,7 @@
 .isle-reminder-dot { border-radius: 99px; background-color: #ff9f0a; }
 
 .isle-reminder-content { spacing: 6px; padding-right: 2px; }
-/* The hairline runs under the text, from the title to the edge, as on macOS. */
+/* The hairline runs under the text, from the title to the edge. */
 .isle-reminder-line { height: 1px; background-color: rgba(255, 255, 255, 0.1); }
 .isle-reminder-title { font-size: 13.5px; color: #ffffff; transition-duration: 200ms; }
 .isle-reminder.done .isle-reminder-title { color: rgba(255, 255, 255, 0.38); }
@@ -662,7 +658,7 @@
 
 /* ── Calendar ─────────────────────────────────────────── */
 
-/* The month, like macOS's Calendar widget. */
+/* The month, as a calendar widget shows it. */
 .isle-cal-month { width: 196px; spacing: 2px; }
 .isle-cal-month-header { spacing: 0; padding-bottom: 2px; }
 .isle-cal-month-title { padding: 1px 4px; border-radius: 6px; }
@@ -730,7 +726,7 @@
 .isle-cal-scroll { -st-vfade-offset: 14px; }
 .isle-cal-events { spacing: 4px; padding-bottom: 2px; }
 
-/* An event as in macOS's Calendar: tinted in its calendar's colour (set
+/* An event: tinted in its calendar's colour (set
  * in calendar.js), with a bar of it down the side. */
 .isle-cal-event {
   spacing: 8px;
@@ -792,7 +788,7 @@
 .isle-shelf-bar { spacing: 8px; }
 .isle-shelf-controls { spacing: 8px; }
 
-/* A macOS-style segmented control: the chosen segment is a raised pill,
+/* A segmented control: the chosen segment is a raised pill,
  * lit from above with a soft shadow beneath (no outline). */
 .isle-segmented {
   padding: 3px;

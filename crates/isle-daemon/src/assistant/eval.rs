@@ -126,7 +126,7 @@ const RUNNING: &[&str] = &["Google Chrome", "Spotify", "Files", "Visual Studio C
 const WINDOWS: &[(&str, &str)] = &[
     ("Google Chrome", "Shorts - YouTube"),
     ("Google Chrome", "Gmail - Inbox"),
-    ("Visual Studio Code", "mod.rs - dynamic-island"),
+    ("Visual Studio Code", "mod.rs - isle"),
     ("Files", "Downloads"),
 ];
 /// Only these requests may use the terminal; for anything else it is a wrong turn.

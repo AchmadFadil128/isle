@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Synced lyrics like Apple Music's: the sung line large and bright, the rest dimmer,
+// Synced lyrics: the sung line large and bright, the rest dimmer,
 // pauses as breathing dots. Click a line to jump there.
 
 import Clutter from 'gi://Clutter';

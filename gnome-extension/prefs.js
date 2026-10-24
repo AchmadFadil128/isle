@@ -42,7 +42,7 @@ export default class IslePreferences extends ExtensionPreferences {
     _aboutPage(settings, window) {
         const page = new Adw.PreferencesPage({title: 'About', icon_name: 'help-about-symbolic'});
         const about = new Adw.PreferencesGroup({title: `Isle ${this.metadata['version-name'] ?? ''}`.trim(),
-            description: 'A dynamic island for GNOME. Free software under the GPL.'});
+            description: 'A notch-style island for GNOME. © 2026 zickrian, free software under the GPL.'});
         const link = (title, subtitle, url) => {
             const row = new Adw.ActionRow({title, subtitle, activatable: true});
             row.add_suffix(new Gtk.Image({icon_name: 'adw-external-link-symbolic'}));
@@ -268,7 +268,7 @@ export default class IslePreferences extends ExtensionPreferences {
         ]));
         look.add(switchRow(settings, 'compact-top-bar', 'Compact top bar', 'A slimmer top bar that frames the island like a bezel'));
         look.add(switchRow(settings, 'island-in-top-bar', 'Island inside the top bar',
-            'Like a MacBook’s notch: the closed island never covers windows'));
+            'Like a notch: the closed island never covers windows'));
         const depth = spinRow(settings, 'notch-depth', 'Island height', 'How far the closed island hangs below the top bar, in pixels', 24, 40);
         settings.bind('island-in-top-bar', depth, 'sensitive', Gio.SettingsBindFlags.GET | Gio.SettingsBindFlags.INVERT_BOOLEAN);
         look.add(depth);

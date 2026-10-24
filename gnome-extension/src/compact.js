@@ -75,7 +75,7 @@ export const CompactView = GObject.registerClass({
         this._clock = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         // How long the screen has been recording, in place of the clock.
         this._elapsed = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, visible: false});
-        // How long the call has lasted, in green like an iPhone's.
+        // How long the call has lasted, in green.
         this._callTime = new St.Label({style_class: 'isle-compact-clock isle-compact-call-time', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, visible: false});
         center.add_child(this._clock);
         center.add_child(this._elapsed);
@@ -198,7 +198,7 @@ export const CompactView = GObject.registerClass({
         this._refresh();
     }
 
-    /** Fits the view inside the top bar, like a MacBook's notch, or below it. */
+    /** Fits the view inside the top bar, like a notch, or below it. */
     set inBar(inBar) {
         if (inBar === this._inBar)
             return;
@@ -230,7 +230,7 @@ export const CompactView = GObject.registerClass({
     _refresh() {
         const {nowPlaying, pomodoro} = this._daemon.state;
         const playing = Playback.isPlaying(nowPlaying);
-        // A paused song stays, like NotchNook, until its player closes.
+        // A paused song stays until its player closes.
         const hasTrack = Playback.hasTrack(nowPlaying);
         const timerActive = pomodoro && pomodoro.phase !== 'idle';
         const recording = this._privacy.recording;
@@ -261,7 +261,7 @@ export const CompactView = GObject.registerClass({
         this._assistant.alive = right === this._assistant;
         if (this._isServiceDown)
             right = this._serviceDown;
-        // On a call the green phone already says the microphone is on, as on an iPhone, unless another app records too.
+        // On a call the green phone already says the microphone is on, unless another app records too.
         const privacy = this._showingPrivacy() ? this._privacy : {};
         const microphone = privacy.microphone && (!onCall || this._call.othersRecording);
         const dots = {camera: privacy.camera, microphone, screenShare: privacy.screenShare};

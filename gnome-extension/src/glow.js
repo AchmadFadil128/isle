@@ -7,7 +7,7 @@ import Cairo from 'cairo';
 
 const STOPS = 24;
 
-// Light from the edge inside a box (`left`, `right`, `top`, corner `radius`) `height` tall, as Siri's.
+// Light from the edge inside a box (`left`, `right`, `top`, corner `radius`) `height` tall.
 // `time` (s) moves it, `level` (0..1, the voice) swells it, `strength` fades it in and out; `cache`
 // keeps the rising mask while the box's height stays.
 export function paintRim(cr, {left, right, top, radius}, height, colors, {time, level}, strength, cache = {}) {

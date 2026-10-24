@@ -103,7 +103,7 @@ install -Dm755 scripts/setup-voice.sh "$BINDIR/isle-setup-voice"
 install -Dm755 scripts/isle-charge-limit "$BINDIR/isle-charge-limit"
 
 step "Installing the Inter font"
-# The island is set in SF Pro where installed, else Inter, its open cousin.
+# The island is set in Inter.
 install -Dm644 data/fonts/InterVariable.ttf "$DATA/fonts/isle/InterVariable.ttf"
 install -Dm644 data/fonts/Inter-LICENSE.txt "$DATA/fonts/isle/Inter-LICENSE.txt"
 fc-cache "$DATA/fonts/isle" >/dev/null 2>&1 || true
@@ -165,7 +165,7 @@ fi
 if [ "$FIRST" = 1 ]; then
 step "Setting up the top bar"
 # Isle's look is the same everywhere: a slim glass top bar with the island
-# hanging from the top of the screen like a MacBook's notch. Only on a first
+# hanging from the top of the screen like a notch. Only on a first
 # install: an update keeps what the user chose since.
 gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle top-bar-style glass
 gsettings --schemadir "$DEST/schemas" set org.gnome.shell.extensions.isle compact-top-bar true

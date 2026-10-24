@@ -28,7 +28,7 @@ import {NotificationCenter} from './notifications.js';
 import {PrivacyMonitor} from './privacy.js';
 import {PeekView} from './peek.js';
 import * as Playback from './playback.js';
-import {KeyboardWatcher, OsdHook, SF_PRO_CLASS, TopBar, hasSfPro} from './shell.js';
+import {KeyboardWatcher, OsdHook, TopBar} from './shell.js';
 import {ShelfHelper} from './shelfHelper.js';
 import {CallPage} from './pages/call.js';
 import {CalendarPage} from './pages/calendar.js';
@@ -208,8 +208,6 @@ export class Controller {
 
     _buildViews() {
         this._island = new Island();
-        if (hasSfPro())
-            this._island.add_style_class_name(SF_PRO_CLASS);
         this._compact = new CompactView(this._daemon, this._settings, this._privacy, this._call);
         // Two, taking turns: a new alert fades in over the one it replaces, rather than swapping in a frame.
         this._peeks = [new PeekView(), new PeekView()];
@@ -673,7 +671,7 @@ export class Controller {
         this._compact.inBar = inBar;
 
         // Alerts hang below the top bar; the open island's header sits in the bar. The compact island
-        // either hangs too or sits inside the bar like a MacBook's notch, covering no window.
+        // either hangs too or sits inside the bar like a notch, covering no window.
         let size, view;
         switch (presentation) {
         case 'expanded':
@@ -818,7 +816,7 @@ export class Controller {
         // An alert that asks or tells what an agent did glows in its colours, still: drawn once.
         const glow = this._presentation === 'peek' ? this._alert?.glow : null;
         const tint = voice ? this._botLook.palette.glow : glow ?? (expanded ? this._expanded.tint : null);
-        const style = voice || glow ? 'siri' : expanded ? this._expanded.tintStyle : null;
+        const style = voice || glow ? 'aura' : expanded ? this._expanded.tintStyle : null;
         if (glow && tint !== this._tint)
             this._island.setTintMotion(ALERT_GLOW_TIME, ALERT_GLOW_LEVEL);
         if (tint !== this._tint || style !== this._tintStyle) {
@@ -839,7 +837,7 @@ export class Controller {
                 this._scheduleVoiceClose(Math.min(this._voiceCloseMs, VOICE_LEAVE_MS));
             return;
         }
-        // An alert waits while the pointer is on it, as a notification does on macOS; not the volume's.
+        // An alert waits while the pointer is on it, as a notification should; not the volume's.
         if (this._alert && !this._alert.transient && this._presentation === 'peek') {
             if (this._island.hovered)
                 this._cancel('alert');

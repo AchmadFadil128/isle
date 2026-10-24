@@ -15,7 +15,7 @@ const NOTIFICATION_DURATION = 5000;
 /** A critical notification stays this long once someone is there to see it. */
 const CRITICAL_DURATION = 20000;
 
-/** A battery on its side, like macOS's; the ring around it shows the level. */
+/** A battery on its side; the ring around it shows the level. */
 function batteryIcon(percent) {
     return percent <= 20 ? 'isle-battery-low-symbolic' : 'isle-battery-symbolic';
 }
@@ -571,7 +571,7 @@ export function assistant(state, open) {
         icon: failed ? 'dialog-warning-symbolic' : 'isle-mic-symbolic',
         motion: failed ? 'shake' : 'bounce',
         title: text,
-        // An answer may take two lines, as a notification's text does on macOS.
+        // An answer may take two lines, as a notification's text does.
         titleLines: 2,
         subtitle: failed ? state.hint ?? '' : 'Isle Assistant',
         tone: failed ? 'bad' : 'good',

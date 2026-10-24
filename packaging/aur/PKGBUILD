@@ -5,7 +5,7 @@
 pkgname=isle-bin
 pkgver=1.0.3
 pkgrel=1
-pkgdesc='A dynamic island for the GNOME Shell top bar: music with synced lyrics, calls, a focus timer, a calendar, a file shelf and a voice assistant'
+pkgdesc='A notch-style island for the GNOME Shell top bar: music with synced lyrics, calls, a focus timer, a calendar, a file shelf and a voice assistant'
 arch=('x86_64')
 url='https://github.com/zickrian/isle'
 license=('GPL-3.0-or-later' 'OFL-1.1')

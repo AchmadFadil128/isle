@@ -45,7 +45,7 @@ const ARMED_AFTER_MS = 500;
 // within this long.
 const STOP_ARMED_MS = 4000;
 const INSTALLER = /(^|[\s;&|(])(apt|apt-get|aptitude|dpkg|dnf|yum|rpm|pacman|zypper|flatpak|snap)\s/;
-/** A selection's colours: macOS's blue under white text. GNOME 47 moved colours from Clutter to Cogl. */
+/** A selection's colours: blue under white text. GNOME 47 moved colours from Clutter to Cogl. */
 const Color = Clutter.Color ?? Cogl.Color;
 const SELECTION = Color.from_string('#0a84ffb3')[1];
 const SELECTED_TEXT = Color.from_string('#ffffff')[1];

@@ -8,7 +8,7 @@
       </choices>
       <default>'glass'</default>
       <summary>Top bar style</summary>
-      <description>“glass”: see-through, with no colour of its own, with the island as a black notch hanging from the top of the screen, like on a MacBook. “black”: the island blends into a black bar. (A “theme” setting from before 0.7.3 reads as glass.)</description>
+      <description>“glass”: see-through, with no colour of its own, with the island as a black notch hanging from the top of the screen. “black”: the island blends into a black bar. (A “theme” setting from before 0.7.3 reads as glass.)</description>
     </key>
     <key name="compact-top-bar" type="b">
       <default>true</default>
@@ -18,7 +18,7 @@
     <key name="island-in-top-bar" type="b">
       <default>true</default>
       <summary>Closed island inside the top bar</summary>
-      <description>Like a MacBook's notch: the top bar is as tall as the closed island, so it never covers windows. Alerts and the open island still hang below it for a moment.</description>
+      <description>Like a notch: the top bar is as tall as the closed island, so it never covers windows. Alerts and the open island still hang below it for a moment.</description>
     </key>
     <key name="lyrics-online" type="b">
       <default>true</default>

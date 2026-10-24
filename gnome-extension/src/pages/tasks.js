@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Reminders, the right half of the Focus page (focus.js), as macOS's in dark mode: an orange title and
+// Reminders, the right half of the Focus page (focus.js), in dark mode: an orange title and
 // count, a ring and a hairline per reminder, and a last row to add one; a ticked one is struck, then goes.
 
 import Clutter from 'gi://Clutter';
@@ -88,7 +88,7 @@ class TasksPage extends Page {
         });
         this._scroll.set_child(this._list);
         this._newRow = this._buildNewRow();
-        // Under the new row when there are none: what macOS says.
+        // Under the new row when there are none.
         this._empty = label('', 'isle-reminders-empty', {x_align: Clutter.ActorAlign.CENTER, y_expand: true});
         const middle = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true, y_expand: true});
         middle.add_child(this._scroll);
@@ -129,7 +129,7 @@ class TasksPage extends Page {
         row.add_child(column);
 
         const text = this._entry.clutter_text;
-        // Enter adds it and leaves the field ready for the next, as on macOS.
+        // Enter adds it and leaves the field ready for the next.
         text.connect('activate', () => this._add());
         // The shell only gets keys on request: ask before the field takes focus, as
         // the grab moves focus itself. Esc or a click outside gives the keyboard back.
@@ -201,7 +201,7 @@ class TasksPage extends Page {
             row.destroy();
             this._rows.delete(id);
         }
-        // One added while the list is on screen opens its row, as on macOS; on first showing, all are there.
+        // One added while the list is on screen opens its row; on first showing, all are there.
         const known = this.mapped ? this._known : null;
         let previous = null;
         for (const task of shown) {
@@ -270,7 +270,7 @@ class TasksPage extends Page {
         });
         row.add_child(check);
 
-        // The title over a hairline that runs from the text to the edge, as on macOS.
+        // The title over a hairline that runs from the text to the edge.
         const column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true});
         const content = new St.BoxLayout({style_class: 'isle-reminder-content', y_expand: true});
         const titleBox = new St.Widget({style_class: 'isle-reminder-title-box', layout_manager: new Clutter.BinLayout(),

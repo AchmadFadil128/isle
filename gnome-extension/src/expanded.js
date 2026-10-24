@@ -58,7 +58,7 @@ export const ExpandedView = GObject.registerClass({
         'width-changed': {},
         // The current page's tint colour changed; see `tint`.
         'tint-changed': {},
-        // The current page's 'siri' tint moved: time (s), level (0..1).
+        // The current page's 'aura' tint moved: time (s), level (0..1).
         'tint-motion': {param_types: [GObject.TYPE_DOUBLE, GObject.TYPE_DOUBLE]},
         // The mic button: open the voice assistant.
         'voice-requested': {},

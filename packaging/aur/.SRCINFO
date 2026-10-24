@@ -1,5 +1,5 @@
 pkgbase = isle-bin
-	pkgdesc = A dynamic island for the GNOME Shell top bar: music with synced lyrics, calls, a focus timer, a calendar, a file shelf and a voice assistant
+	pkgdesc = A notch-style island for the GNOME Shell top bar: music with synced lyrics, calls, a focus timer, a calendar, a file shelf and a voice assistant
 	pkgver = 1.0.3
 	pkgrel = 1
 	url = https://github.com/zickrian/isle
