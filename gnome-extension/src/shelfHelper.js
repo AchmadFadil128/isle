@@ -54,6 +54,9 @@ const DRAG_AWAY = 260;
 /** What a drag of files offers; browsers' tabs and bookmarks carry a URI list too, and are left alone. */
 const FILE_TYPES = ['text/uri-list', 'x-special/gnome-copied-files'];
 const NOT_FILES = /tab|x-moz-place/;
+/** A helper that quits this often while shown, within this long, is not started again until next login. */
+const MAX_CRASHES = 3;
+const CRASH_WINDOW_US = 10 * 60 * 1000 * 1000;
 
 /** Whether the drag under way carries files; null while it offers nothing yet. */
 function dragCarriesFiles() {
@@ -268,16 +271,38 @@ export class ShelfHelper extends Signals.EventEmitter {
                     this._hoveringId = proxy.connectSignal('Hovering', (_proxy, _sender, [uris]) =>
                         this.emit('drag-files', uris));
                     this._signalProxy = proxy;
-                    // A helper that quits mid-drag never says the drag ended.
-                    this._ownerId = proxy.connect('notify::g-name-owner', () => {
-                        if (this._dragging && !proxy.g_name_owner) {
-                            this._dragging = false;
-                            this.emit('drag-end');
-                        }
-                    });
+                    this._ownerId = proxy.connect('notify::g-name-owner', () => this._onOwnerChanged(proxy));
                     this.sync();
                 }, this._cancellable, Gio.DBusProxyFlags.DO_NOT_AUTO_START_AT_CONSTRUCTION);
             });
+    }
+
+    _onOwnerChanged(proxy) {
+        if (proxy.g_name_owner) {
+            // Started again (after a crash, or quitting as the drag began): it must hear of the drag too.
+            if (this._dragNear)
+                this._setDropping(true);
+            return;
+        }
+        // A helper that quits mid-drag never says the drag ended.
+        if (this._dragging) {
+            this._dragging = false;
+            this.emit('drag-end');
+        }
+        if (!this._shownRect)
+            return;
+        // Gone while shown (it crashed): the tab shows its own tiles again, and the next place starts a new one.
+        this._shownRect = this._shownArea = null;
+        this._page.helperActive = false;
+        const now = GLib.get_monotonic_time();
+        this._crashes = [...(this._crashes ?? []).filter(at => now - at < CRASH_WINDOW_US), now];
+        if (this._crashes.length >= MAX_CRASHES) {
+            console.warn('Isle: the shelf helper keeps quitting; dropping files is off until next login');
+            this._proxy = null;
+            this.emit('available-changed');
+            return;
+        }
+        this.sync();
     }
 
     /** Opens the shelf when a drag nears the island; closes it if the drag goes elsewhere. */

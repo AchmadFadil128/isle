@@ -234,6 +234,14 @@ impl ShelfWindow {
     /// Whether a file is being dragged towards the island: the shelf then
     /// shows where it will land before the pointer even gets here.
     pub fn set_dropping(&self, dropping: bool) {
+        // Kept running while a drag is on its way; free to quit again once it is gone.
+        if dropping {
+            if let Some(quit) = self.0.idle_quit.take() {
+                quit.remove();
+            }
+        } else if !self.0.window.is_visible() {
+            self.hide();
+        }
         if self.0.near.replace(dropping) != dropping {
             self.limit_input();
             self.render();
