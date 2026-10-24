@@ -181,6 +181,8 @@ All notable changes to Isle are listed here. The format follows
 - Opening the Usage page asks Claude for new numbers at most every two minutes, as the guide says (every
   half minute only while offline); it asked every half minute, four times what the guide promises of an
   endpoint Claude does not document.
+- isled no longer keeps a note of every Claude Code and Codex session it ever heard from, which grew
+  for as long as it ran.
 
 ## [1.0.6] - 2026-10-24
 
