@@ -6,6 +6,30 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-10-24
+
+### Fixed
+
+- Claude Code's and Codex's alerts no longer go missing when another window (an editor on the same
+  project) names the project: the agent's own window is found by its process, and a title only counts
+  as a whole word ("app" no longer matches "WhatsApp"). A terminal or editor with several windows is
+  told apart too.
+- A Claude Code permission the island could not ask itself (a long or many-line command) now gets an
+  alert instead of nothing.
+- The assistant's answers show their Markdown as formatting in the pill and as plain words in alerts,
+  never as `**`; an answer with only actions no longer breaks the conversation.
+- Stop while a command card waits drops the command for good; a card left unanswered is told to the AI
+  as not run, not as denied.
+- `sudo` is taken off only where a command starts (`grep sudo log` keeps its word), and a sudo run as
+  another user is refused with why.
+- Music, reminders, volume, Bluetooth and brightness say when they did not work, with the reason,
+  instead of reporting success; a window named by its title is the frontmost, closest match.
+- Hints name your own shortcut, Codex gets its approval hooks after an upgrade, a folder an AI cannot
+  write is no longer called a used-up plan, and done alerts keep underscores in names.
+- A shelf file's name takes two lines, so "Alex Morgan CV.pdf" shows whole; a charging alert never
+  shows "0%" before it counts up; a finished command's step reads "Asked to run it".
+- The hidden warm-up alert can no longer appear as "Charging · Isle · 0%".
+
 ## [1.0.4] - 2026-10-24
 
 ### Changed
@@ -805,7 +829,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.4...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.5...HEAD
+[1.0.5]: https://github.com/zickrian/isle/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/zickrian/isle/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/zickrian/isle/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/zickrian/isle/compare/v1.0.1...v1.0.2
