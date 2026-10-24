@@ -24,6 +24,11 @@ All notable changes to Isle are listed here. The format follows
   alert already answered is not shown again when another one replaces it.
 - Showing the assistant at work again (a click, or its shortcut, while it answers in the background) no
   longer leaves the alert under it to run out unseen; it shows once the assistant closes.
+- When a fullscreen window hides the island, the alert on screen waits until it shows again instead of
+  running out unseen (a critical notification was marked read, a reminder gone), and Claude's or Codex's
+  asks go to their terminals at once, as asks that come while it is hidden do.
+- Locking the screen or turning Isle off sends Claude's and Codex's waiting asks to their terminals at
+  once; Codex waited nearly ten minutes.
 
 ## [1.0.6] - 2026-10-24
 

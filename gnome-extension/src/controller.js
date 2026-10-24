@@ -254,7 +254,9 @@ export class Controller {
         });
         // Hidden by a fullscreen window meanwhile: what waited shows now.
         this._island.connect('notify::visible', () => {
-            if (this._island.visible && !this._alert)
+            if (!this._island.visible)
+                this._onHidden();
+            else if (!this._alert)
                 this._nextAlert();
         });
         this._connectSignals();
@@ -1260,6 +1262,24 @@ export class Controller {
             this._queue.unshift(alert);
     }
 
+    // Hidden by a fullscreen window: an agent's ask goes to its terminal, as one asked now would (see
+    // `_onAgentAsking`); the alert on screen waits to be seen, its time not running out unseen.
+    _onHidden() {
+        this._passAgentAsks();
+        this._shelveAlert();
+        this._render();
+    }
+
+    /** The agents' asks on screen or waiting, unanswered, go back to their terminals. */
+    _passAgentAsks() {
+        const asks = [this._alert, ...this._queue].filter(alert => alert?.onDismissed && !alert.answered);
+        this._queue = this._queue.filter(alert => !asks.includes(alert));
+        for (const alert of asks) {
+            alert.answered = true;
+            alert.onDismissed();
+        }
+    }
+
     _nextAlert() {
         // One shows already (the command asked as the assistant closed): the queue waits behind it.
         if (this._alert || !this._island.visible || this._expandWanted || this._voiceOpen || !this._queue.length) {
@@ -1881,6 +1901,8 @@ export class Controller {
             this._destroyPartial();
             return;
         }
+        // Turned off (the screen locks too): agents waiting on an answer here ask in their terminals at once.
+        this._passAgentAsks();
         global.display.get_selection().disconnect(this._primaryChanged);
         global.display.disconnect(this._focusChanged);
         global.display.disconnect(this._focusMonitorChanged);
