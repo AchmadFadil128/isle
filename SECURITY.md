@@ -7,8 +7,8 @@ reporting.
 
 | Version | Supported |
 |---|---|
-| 1.0.x | Yes |
-| 0.9.x and older | No |
+| 1.1.x | Yes |
+| 1.0.x and older | No |
 
 ## Reporting a vulnerability
 

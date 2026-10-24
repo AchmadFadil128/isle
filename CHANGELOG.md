@@ -6,6 +6,8 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-24
+
 ### Changed
 
 - The Files tab always takes dropped files: when it settled without a later change (its fade cut short),
@@ -1070,7 +1072,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.6...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/zickrian/isle/compare/v1.0.6...v1.1.0
 [1.0.6]: https://github.com/zickrian/isle/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/zickrian/isle/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/zickrian/isle/compare/v1.0.3...v1.0.4
