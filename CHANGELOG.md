@@ -186,6 +186,7 @@ All notable changes to Isle are listed here. The format follows
 - With no conversation to keep, isled no longer wakes every minute to check whether it is over.
 - The guides give the commands of a .deb, .rpm or AUR install by name (`isled --doctor`,
   `isle-setup-voice`): the `~/.local/bin/…` they gave is only there with the one-line install.
+- The installation guide's .deb and .rpm commands match any release's file, not only 1.0.0's.
 
 ## [1.0.6] - 2026-10-24
 
