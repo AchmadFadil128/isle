@@ -58,6 +58,8 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
         });
     let mut previous: Option<(Reading, bool)> = None;
     let mut last_power_alert: Option<Instant> = None;
+    // The lowest level warned about since the charger was unplugged.
+    let mut warned: Option<f64> = None;
 
     loop {
         let all = properties
@@ -77,14 +79,19 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
             (Some((_, was_full)), Some((now, true))) if !was_full && now.plugged => {
                 Some(SystemEvent::BatteryFull)
             }
-            (Some((before, _)), Some((now, _))) if !now.plugged => LOW_LEVELS
-                .into_iter()
-                .any(|level| before.percent > level && now.percent <= level)
-                .then_some(SystemEvent::BatteryLow {
-                    percent: now.percent,
-                }),
+            (Some((before, _)), Some((now, _))) if !now.plugged => {
+                low_level(before.percent, now.percent, warned).map(|level| {
+                    warned = Some(level);
+                    SystemEvent::BatteryLow {
+                        percent: now.percent,
+                    }
+                })
+            }
             _ => None,
         };
+        if current.as_ref().is_some_and(|(now, _)| now.plugged) {
+            warned = None;
+        }
 
         let battery = current.as_ref().map(|(reading, _)| reading.shown());
         publish(&iface, |state| state.battery = battery, event).await;
@@ -94,6 +101,15 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
             return Ok(());
         }
     }
+}
+
+/// The low level the battery just went under, if not warned about since unplugged (`warned`, the lowest
+/// so far): a level read a little up and down again, as some batteries are, warns once.
+fn low_level(before: f64, now: f64, warned: Option<f64>) -> Option<f64> {
+    LOW_LEVELS
+        .into_iter()
+        .filter(|&level| warned.is_none_or(|warned| level < warned))
+        .rfind(|&level| before > level && now <= level)
 }
 
 /// The battery as read, its exact level for the alerts.
@@ -156,5 +172,16 @@ mod tests {
         assert_eq!(reading(57.5).shown().percent, 58.0);
         // Small changes leave the state as it was.
         assert_eq!(reading(57.31).shown(), reading(56.9).shown());
+    }
+
+    #[test]
+    fn each_low_level_warns_once_until_plugged_in() {
+        assert_eq!(low_level(20.3, 19.8, None), Some(20.0));
+        // Back over 20% and under again: said already.
+        assert_eq!(low_level(20.1, 19.9, Some(20.0)), None);
+        assert_eq!(low_level(10.2, 9.9, Some(20.0)), Some(10.0));
+        // Asleep past two levels: the lowest.
+        assert_eq!(low_level(22.0, 8.0, None), Some(10.0));
+        assert_eq!(low_level(30.0, 25.0, None), None);
     }
 }

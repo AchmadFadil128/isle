@@ -187,6 +187,8 @@ All notable changes to Isle are listed here. The format follows
 - The guides give the commands of a .deb, .rpm or AUR install by name (`isled --doctor`,
   `isle-setup-voice`): the `~/.local/bin/…` they gave is only there with the one-line install.
 - The installation guide's .deb and .rpm commands match any release's file, not only 1.0.0's.
+- A battery whose level reads a little up and down around 20%, 10% or 5% warns once at each, as
+  meant, until the charger is plugged in; it warned again at every dip.
 
 ## [1.0.6] - 2026-10-24
 
