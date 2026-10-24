@@ -42,6 +42,14 @@ const INTERFACE: &str = r#"
       <arg name="aheight" type="i" direction="in"/>
     </method>
     <method name="Hide"/>
+    <!-- 1.1: the scale GTK draws at (X pixels per logical one), and setting it: the extension sets
+         it if the window comes out another size than asked, as when GTK started before GNOME's. -->
+    <method name="Scale">
+      <arg name="scale" type="i" direction="out"/>
+    </method>
+    <method name="SetScale">
+      <arg name="scale" type="i" direction="in"/>
+    </method>
     <!-- A file is being dragged towards the island: show where it will
          land before the pointer gets to the window. -->
     <method name="SetDropping">
@@ -60,6 +68,8 @@ const INTERFACE: &str = r#"
   </interface>
 </node>"#;
 
+/// The largest scale `SetScale` takes.
+const MAX_SCALE: i32 = 4;
 const OBJECT_PATH: &str = "/io/github/zickrian/isle/ShelfWindow";
 const INTERFACE_NAME: &str = "io.github.zickrian.isle.ShelfWindow1";
 
@@ -105,6 +115,15 @@ pub fn register(connection: &gio::DBusConnection, window: ShelfWindow) -> Result
                     ),
                 }
             }
+            "Scale" => invocation.return_value(Some(&(window.scale(),).to_variant())),
+            "SetScale" => match params.get::<(i32,)>() {
+                Some((scale,)) if (1..=MAX_SCALE).contains(&scale) => {
+                    window.set_scale(scale);
+                    invocation.return_value(None);
+                }
+                _ => invocation
+                    .return_error(gio::DBusError::InvalidArgs, "expected a scale of 1 to 4"),
+            },
             "Hide" => {
                 window.hide();
                 invocation.return_value(None);

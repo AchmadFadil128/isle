@@ -178,6 +178,13 @@ All notable changes to Isle are listed here. The format follows
   assistant without that alert coming back once the assistant closes.
 - Locking the screen while the assistant's command waits for Run or Deny in an alert no longer shows the
   notification waiting behind it as the screen locks, marking it read with its sound, unseen.
+- On a 200% display, the Files tab's drag-and-drop window no longer comes out half the island's size
+  when the shelf's helper starts before GNOME has told it the display's scale: it is set to match.
+- On a 200% display without fractional scaling, the calendar writes the month whole ("OCTOBER", not
+  "OCTOB…").
+- A password a password manager clears again also leaves the clipboard history when you pasted it into
+  another app (the manager clears it on a timer, with that app in front), and copying blank text no
+  longer takes the last copy out of the history.
 
 ## [1.0.6] - 2026-10-24
 

@@ -138,6 +138,15 @@ impl ShelfWindow {
                 });
             }
         });
+        // Another scale (GNOME's arriving after the helper started, or `set_scale`): the same place in X pixels.
+        let weak = Rc::downgrade(&shelf.0);
+        shelf.0.window.connect_scale_factor_notify(move |window| {
+            if let Some(inner) = weak.upgrade()
+                && window.is_mapped()
+            {
+                ShelfWindow(inner).place();
+            }
+        });
         shelf.connect_daemon();
 
         shelf.render();
@@ -221,6 +230,21 @@ impl ShelfWindow {
         };
         if let Err(err) = x11::place(&self.0.window, x, y, width, height) {
             warn!("could not position the shelf window: {err}");
+        }
+    }
+
+    /// The scale GTK draws at: X pixels per logical one.
+    pub fn scale(&self) -> i32 {
+        self.0.window.scale_factor()
+    }
+
+    /// Draws at `scale` from now on, whatever GNOME's settings say.
+    pub fn set_scale(&self, scale: i32) {
+        let display = WidgetExt::display(&self.0.window);
+        match display.downcast_ref::<gdk4_x11::X11Display>() {
+            #[allow(deprecated)] // X11 itself is deprecated since GTK 4.18; this still works
+            Some(display) => display.set_surface_scale(scale),
+            None => warn!("the shelf window is not on X11; its scale stays"),
         }
     }
 

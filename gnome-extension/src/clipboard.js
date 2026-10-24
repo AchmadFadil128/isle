@@ -83,7 +83,7 @@ export class ClipboardHistory {
         this._ownCopy = false;
         this._timeouts = new Set();
         this._cancellable = new Gio.Cancellable();
-        /** The text last added: {id, appId, at}, until something else is copied. */
+        /** The text last added: {id, at}, until something else is copied. */
         this._lastText = null;
         // Made now: a new virtual device joins the seat a moment later, and drops the first paste.
         this._keyboard = clutterBackend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
@@ -145,8 +145,8 @@ export class ClipboardHistory {
                 this._lastText = null;
                 this._daemon.call('clipboard', 'AddImage', png.get_data(), appId);
             }
-        } else if (mimetypes.length === 0 || bytes) {
-            this._forgetSecret(appId);
+        } else if (mimetypes.length === 0 || (bytes && !text.replaceAll('\0', ''))) {
+            this._forgetSecret();
         }
     }
 
@@ -156,15 +156,15 @@ export class ClipboardHistory {
         this._lastText = null;
         const [id] = await this._daemon.call('clipboard', 'AddText', text, appId) ?? [];
         if (id !== undefined)
-            this._lastText = {id, appId, at: Date.now()};
+            this._lastText = {id, at: Date.now()};
     }
 
-    // The clipboard emptied (or blanked) by the app that just copied text: a password manager
-    // clearing a password, which then leaves the history too, unless pinned.
-    _forgetSecret(appId) {
+    // The clipboard emptied soon after text was copied: a password manager clearing a password, which then
+    // leaves the history too, unless pinned. Whatever app is in front: it clears on a timer, after the paste.
+    _forgetSecret() {
         const last = this._lastText;
         this._lastText = null;
-        if (!last || last.appId !== appId || Date.now() - last.at > SECRET_CLEARED_MS || this._destroyed)
+        if (!last || Date.now() - last.at > SECRET_CLEARED_MS || this._destroyed)
             return;
         const item = (this._daemon.state.clipboard ?? []).find(other => other.id === last.id);
         if (item && !item.pinned)
