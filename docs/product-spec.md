@@ -38,7 +38,7 @@ sizes are logical pixels.
 The top bar is slimmed to a thin bezel (status icons and the tray stay in
 it) and see-through like glass, with no colour of its own. The
 island is a black notch hanging from the top edge of the screen with concave
-shoulders, like Boring Notch on a MacBook. Closed, it sits inside the bar
+shoulders. Closed, it sits inside the bar
 (32 px, against 26 px when it hangs below instead): maximised
 windows start below the bar, so the resting island never covers an app and
 no screen space is lost to it. Alerts and the open island reach below the
@@ -47,8 +47,7 @@ sits below the bar's height, and the open island's header row level with
 the bar. In the settings the closed island can hang below the bar instead
 ("Compact, hanging").
 
-Type is set like macOS: SF Pro where installed, else Inter (installed with
-Isle), semibold for titles, nothing heavier than bold, and slightly tighter
+Type is set in Inter (installed with Isle), semibold for titles, nothing heavier than bold, and slightly tighter
 tracking on large figures. The island's text fields keep their own look
 when Blur my Shell restyles the shell's.
 
@@ -133,7 +132,7 @@ a scrollbar.
   a request or a command runs with the island closed; a click shows it) →
   muted microphone on a call → a second activity → music bars → up to two privacy dots.
 - Two activities at once: the first of recording, call, music and timer keeps the left slot and the
-  centre; the next takes the right slot, as on iPhone: the timer's time left (white while focusing,
+  centre; the next takes the right slot: the timer's time left (white while focusing,
   green on a break; beside the music bars while a song is first), a call's green phone and length, or
   the music bars. A second time is as large as the clock and on its line, with no ring. The island widens
   by as much as that is wider than a slot, on both sides, so the clock stays centred. Each side's sign
@@ -143,19 +142,19 @@ a scrollbar.
   notifications) → moon (Do Not Disturb on).
 - While the screen records, the centre shows how long it has been recording
   instead of the clock; during a call (and no recording), how long the call
-  has lasted, in green, as on iPhone.
+  has lasted, in green.
 - Right slot: a red crossed-out microphone while a call is muted, else music
   bars while a song is loaded. They dance only while it
   plays and the closed island is on screen, and rest after a minute without
   input. Paused, they rest and dim, and the cover stays until the player
-  closes, as in NotchNook.
-- Far right: privacy dots, as on iPhone: green camera, orange microphone,
+  closes.
+- Far right: privacy dots: green camera, orange microphone,
   blue screen sharing (the island widens by 22 px while any is shown).
 - Centre: the clock (follows GNOME's 12/24-hour setting).
 
 ## 5. Pages
 
-Every page shares the header row inside the top bar, like NotchNook's. On
+Every page shares the header row inside the top bar. On
 the left, a tab per page: icons, the open page's in a lit pill with its
 name, and a red dot on Notifications while some are unseen. On the right a
 red "● 0:42" pill while the screen records (click to stop), a green "📞 1:15"
@@ -189,7 +188,7 @@ every app; white and "Muted" while on) and **Open** (brings the call's
 window to the front, switching workspace if needed, and closes the island).
 When the call ends the tab goes and an open island moves to the next page.
 
-**Music**, laid out like macOS's Now Playing. On the left a 104 px cover
+**Music**, laid out as a now-playing card. On the left a 104 px cover
 (click: bring the player forward) with the playing app's icon on its corner
 (Spotify, Chrome, …; found by name when the player gives no desktop entry).
 Beside it: title and artist — album (or the app's name) with the lyrics and
@@ -205,7 +204,7 @@ headphones, earbuds, HDMI) with a check on the current one; click one to
 switch. The output button lights up and fills in while this is shown; it
 returns to the player when the island closes.
 
-**Lyrics** (Music page, toggled), like Apple Music's. The island widens to
+**Lyrics** (Music page, toggled). The island widens to
 720, its contents gliding to their new place. Left, in a column: a 64 px cover, title, artist and the music bars
 (dancing while it plays), the scrubber, then the lyrics toggle (lit),
 previous · play/pause · next and the output button. Right: synced lines;
@@ -224,7 +223,7 @@ way to nothing (browsers report no title and "Paused" for a moment between
 videos), the song is shown playing for up to 1.5 s, so the cover, bars and
 width do not drop out and back; a song paused by itself shows at once.
 
-**Notifications**, as macOS lists them: a heading "Notifications" with
+**Notifications**, as a plain list: a heading "Notifications" with
 **Do Not Disturb** (a bell, or a moon on purple while on) and a **Clear**
 pill on its right. Below, newest first, one line each: the app's icon (a
 symbolic one on a grey tile), the title in bold and its text in grey, and
@@ -299,8 +298,8 @@ drawn while the page is open, so copying costs nothing on screen. Copies are nev
 when a password manager marks them secret, from ignored apps (password
 managers by default; Settings → Clipboard), or while history is off.
 
-**Reminders** (a page of its own, the island's full width), as macOS's in
-dark mode: an orange "Reminders" with the number still open on the right
+**Reminders** (a page of its own, the island's full width), in dark mode:
+an orange "Reminders" with the number still open on the right
 and a +; under it the reminders as rows of a thin ring and the title over a
 hairline that runs from the text to the edge (a long title wraps over as
 many lines as it needs, the ring by its first line), scrolling past what
@@ -314,7 +313,7 @@ up. Closing the island in that moment keeps it done. Empty: "No Reminders",
 or "All Done" once today's are ticked off. Done ones are cleared at
 midnight.
 
-**Calendar** (title "Calendar"), like macOS's Calendar widget. Left: the
+**Calendar** (title "Calendar"), as a calendar widget. Left: the
 month in red capitals with the year (click: back to today) and ‹ › to move
 between months; the week's day letters (from the locale's first weekday,
 weekends dimmer); the days, today in a red circle, the chosen day in a grey
@@ -367,9 +366,9 @@ computer. Right-clicking an alert puts it away without opening it.
 
 Badges are grey unless the colour says something (green charging, red low
 battery or failure, the plan's own colour, blue for an event); nothing amber.
-Join is the one blue button, as macOS marks the action to take. Buttons on alerts,
+Join is the one blue button, marking the action to take. Buttons on alerts,
 notifications and the assistant are translucent grey pills with white text,
-lighter under the pointer, as macOS's notification buttons.
+lighter under the pointer.
 
 When a window is fullscreen the island hides, alerts wait (see above) and
 GNOME's own volume pop-up is used. Charging, network, Bluetooth and Caps

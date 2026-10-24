@@ -6,6 +6,16 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-10-24
+
+### Changed
+
+- Isle speaks for itself: its settings, its description and its documents
+  no longer compare it to other companies' products, and the README says
+  who holds its copyright under the GPL.
+- Isle is always set in Inter, the typeface it installs; it no longer
+  switches to another company's font when that one is installed.
+
 ## [1.0.3] - 2026-10-24
 
 ### Fixed
@@ -171,11 +181,11 @@ shape and colour.
 - Notifications are a plain list, newest first, one line each, with Clear;
   their buttons and × show as the pointer passes over.
 - What the island shows grows and shrinks with its shape as it opens and
-  closes, as on an iPhone.
+  closes.
 - The assistant's button in the open island is a sparkle, not a microphone.
 - Only numbers that change or line up (clocks, timers, percentages) keep
   their figures the same width; others read as ordinary text, and larger
-  labels are set a little tighter, as SF Pro does.
+  labels are set a little tighter.
 - The closed island's signs sit as far in from each end, and the open
   island's tabs and gear line up with its pages.
 
@@ -214,7 +224,7 @@ Lighter and smoother all round, with nothing changed in how Isle looks.
   notifications, the clipboard, usage, the calendar or reminders keeps what
   is already drawn instead of building it again in the frames that animate.
 - Searching the clipboard filters the cards it has instead of rebuilding
-  them at each key; the music bars, the Siri glow and the face leave no
+  them at each key; the music bars, the assistant's glow and the face leave no
   garbage behind each frame, so the shell pauses less to collect it.
 - The island's shape is only redrawn when its size changes; the closed
   island's timers tick only while it is on screen.
@@ -228,7 +238,7 @@ Lighter and smoother all round, with nothing changed in how Isle looks.
 
 - Isle draws the island's icons itself, in SF Symbols' manner (volume,
   brightness, keyboard light, touchpad, airplane mode, camera, Bluetooth,
-  Wi-Fi, display, warning, update, recording), with Apple's system colours;
+  Wi-Fi, display, warning, update, recording), with the system colours;
   a battery on its side replaces GNOME's upright one.
 - Each alert's icon moves once as it appears: charging pulses the bolt, a
   reminder sways the bell, Caps Lock lifts its arrow, a stopped service
@@ -375,7 +385,7 @@ Lighter and smoother all round, with nothing changed in how Isle looks.
   steps, it says where it got to. Slow steps (opening an app, starting a
   player) get the time they need, and an answer in a code block or in plain
   words is read alike from all three AIs.
-- Buttons in the island are translucent grey, as on macOS, and alerts take
+- Buttons in the island are translucent grey, and alerts take
   the island's own colours: the Claude and ChatGPT plans their own, red when
   nearly used up; reminders and Caps Lock neutral.
 - **Nothing of the assistant runs while you are not asking.** The AI quits
@@ -511,7 +521,7 @@ Lighter and smoother all round, with nothing changed in how Isle looks.
   reminders on the right, so what to work on sits beside the time to work
   on it. The header has one tab fewer; this page is a little wider than the
   others to fit both.
-- **Reminders** look closer to macOS's: an orange title with the number
+- **Reminders** look cleaner: an orange title with the number
   still open, a thin ring per reminder that fills with an orange dot when
   ticked, the title struck through at once, then the row folds away; a
   last "New Reminder" row to add one. Four whole rows show before the list
@@ -549,7 +559,7 @@ Lighter and smoother all round, with nothing changed in how Isle looks.
 
 ### Changed
 
-- **Tasks are now Reminders**, laid out as macOS Reminders: an orange title
+- **Tasks are now Reminders**, laid out as a reminders list: an orange title
   and count, a round tick box, plain rows under hairlines and a New
   Reminder row last (Enter adds one and leaves the field ready for the
   next). A ticked reminder is struck through and folds away a moment later;
@@ -583,7 +593,7 @@ Lighter and smoother all round, with nothing changed in how Isle looks.
 
 ### Added
 
-- A **Calendar** page, like macOS's Calendar widget: the month on the left
+- A **Calendar** page, as a calendar widget: the month on the left
   (today in red, a dot under days with events) and the chosen day's events
   on the right. It shows the desktop's calendars (Google and others through
   Online Accounts) and events written in one line on the island, such as
@@ -597,7 +607,7 @@ Lighter and smoother all round, with nothing changed in how Isle looks.
 
 ### Changed
 
-- The lyrics look like Apple Music's: the line being sung large and bright,
+- The lyrics: the line being sung large and bright,
   the others smaller and dimmer, faded edges, breathing dots for pauses and
   a long intro, a clearer column for the player with the music bars by the
   title, and proper states for loading, no lyrics and the service being
@@ -659,7 +669,7 @@ Lighter and smoother all round, with nothing changed in how Isle looks.
 - Release packages with the programs ready-built
   (`isle-<version>-x86_64-linux.tar.gz`), made by a Release workflow for
   every version tag; `install.sh` uses ready-built programs when present.
-- Notifications from one app fold into a stack, as on macOS: the newest
+- Notifications from one app fold into a stack: the newest
   card, the next one's edge under it and "+2 more from Chrome", which
   unfolds them under the app's name with "Show less".
 
@@ -682,12 +692,12 @@ The first release.
 - A code of conduct (Contributor Covenant 2.1) and a security policy.
 - A README with a demo, screenshots, installation steps for Ubuntu and
   Fedora, usage, measured resource use, privacy notes and troubleshooting.
-- One look across every page, as on macOS: Isle's own solid icons for
+- One look across every page: Isle's own solid icons for
   play, pause, skip, close, check, add and the folding arrows instead of
   the theme's; controls are pills and cards share a 12 px corner; the
   Clipboard / Files switch is a segmented control whose chosen segment is
   raised.
-- Music laid out like macOS's Now Playing: a large cover beside the title,
+- Music laid out as a now-playing card: a large cover beside the title,
   the scrubber and the controls, with lyrics and output as small buttons
   at the top right. Tasks stack today's progress under the ring, drop the
   repeated empty message, and scroll to the finished tasks when unfolded.
@@ -702,18 +712,18 @@ The first release.
   time inside its ring with the phase, today's total and one row of
   controls beside it; the clipboard search is a round button that opens
   into a field.
-- Notification cards like macOS's: the app's icon (a system one on a grey
+- Notification cards: the app's icon (a system one on a grey
   tile), the title with its time on the right, and a close button in the
   time's place under the pointer. Lists fade out at an edge that scrolls
   on instead of being cut.
 - Alerts look like iOS's: icon badges lit in the alert's colour with a soft
   gradient, and Caps Lock as its own icon with an "On" / "Off" pill.
-- Type like macOS: SF Pro where installed, else Inter, which the installer
+- Type set in Inter, which the installer
   now puts in `~/.local/share/fonts/isle`; semibold titles, tighter
   tracking on large figures, medium-weight top bar text instead of the
   theme's bold, and the date without the year ("Tue 20 Oct"). The shelf's
   drag-and-drop window uses the same type.
-- Tabs in the open island's header, like NotchNook: one per page, the open
+- Tabs in the open island's header: one per page, the open
   one named on a dark grey pill, and a red dot while notifications are unseen.
   They replace the side arrows and page dots. The island
   reopens on the page picked last (for 5 minutes), and stays on the Shelf
@@ -721,10 +731,10 @@ The first release.
 - The playing app's icon on the cover's corner, found by name when the
   player gives no desktop entry (Chrome).
 - A glass top bar, the new default: see-through with no colour of its own,
-  and the island as a black notch hanging from the top of the screen, like
-  a MacBook's notch. "Top bar" in the settings picks glass,
+  and the island as a black notch hanging from the top of the screen.
+  "Top bar" in the settings picks glass,
   black (the island blends in) or the theme's colour.
-- The closed island sits inside the top bar (32 px), like a MacBook's notch:
+- The closed island sits inside the top bar (32 px), like a notch:
   maximised windows start right below it and the island never covers an
   app. Alerts and the open island still hang below
   for as long as they are shown. "Island inside the top bar" in the settings
@@ -790,7 +800,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.4...HEAD
+[1.0.4]: https://github.com/zickrian/isle/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/zickrian/isle/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/zickrian/isle/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/zickrian/isle/compare/v1.0.0...v1.0.1

@@ -2,7 +2,7 @@
 
 # Isle
 
-**A dynamic island for the GNOME desktop.**
+**A notch-style island for the GNOME desktop.**
 
 Music with synced lyrics, calls, notifications, a focus timer, reminders, a
 calendar that tells you when to join a meeting, a clipboard shelf, Claude
@@ -18,7 +18,7 @@ your screen.
 
 </div>
 
-Isle turns the centre of the top bar into a black notch, like a MacBook's.
+Isle turns the centre of the top bar into a black notch.
 At rest it shows the time and what is going on (a song, a timer, a
 recording, or two of them at once). Rest the pointer on it and it opens with spring physics into a
 small panel with tabs for each page; passing over it on the way elsewhere
@@ -48,13 +48,13 @@ appear in the same place instead of in the middle of the screen.
 | | |
 |---|---|
 | <img src="docs/images/music.png" alt="Music page" width="420"> | **Music.** Spotify, YouTube in your browser, or any MPRIS player: cover art with the playing app's icon, a scrubber and controls. Volume and output switching are one click away. |
-| <img src="docs/images/lyrics.png" alt="Synced lyrics" width="420"> | **Synced lyrics** from [LRCLIB](https://lrclib.net), like Apple Music's: the line being sung large and bright, pauses as breathing dots. The island widens and takes the cover's colour; click a line to jump to it. |
+| <img src="docs/images/lyrics.png" alt="Synced lyrics" width="420"> | **Synced lyrics** from [LRCLIB](https://lrclib.net): the line being sung large and bright, pauses as breathing dots. The island widens and takes the cover's colour; click a line to jump to it. |
 | <img src="docs/images/call.png" alt="A Google Meet call in the island: a live preview of the call, its length, mute and open" width="420"> | **Calls** in WhatsApp, Telegram, Meet or any app or browser: the closed island shows a green phone and how long the call has lasted. Open it to see the call live (you and whoever you call) while you work in other windows, mute your microphone, or jump back to the call. |
 | <img src="docs/images/focus.png" alt="Focus page: the timer's ring, the work and break lengths, and Start" width="420"> | **Focus.** A Pomodoro timer with breaks and Do Not Disturb while you focus: a ring with the time left, the work and break lengths to change with − and +, and Start. Its ring and time stay in the closed island; beside a song, its time sits next to the music bars. |
-| <img src="docs/images/reminders.png" alt="Reminders page: a list with a long reminder wrapped over two lines" width="420"> | **Reminders**, a plain list as macOS shows them: add, rename in place, tick one off and it is struck through, then goes. A long one wraps over as many lines as it needs. |
+| <img src="docs/images/reminders.png" alt="Reminders page: a list with a long reminder wrapped over two lines" width="420"> | **Reminders**, a plain list: add, rename in place, tick one off and it is struck through, then goes. A long one wraps over as many lines as it needs. |
 | <img src="docs/images/clipboard.png" alt="Clipboard history" width="420"> | **Shelf.** A clipboard history of text, links, images and files (search, filter, pin; Super+V to paste), and a files tray: drop files on the island, then drag them into any app or click one to copy it, ready to paste into a chat. |
 | <img src="docs/images/files.png" alt="The files tray with a photo, a PDF and a text file" width="420"> | **Files tray.** Files dropped on the island wait here, with their thumbnails, until you drag them into an app or click one to copy it. |
-| <img src="docs/images/calendar.png" alt="Calendar" width="420"> | **Calendar.** The month beside the chosen day's events, like macOS's Calendar widget. Shows your desktop calendars (Google and others through Online Accounts) and events you add in a line: "Dinner 8:00 pm". Five minutes before an event, the island reminds you, with **Join** when it has a Google Meet, Zoom, Teams or Webex link. |
+| <img src="docs/images/calendar.png" alt="Calendar" width="420"> | **Calendar.** The month beside the chosen day's events. Shows your desktop calendars (Google and others through Online Accounts) and events you add in a line: "Dinner 8:00 pm". Five minutes before an event, the island reminds you, with **Join** when it has a Google Meet, Zoom, Teams or Webex link. |
 | <img src="docs/images/notifications.png" alt="The notifications page" width="420"> | **Notifications.** GNOME's notifications collect here as a plain list, newest first, with their buttons ("Reply", "Mark as read") under the pointer, Clear, and Do Not Disturb a click away. |
 | <img src="docs/images/voice.png" alt="The voice assistant working through a request in steps: finding Spotify, opening it, playing jazz, setting the volume" width="420"> | **Voice assistant.** Press Super+I and ask, in English or Indonesian: play a song, find a file, put windows side by side, add a reminder, explain why the laptop is slow. It works as an agent: a request with several steps is done one after another, each step checked, with the AI you already use (Claude Code, Codex or Antigravity). |
 | <img src="docs/images/command.png" alt="The assistant's card for sudo apt install -y vlc: Needs your password, Deny and Run; then running, with its last lines and Stop" width="420"> | **Installs and fixes things.** "Install LibreOffice", "pasang codex": it checks what your Linux has, searches the web when unsure, and shows the one command it wants to run, with what to know (your password, a script from the web, removing files). Press **Run** or **Deny**. It runs in the background while you carry on, and the assistant checks it worked before saying so. |
@@ -510,8 +510,15 @@ problems privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-Isle is free software under the
-[GNU General Public License v3.0 or later](LICENSE).
+Copyright © 2026 zickrian
+
+Isle is free software: you can redistribute it and/or modify it under the
+terms of the [GNU General Public License](LICENSE) as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. It is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. See the [GNU General Public License](LICENSE)
+for more details.
 
 The bundled [Inter](https://rsms.me/inter/) typeface (`data/fonts`) is under
 the [SIL Open Font License 1.1](data/fonts/Inter-LICENSE.txt). Lyrics come
@@ -520,9 +527,7 @@ come from [Simple Icons](https://simpleicons.org) (CC0); they are trademarks of
 Anthropic and OpenAI, shown only to name their plans. The assistant's face
 takes its expressions from [bloub](https://github.com/jeremy-prt/bloub) by
 Jérémy Perret, under the MIT License
-([notice](gnome-extension/NOTICE-bloub.txt)). Isle is inspired by the iPhone's Dynamic
-Island and by [NotchNook](https://lo.cafe/notchnook) and
-[Boring Notch](https://github.com/TheBoredTeam/boring.notch) on the Mac.
+([notice](gnome-extension/NOTICE-bloub.txt)).
 
 The demo video shows "Clouds" by Tibor Mokanszki from the Ubuntu 24.04
 wallpapers, under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/);

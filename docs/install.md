@@ -26,7 +26,7 @@ Each of these was installed with the command below and checked:
 Other systems with one of these GNOME Shell versions work the same way.
 Other desktops (KDE Plasma, Cinnamon, XFCE, COSMIC, …) cannot load GNOME
 Shell extensions, so Isle does not run there; nor does it run on ARM
-computers (Raspberry Pi, Apple Silicon), for which there are no ready-built
+computers (Raspberry Pi and other ARM machines), for which there are no ready-built
 programs.
 
 ## 2. Install
