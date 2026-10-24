@@ -475,7 +475,9 @@ export const VoiceView = GObject.registerClass({
         this._card.visible = Boolean(card);
         if (card) {
             this._card.setCard(card);
-            this._showAction(card.status === 'waiting' || card.status === 'running' ? null : this._typeButton);
+            // Ended, the row's button is back: Stop while the request still works on, else typing instead.
+            const ended = WORKING.includes(this._phase) ? this._stop : this._typeButton;
+            this._showAction(card.status === 'waiting' || card.status === 'running' ? null : ended);
         }
         const form = this._cardForm();
         if (form)

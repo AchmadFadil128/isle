@@ -27,6 +27,8 @@ All notable changes to Isle are listed here. The format follows
 - The mic in the open island shows a request still at work instead of starting one that was lost, and a
   request at work when the screen locks carries on afterwards: its answer comes as an alert, and a command
   it waits on asks again.
+- Once a command it ran has ended, the assistant keeps its Stop button while it still works on the
+  request, instead of offering to type a new one.
 
 ## [1.0.6] - 2026-10-24
 
