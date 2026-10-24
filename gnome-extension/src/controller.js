@@ -543,6 +543,7 @@ export class Controller {
     // Layout
 
     _updateGeometry() {
+        const before = this._monitor;
         this._monitor = this._wantedMonitor();
         // On a black bar the island grows out of it, its shoulders below the
         // bar; on any other it hangs from the top of the screen like a notch.
@@ -552,6 +553,14 @@ export class Controller {
         this._expanded.topInset = this._onBar ? this._topBar.height : HEADER_WITHOUT_BAR;
         this._topBar.clockShown = !this._onBar;
         this._render();
+        if (this._monitor !== before)
+            this._syncFullscreen();
+    }
+
+    // GNOME hides the island under a fullscreen window only when fullscreen changes, not when it moves
+    // to another display: its rule (layout.js `_updateActorVisibility`), here.
+    _syncFullscreen() {
+        this._island.visible = !(global.window_group.visible && this._monitor?.inFullscreen);
     }
 
     /** The display the island belongs on: the main one, or the one of the window in use (see Settings). */

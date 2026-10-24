@@ -109,6 +109,9 @@ All notable changes to Isle are listed here. The format follows
 - Tidier pages: every page's content starts and ends on the same edges, secondary buttons share one
   grey, placeholders one brightness and no indent, empty lists one style, the Focus buttons one height;
   calendar times, usage percents and header icons line up, and a song counts down with a minus sign.
+- With the island following the display in use, it no longer stays hidden after moving off a display
+  with a fullscreen window (alerts waited forever and Super+V did nothing), nor shows over a fullscreen
+  video on the display it moves to.
 
 ## [1.0.6] - 2026-10-24
 
