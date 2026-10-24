@@ -37,11 +37,12 @@ install_service() {
 
 SHELF=0
 WHISPER=0
-if [ -x bin/isled ]; then
+# -f, not -x: unpacked where files cannot run (a /tmp mounted noexec), they still install.
+if [ -f bin/isled ]; then
     # A release package: the programs come built.
     BUILT=bin
-    [ -x bin/isle-shelf ] && SHELF=1
-    [ -x bin/isle-whisper ] && WHISPER=1
+    [ -f bin/isle-shelf ] && SHELF=1
+    [ -f bin/isle-whisper ] && WHISPER=1
 else
     BUILT=target/release
     step "Building isled"

@@ -111,7 +111,8 @@ main() {
     local package
     package="$(find "$WORK" -mindepth 1 -maxdepth 1 -type d -name 'isle-*' | head -n1)"
     [ -n "$package" ] || fail "the package has an unexpected layout."
-    "$package/install.sh"
+    # Through bash: a /tmp mounted noexec runs no file in it directly.
+    bash "$package/install.sh"
 
     # The package's uninstaller stays around as a command.
     install -Dm755 "$package/uninstall.sh" "$HOME/.local/bin/isle-uninstall"

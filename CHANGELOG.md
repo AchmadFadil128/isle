@@ -30,6 +30,8 @@ All notable changes to Isle are listed here. The format follows
   greyed out while the island shows the usage.
 - The installer says when `~/.local/bin` is not on the PATH, and the guide gives Isle's commands
   with that folder (`~/.local/bin/isled --doctor`), so they run where their names alone are not found.
+- The one-line install works where `/tmp` is mounted `noexec`: it ran the package's installer from
+  there directly, which such a system refuses.
 
 ## [1.0.6] - 2026-10-24
 
