@@ -38,6 +38,8 @@ All notable changes to Isle are listed here. The format follows
 - A notification its app takes back goes from the island at once, also while the screen is shared, rather
   than staying for its whole time.
 - A notification updated while it waited its turn shows its new words, not the first ones.
+- Run or Deny on the assistant's command alert answers that command only, never a newer one, and Run shows
+  "Running" for its moment before the alert goes. A notification's title on several lines shows on one.
 
 ## [1.0.6] - 2026-10-24
 

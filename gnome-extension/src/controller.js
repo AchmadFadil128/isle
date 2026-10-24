@@ -1728,13 +1728,15 @@ export class Controller {
     }
 
     _askInAlert(action) {
-        this._post(Alerts.taskAsks(action, this._botLook, run => this._deciding?.done(run)));
+        // Its buttons answer its own command, never one asked after it.
+        this._post(Alerts.taskAsks(action, this._botLook, run => this._deciding?.action === action && this._deciding.done(run)));
     }
 
-    /** Takes the alert with `key` away, shown or waiting its turn. */
+    /** Takes the alert with `key` away, shown or waiting its turn; one answered on screen goes once its answer
+     * has shown ("Running"). */
     _withdrawAlert(key) {
         this._queue = this._queue.filter(alert => alert.key !== key);
-        if (this._alert?.key === key) {
+        if (this._alert?.key === key && !this._alert.answered) {
             this._alert.answered = true;
             this._dismissAlert(true);
         }

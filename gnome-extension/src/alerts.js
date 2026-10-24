@@ -241,7 +241,9 @@ export function notification(item, urgent, {onShown, onWithdrawn}, shared = fals
     // clicking the alert afterwards must not touch the destroyed object.
     watchWithdrawal(item, () => onWithdrawn(key));
     const body = shared ? '' : plainBody(item).replace(/\s+/g, ' ').trim();
-    const title = shared ? item.source?.title || 'New notification' : item.title || item.source?.title || '';
+    // On one line, as the body.
+    const title = (shared ? item.source?.title || 'New notification' : item.title || item.source?.title || '')
+        .replace(/\s+/g, ' ').trim();
     const alert = {
         // Its own key: one arriving behind another waits its turn; the same one updated replaces itself.
         key,
