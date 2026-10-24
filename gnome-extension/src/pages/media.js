@@ -48,6 +48,7 @@ class MediaPage extends Page {
         this._remaining = [];
         this._scrubbers = [];
         this._playButtons = [];
+        this._transports = [];
 
         this._player = this._buildPlayer();
         this._lyricsLayout = this._buildLyricsLayout();
@@ -163,12 +164,14 @@ class MediaPage extends Page {
         const row = new St.BoxLayout({style_class: 'isle-transport', y_align: Clutter.ActorAlign.CENTER});
         const play = iconButton('isle-play-symbolic', 'isle-button-flat isle-play',
             () => this.daemon.call('media', 'PlayPause'), {size: 22, accessibleName: 'Play or pause'});
-        row.add_child(iconButton('isle-backward-symbolic', 'isle-button-flat',
-            () => this.daemon.call('media', 'Previous'), {size: 18, accessibleName: 'Previous'}));
-        row.add_child(play);
-        row.add_child(iconButton('isle-forward-symbolic', 'isle-button-flat',
-            () => this.daemon.call('media', 'Next'), {size: 18, accessibleName: 'Next'}));
+        const previous = iconButton('isle-backward-symbolic', 'isle-button-flat',
+            () => this.daemon.call('media', 'Previous'), {size: 18, accessibleName: 'Previous'});
+        const next = iconButton('isle-forward-symbolic', 'isle-button-flat',
+            () => this.daemon.call('media', 'Next'), {size: 18, accessibleName: 'Next'});
+        for (const button of [previous, play, next])
+            row.add_child(button);
         this._playButtons.push(play);
+        this._transports.push({previous, play, next});
         return row;
     }
 
@@ -336,6 +339,12 @@ class MediaPage extends Page {
         const playIcon = nowPlaying.status === 'Playing' ? 'isle-pause-symbolic' : 'isle-play-symbolic';
         for (const button of this._playButtons)
             setButtonIcon(button, playIcon);
+        // Dimmed where the player can't (no next song, a stream that can't pause).
+        for (const {previous, play, next} of this._transports) {
+            setEnabled(previous, nowPlaying.can_go_previous);
+            setEnabled(play, nowPlaying.can_play_pause);
+            setEnabled(next, nowPlaying.can_go_next);
+        }
 
         this._syncBadges();
 
