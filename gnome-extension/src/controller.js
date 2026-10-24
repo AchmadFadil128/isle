@@ -1172,9 +1172,8 @@ export class Controller {
             this._enqueue(alert);
             return;
         }
-        // Shown again afterwards, unless it was a passing one (the volume); a critical notification stays.
-        if (this._alert && !this._alert.transient)
-            this._queue.unshift(this._alert);
+        // Shown again afterwards, unless it was a passing one (the volume) or answered; a critical notification stays.
+        this._shelveAlert();
         this._showAlert(alert);
     }
 
@@ -1249,6 +1248,16 @@ export class Controller {
         this._alert = null;
         if (showNext)
             this._nextAlert();
+    }
+
+    /** Puts the alert on screen back first in line, not put away (an agent's ask keeps waiting for its answer);
+     * a passing or answered one just goes. */
+    _shelveAlert() {
+        const alert = this._alert;
+        this._cancel('alert');
+        this._alert = null;
+        if (alert && !alert.transient && !alert.answered)
+            this._queue.unshift(alert);
     }
 
     _nextAlert() {
@@ -1422,9 +1431,7 @@ export class Controller {
         this._cancel('expand');
         this._cancel('collapse');
         this._expandWanted = false;
-        if (this._alert && !this._alert.transient)
-            this._queue.unshift(this._alert);
-        this._dismissAlert(false);
+        this._shelveAlert();
         this._voiceOpen = true;
         this._voiceInBackground = false;
         this._voiceTurn = this._daemon.state.assistant?.turn ?? 0;
@@ -1496,6 +1503,7 @@ export class Controller {
         this._cancel('expand');
         this._cancel('collapse');
         this._expandWanted = false;
+        this._shelveAlert();
         this._voiceOpen = true;
         this._voiceInBackground = false;
         this._voiceTarget = global.display.focus_window;

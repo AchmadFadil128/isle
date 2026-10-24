@@ -19,6 +19,11 @@ All notable changes to Isle are listed here. The format follows
   own time. An agent's ask went back to its terminal, and the assistant's command waited unseen.
 - Closing the assistant while its command waits for Run or Deny no longer puts an alert that waited in
   place of that ask: the ask was gone, and the command waited unseen for ten minutes.
+- Opening the assistant over an alert puts the alert back in line without answering it: Claude's or
+  Codex's ask no longer went to the terminal and then came back with Allow and Deny that did nothing. An
+  alert already answered is not shown again when another one replaces it.
+- Showing the assistant at work again (a click, or its shortcut, while it answers in the background) no
+  longer leaves the alert under it to run out unseen; it shows once the assistant closes.
 
 ## [1.0.6] - 2026-10-24
 
