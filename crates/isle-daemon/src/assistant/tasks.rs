@@ -252,7 +252,8 @@ pub async fn follow(task: &Task, progress: impl Fn(Progress)) -> (Ended, String)
         }
         progress(Progress {
             output: shown(&output),
-            seconds: started.elapsed().as_secs_f64(),
+            // Whole seconds, as the card shows them: a round with no new output then changes nothing.
+            seconds: started.elapsed().as_secs() as f64,
             ended: None,
         });
         tokio::time::sleep(POLL).await;

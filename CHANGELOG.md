@@ -8,6 +8,8 @@ All notable changes to Isle are listed here. The format follows
 
 ### Changed
 
+- While the assistant runs a command, Isle's service sends its state to GNOME Shell only when something
+  shows differently: about once a second instead of two or three times, and never the same state twice.
 - Opening the island on a song with synced lyrics no longer eases each lyric line behind the player
   before its first frame, and lyrics out of sight no longer wake Isle at every line: they are set as
   they show.

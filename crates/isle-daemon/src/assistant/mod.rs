@@ -113,7 +113,7 @@ enum Phase {
     Error,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 struct State {
     phase: Phase,
     /// What the user said.
@@ -1606,7 +1606,12 @@ async fn show_history(iface: &InterfaceRef<AssistantService>, chat: &Chat) {
 
 async fn publish(iface: &InterfaceRef<AssistantService>, update: impl FnOnce(&mut State)) {
     let mut service = iface.get_mut().await;
+    // Unchanged (a running command's poll with nothing new), it is not serialised and sent to the shell.
+    let before = service.state.clone();
     update(&mut service.state);
+    if service.state == before {
+        return;
+    }
     if let Err(err) = service.state_changed(iface.signal_emitter()).await {
         warn!("could not publish the assistant state: {err}");
     }
