@@ -116,6 +116,8 @@ All notable changes to Isle are listed here. The format follows
   a call) now keeps notification text, the clipboard and the shelf hidden as one begun later does.
 - An alert growing under a pointer that rests at the top of the screen no longer opens the island
   (with "open on hover"), nor stays on screen until the pointer moves: it counts once the pointer moves.
+- Notifications opened by asking the assistant close with Esc or a click elsewhere, as with Super+V,
+  instead of staying open until the pointer went over the island and away.
 
 ## [1.0.6] - 2026-10-24
 

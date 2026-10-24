@@ -1152,10 +1152,15 @@ export class Controller {
         }
         this._shelf.showTab('clipboard');
         this.expand('shelf');
-        this._setKeyboard(true);
+        this._holdOpen();
         if (this._keyboardGrab)
             this._shelf.showTab('clipboard', {focusSearch: true});
-        else // another grab holds the keyboard: it closes once the pointer is not on it
+    }
+
+    /** Opened without the pointer, it takes the keyboard: Esc or a click elsewhere closes it. */
+    _holdOpen() {
+        this._setKeyboard(true);
+        if (!this._keyboardGrab) // another grab holds the keyboard: it closes once the pointer is not on it
             this._later('collapse', KEYBOARD_LESS_CLOSE_MS, () => {
                 if (!this._island.hovered)
                     this._collapseUnlessHeld();
@@ -1915,7 +1920,11 @@ export class Controller {
             writer: this._writer,
             decide: action => this._decide(action),
             // The answer shows for a moment, then the page.
-            showNotifications: () => this._later('voice-page', 1200, () => this.expand('notifications')),
+            showNotifications: () => this._later('voice-page', 1200, () => {
+                this.expand('notifications');
+                if (!this._island.hovered && !this._keyboardGrab)
+                    this._holdOpen();
+            }),
             // Closed first, so the island is not in a screenshot or over the lock screen.
             // Every close-first action of an answer runs, in order, once the island has closed.
             closeThen: callback => {
