@@ -136,7 +136,8 @@ busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DB
 # Without a user service manager (over SSH, say) isled still starts on its
 # own when the extension first calls it.
 if systemctl --user daemon-reload 2>/dev/null; then
-    systemctl --user enable isled.service >/dev/null 2>&1
+    systemctl --user enable isled.service >/dev/null 2>&1 ||
+        echo "isled could not be set to start with your session ('systemctl --user enable isled' says why); it still starts once the island calls it."
     # A failure here is reported, not fatal: the extension still goes in, and isled starts once called.
     systemctl --user restart isled.service ||
         echo "isled did not start; see 'journalctl --user -u isled' (the island still works without it, minus its services)."

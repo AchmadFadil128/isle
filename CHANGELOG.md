@@ -34,6 +34,8 @@ All notable changes to Isle are listed here. The format follows
   there directly, which such a system refuses.
 - Installing from source goes on without the shelf's drag-and-drop helper when it does not build (it
   needs Rust 1.92), instead of stopping the whole install.
+- The installer no longer stops without a word when isled cannot be set to start with the session; it
+  says so and finishes.
 
 ## [1.0.6] - 2026-10-24
 
