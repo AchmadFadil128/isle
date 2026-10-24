@@ -370,9 +370,16 @@ async fn run_command(
         ran.push((shown.clone(), status.into()));
         return if denied {
             format!("run `{shown}`: the user denied it. Do not run it; offer another way, or stop.")
+        } else if report.text.contains("password was not given") {
+            format!(
+                "run `{shown}` did not start: the password dialog was closed without the password ({}). \
+                 The user chose not to; say so.",
+                report.text
+            )
         } else {
             format!(
-                "run `{shown}` did not start ({}). If the password dialog was cancelled, the user chose not to; say so.",
+                "run `{shown}` did not start ({}). Say plainly that it could not start and why; do not \
+                 guess another reason.",
                 report.text
             )
         };
