@@ -316,6 +316,35 @@ pub fn store() -> Store<Running> {
     Store::new("tasks")
 }
 
+/// Keeps a started task in tasks.json, so isled finds it again after a restart (see `mod.rs`).
+pub fn remember(task: &Task) {
+    remember_in(&mut store(), task);
+}
+
+/// Takes a task out of tasks.json once it has been told.
+pub fn forget(task: &Task) {
+    forget_in(&mut store(), task);
+}
+
+// Written at once: each call has its own store, and a quick command's forget must find its remember.
+fn remember_in(store: &mut Store<Running>, task: &Task) {
+    let mut running = store.load();
+    running.tasks.retain(|t| t.id != task.id);
+    running.tasks.push(task.clone());
+    store.save_now(&running);
+}
+
+fn forget_in(store: &mut Store<Running>, task: &Task) {
+    let mut running = store.load();
+    running.tasks.retain(|t| t.id != task.id);
+    // None left: no file at all.
+    if running.tasks.is_empty() {
+        store.remove();
+    } else {
+        store.save_now(&running);
+    }
+}
+
 /// What became of a task while isled was not watching: how it ended and its output, or `None` if it
 /// still runs (then it is followed again).
 pub async fn settled(task: &Task) -> Option<(Ended, String)> {
@@ -555,6 +584,30 @@ pub fn card(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_task_forgotten_right_after_it_started_stays_forgotten() {
+        let dir = std::env::temp_dir().join(format!("isle-tasks-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("tasks.json");
+        let task = |id: &str| Task {
+            id: id.into(),
+            command: "true".into(),
+            why: "Test".into(),
+            scope: Scope::User,
+            log: dir.join(format!("run-{id}.log")),
+            started: 0,
+        };
+        remember_in(&mut Store::at(path.clone()), &task("a"));
+        remember_in(&mut Store::at(path.clone()), &task("b"));
+        forget_in(&mut Store::at(path.clone()), &task("a"));
+        forget_in(&mut Store::at(path.clone()), &task("b"));
+        // No write still on its way puts a told task back.
+        crate::store::flush();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(!path.exists());
+        std::fs::remove_dir_all(dir).ok();
+    }
 
     #[test]
     fn only_commands_shown_whole_are_offered() {

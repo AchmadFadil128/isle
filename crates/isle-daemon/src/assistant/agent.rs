@@ -15,7 +15,7 @@ use tokio::sync::oneshot;
 
 use super::answer::Answer;
 use super::brain::Brain;
-use super::tasks::{self, Ended, Scope, Task};
+use super::tasks::{self, Ended, Scope};
 use super::{apps, check, files};
 
 /// The AI may take this many more steps after its first answer before what it says stands.
@@ -410,7 +410,7 @@ async fn run_command(
             )
         };
     }
-    remember(&task);
+    tasks::remember(&task);
     let (ended, output) = tasks::follow(&task, |progress| {
         let status = match progress.ended {
             None => "running",
@@ -421,7 +421,7 @@ async fn run_command(
         out.cards.send(card(status, Some(&progress))).ok();
     })
     .await;
-    forget_task(&task);
+    tasks::forget(&task);
     tasks::clean(&task);
     let output = if output.is_empty() {
         "(no output)".to_owned()
@@ -447,26 +447,6 @@ async fn run_command(
                 "run `{shown}` was stopped before it finished (by the user, or its time ran out). Output so far:\n{output}"
             )
         }
-    }
-}
-
-/// Keeps a started task in tasks.json, so isled finds it again after a restart (see `mod.rs`).
-fn remember(task: &Task) {
-    let mut store = tasks::store();
-    let mut running = store.load();
-    running.tasks.push(task.clone());
-    store.save(&running);
-}
-
-fn forget_task(task: &Task) {
-    let mut store = tasks::store();
-    let mut running = store.load();
-    running.tasks.retain(|t| t.id != task.id);
-    // None left: no file at all.
-    if running.tasks.is_empty() {
-        store.remove();
-    } else {
-        store.save(&running);
     }
 }
 
