@@ -26,6 +26,7 @@ mod system;
 mod tasks;
 mod whisper;
 
+use std::collections::VecDeque;
 use std::time::Duration;
 
 use chrono::NaiveDate;
@@ -830,6 +831,8 @@ fn new_day(session: &mut Session, pruned: &mut Option<NaiveDate>) {
 pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut commands: Commands) {
     let mut session = Session::default();
     let mut next = None;
+    // Commands about the conversation that came while a request was answered, handled after it.
+    let mut later = VecDeque::new();
     let mut pruned = None;
     // When the AI, unused since, quits (see `KEEP_WARM`).
     let mut cool_at: Option<tokio::time::Instant> = None;
@@ -855,7 +858,7 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 None => std::future::pending().await,
             }
         };
-        let command = match next.take() {
+        let command = match next.take().or_else(|| later.pop_front()) {
             Some(command) => command,
             None => tokio::select! {
                 command = commands.recv() => match command {
@@ -912,7 +915,16 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 session.resume(today());
                 session.adopt(*context);
                 session.open = true;
-                turn(&iface, &data, &mut session, &mut talk, None, &mut commands).await
+                turn(
+                    &iface,
+                    &data,
+                    &mut session,
+                    &mut talk,
+                    None,
+                    &mut commands,
+                    &mut later,
+                )
+                .await
             }
             Command::Ask(text, context) => {
                 if talk.end_if_over(&mut session, Keep::parse(&context.keep_chat)) {
@@ -928,6 +940,7 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                     &mut talk,
                     Some(text),
                     &mut commands,
+                    &mut later,
                 )
                 .await
             }
@@ -1030,7 +1043,8 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
     }
 }
 
-/// One request and its answer. Returns a command that interrupted it (End).
+/// One request and its answer. Returns a command that interrupted it (End, or a typed request), and
+/// keeps in `later` those that wait for it (see `hold`).
 async fn turn(
     iface: &InterfaceRef<AssistantService>,
     data: &Sources,
@@ -1038,6 +1052,7 @@ async fn turn(
     talk: &mut Talk,
     typed: Option<String>,
     commands: &mut Commands,
+    later: &mut VecDeque<Command>,
 ) -> Option<Command> {
     let spoken = typed.is_none();
     let text = match typed {
@@ -1069,7 +1084,7 @@ async fn turn(
                 state.hint.clear();
             })
             .await;
-            let audio = match record(iface, commands).await {
+            let audio = match record(iface, commands, later).await {
                 Ok(Recorded::Audio(audio)) => audio,
                 Ok(Recorded::Nothing) => return fail(iface, NOTHING_HEARD).await,
                 Ok(Recorded::NoMic) => return fail(iface, NO_MIC).await,
@@ -1079,7 +1094,8 @@ async fn turn(
             publish(iface, |state| state.phase = Phase::Transcribing).await;
             let whisper = session.whisper.as_mut().expect("started above");
             let transcribed = tokio::time::timeout(TRANSCRIBE_TIMEOUT, whisper.transcribe(&audio));
-            let transcribed = until_cancelled(transcribed, commands, &mut session.open).await;
+            let transcribed =
+                until_cancelled(transcribed, commands, later, &mut session.open).await;
             // Done with it: the speech model quits, its memory freed while the AI works.
             session.whisper = None;
             match transcribed {
@@ -1152,6 +1168,7 @@ async fn turn(
     let result = drive(
         asked,
         commands,
+        later,
         &mut steps,
         &mut drafts,
         &mut card_updates,
@@ -1296,6 +1313,7 @@ const SILENT_RMS: f32 = 1e-4;
 async fn record(
     iface: &InterfaceRef<AssistantService>,
     commands: &mut Commands,
+    later: &mut VecDeque<Command>,
 ) -> Result<Recorded, Command> {
     let mut mic = match Mic::start() {
         Ok(mic) => mic,
@@ -1334,8 +1352,9 @@ async fn record(
                 Some(Command::Stop) if endpointer.heard_speech() => break,
                 Some(Command::Stop) => return Ok(Recorded::Nothing),
                 Some(Command::End | Command::Cancel) | None => return Err(Command::End),
-                // The extension sends no other request mid-turn; one that comes is dropped.
-                Some(_) => {}
+                // Typed instead: the recording gives way to it.
+                Some(ask @ Command::Ask(..)) => return Err(ask),
+                Some(command) => hold(command, later),
             },
         }
     }
@@ -1353,6 +1372,7 @@ async fn record(
 async fn drive<T>(
     future: impl Future<Output = T>,
     commands: &mut Commands,
+    later: &mut VecDeque<Command>,
     steps: &mut mpsc::UnboundedReceiver<String>,
     drafts: &mut mpsc::UnboundedReceiver<String>,
     cards: &mut mpsc::UnboundedReceiver<Value>,
@@ -1413,8 +1433,7 @@ async fn drive<T>(
                 }
                 Some(Command::End) => *open = false,
                 Some(Command::Cancel) | None => return Err(Command::End),
-                // The extension sends no new request while one runs (it reopens this one instead).
-                Some(_) => {}
+                Some(command) => hold(command, later),
             },
         }
     }
@@ -1424,6 +1443,7 @@ async fn drive<T>(
 async fn until_cancelled<T>(
     future: impl Future<Output = T>,
     commands: &mut Commands,
+    later: &mut VecDeque<Command>,
     open: &mut bool,
 ) -> Result<T, Command> {
     tokio::pin!(future);
@@ -1433,9 +1453,22 @@ async fn until_cancelled<T>(
             command = commands.recv() => match command {
                 Some(Command::End) => *open = false,
                 Some(Command::Cancel) | None => return Err(Command::End),
-                Some(_) => {}
+                // Typed while what was said is turned into text: the typed request goes first.
+                Some(ask @ Command::Ask(..)) => return Err(ask),
+                Some(command) => hold(command, later),
             },
         }
+    }
+}
+
+/// A command that came mid-request: New chat, Undo, Clear and a command's end wait for the request to
+/// end. The extension sends no new request while one runs (it reopens this one instead), so one is dropped.
+fn hold(command: Command, later: &mut VecDeque<Command>) {
+    match command {
+        Command::NewChat | Command::UndoNewChat | Command::ClearChat | Command::Settled(..) => {
+            later.push_back(command);
+        }
+        _ => {}
     }
 }
 
@@ -1767,5 +1800,35 @@ mod tests {
     #[test]
     fn midnight_is_within_a_day() {
         assert!(until_midnight() <= Duration::from_secs(24 * 3600 + 1));
+    }
+
+    #[tokio::test]
+    async fn commands_that_come_mid_request_wait_for_it() {
+        let (sender, mut commands) = mpsc::unbounded_channel();
+        let mut later = VecDeque::new();
+        let mut open = true;
+        for command in [
+            Command::NewChat,
+            Command::Warm(Box::default()),
+            Command::UndoNewChat,
+            Command::ClearChat,
+            Command::End,
+            Command::Ask("open files".into(), Box::default()),
+        ] {
+            sender.send(command).unwrap();
+        }
+        // A typed request ends the wait; the island closing does not.
+        let waited = until_cancelled(
+            std::future::pending::<()>(),
+            &mut commands,
+            &mut later,
+            &mut open,
+        );
+        assert!(matches!(waited.await, Err(Command::Ask(text, _)) if text == "open files"));
+        assert!(!open);
+        assert!(matches!(
+            later.make_contiguous(),
+            [Command::NewChat, Command::UndoNewChat, Command::ClearChat]
+        ));
     }
 }
