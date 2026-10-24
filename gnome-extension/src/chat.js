@@ -316,7 +316,9 @@ export const CommandCard = GObject.registerClass({
      * seconds, exit}.
      */
     setCard(card) {
-        const previous = this._state;
+        // Another card (the last one hidden while it waited) starts its own wait.
+        const previous = card.id === this._id ? this._state : null;
+        this._id = card.id;
         this._state = card.status;
         if (card.status === 'waiting' && previous !== 'waiting')
             this._waitingSince = GLib.get_monotonic_time();

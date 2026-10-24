@@ -37,6 +37,8 @@ All notable changes to Isle are listed here. The format follows
   did not come back, nor while the island is closed.
 - After Isle's service restarts, the assistant's first answer does what it says (opening an app, say)
   instead of sometimes skipping it.
+- A command card that comes after one put away while it waited takes no Enter or click in its first half
+  second either, so a key meant for something else never runs it.
 
 ## [1.0.6] - 2026-10-24
 
