@@ -203,7 +203,7 @@ Click the gear right of the clock in the open island (or Isle's gear in the
   notification banners instead of the island's; what Super+V opens (the
   clipboard history, or GNOME's calendar); lyrics online; new versions;
   a reminder before calendar events, and how many minutes before.
-  Alerts other than a low battery wait while Do Not Disturb is on.
+  Alerts other than a low battery are not shown while Do Not Disturb is on.
 - **Calls:** show calls in the island, and the live preview of the call.
 - **Clipboard:** turn the history on or off, clear it, and choose apps whose
   copies are never kept (password managers are on the list from the start).

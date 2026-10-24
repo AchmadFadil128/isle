@@ -39,6 +39,32 @@ All notable changes to Isle are listed here. The format follows
 - The installation guide and settings descriptions are up to date: the installer's last lines, a
   current version to pin, an `ERROR` state as a bug to report, the link for building from source, and
   the voice assistant's AI as Claude Code, Codex or Antigravity rather than only agy.
+- An alert that asks (Allow or Deny from Claude or Codex, Run or Deny from the assistant) or has a button
+  (Join, a critical notification's) no longer goes 1.5 seconds after the pointer leaves it: it keeps its
+  own time. An agent's ask went back to its terminal, and the assistant's command waited unseen.
+- Closing the assistant while its command waits for Run or Deny no longer puts an alert that waited in
+  place of that ask: the ask was gone, and the command waited unseen for ten minutes.
+- Opening the assistant over an alert puts the alert back in line without answering it: Claude's or
+  Codex's ask no longer went to the terminal and then came back with Allow and Deny that did nothing. An
+  alert already answered is not shown again when another one replaces it.
+- Showing the assistant at work again (a click, or its shortcut, while it answers in the background) no
+  longer leaves the alert under it to run out unseen; it shows once the assistant closes.
+- When a fullscreen window hides the island, the alert on screen waits until it shows again instead of
+  running out unseen (a critical notification was marked read, a reminder gone), and Claude's or Codex's
+  asks go to their terminals at once, as asks that come while it is hidden do.
+- Locking the screen or turning Isle off sends Claude's and Codex's waiting asks to their terminals at
+  once; Codex waited nearly ten minutes.
+- A notification keeps text in angle brackets, as GNOME shows it: "Ann <ann@example.com>",
+  "Vec<String>" and "a < b > c" lost those words in the island.
+- A calendar event's alert that waited (the island open, or a fullscreen window) says how many minutes
+  are left when it shows, not "in 5 min" from when it was due, and no longer shows once the event is over.
+- Do Not Disturb also holds back the AI plan usage warnings, new song alerts and the new version alert,
+  as it does the island's other alerts.
+- A notification its app takes back goes from the island at once, also while the screen is shared, rather
+  than staying for its whole time.
+- A notification updated while it waited its turn shows its new words, not the first ones.
+- Run or Deny on the assistant's command alert answers that command only, never a newer one, and Run shows
+  "Running" for its moment before the alert goes. A notification's title on several lines shows on one.
 
 ## [1.0.6] - 2026-10-24
 

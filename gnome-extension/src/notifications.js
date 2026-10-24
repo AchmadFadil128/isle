@@ -196,8 +196,9 @@ export function plainBody(notification) {
     const body = notification.body ?? '';
     if (!notification.useBodyMarkup)
         return body;
+    // Only <b>, <i> and <u> are tags, as GNOME reads them: "Ann <ann@example.com>" keeps its address.
     return body
-        .replace(/<[^>]*>/g, '')
+        .replace(/<\/?[biu]>/g, '')
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')

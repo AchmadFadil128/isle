@@ -254,7 +254,9 @@ export class Controller {
         });
         // Hidden by a fullscreen window meanwhile: what waited shows now.
         this._island.connect('notify::visible', () => {
-            if (this._island.visible && !this._alert)
+            if (!this._island.visible)
+                this._onHidden();
+            else if (!this._alert)
                 this._nextAlert();
         });
         this._connectSignals();
@@ -430,8 +432,11 @@ export class Controller {
         daemon.connect('running-changed', () => this._onServiceChanged());
         // Never started at all (a broken install) is the same as stopped.
         this._onServiceChanged();
-        daemon.connect('usage-alert', (_daemon, provider, window, percent, resetsAt) =>
-            this._post(Alerts.usage(provider, window, percent, resetsAt, this._settings.get_int('usage-critical'))));
+        daemon.connect('usage-alert', (_daemon, provider, window, percent, resetsAt) => {
+            // Not in Do Not Disturb, as other alerts.
+            if (!this._notifications.dnd)
+                this._post(Alerts.usage(provider, window, percent, resetsAt, this._settings.get_int('usage-critical')));
+        });
         // isled forgets the settings when it restarts; they are sent again whenever it appears.
         daemon.connect('appeared', (_daemon, name) => {
             if (name === 'usage')
@@ -517,8 +522,11 @@ export class Controller {
         const notifications = this._notifications;
         notifications.connect('banner', (_center, notification) => {
             const urgent = notification.urgency === MessageTray.Urgency.CRITICAL;
-            this._post(Alerts.notification(notification, urgent, () => notifications.acknowledge(notification),
-                this._sharing));
+            this._post(Alerts.notification(notification, urgent, {
+                onShown: () => notifications.acknowledge(notification),
+                // Taken back by its app: it goes from the island too.
+                onWithdrawn: key => !this._destroying && this._withdrawAlert(key),
+            }, this._sharing));
         });
         notifications.connect('dnd-changed', () => (this._compact.doNotDisturb = notifications.dnd));
         notifications.connect('changed', () => (this._compact.unseenNotifications = notifications.unseenCount > 0));
@@ -878,6 +886,9 @@ export class Controller {
         if (this._alert && !this._alert.transient && this._presentation === 'peek') {
             if (this._island.hovered)
                 this._cancel('alert');
+            // One that waits for an answer or has a button (Allow, Join) keeps its own time; a plain one goes soon.
+            else if (this._alert.sticky || this._alert.action || this._alert.actions?.length)
+                this._timeAlert();
             else
                 this._later('alert', Math.min(ALERT_LEAVE_MS, this._alert.duration ?? ALERT_LEAVE_MS),
                     () => this._dismissAlert(true));
@@ -1169,9 +1180,8 @@ export class Controller {
             this._enqueue(alert);
             return;
         }
-        // Shown again afterwards, unless it was a passing one (the volume); a critical notification stays.
-        if (this._alert && !this._alert.transient)
-            this._queue.unshift(this._alert);
+        // Shown again afterwards, unless it was a passing one (the volume) or answered; a critical notification stays.
+        this._shelveAlert();
         this._showAlert(alert);
     }
 
@@ -1248,8 +1258,37 @@ export class Controller {
             this._nextAlert();
     }
 
+    /** Puts the alert on screen back first in line, not put away (an agent's ask keeps waiting for its answer);
+     * a passing or answered one just goes. */
+    _shelveAlert() {
+        const alert = this._alert;
+        this._cancel('alert');
+        this._alert = null;
+        if (alert && !alert.transient && !alert.answered)
+            this._queue.unshift(alert);
+    }
+
+    // Hidden by a fullscreen window: an agent's ask goes to its terminal, as one asked now would (see
+    // `_onAgentAsking`); the alert on screen waits to be seen, its time not running out unseen.
+    _onHidden() {
+        this._passAgentAsks();
+        this._shelveAlert();
+        this._render();
+    }
+
+    /** The agents' asks on screen or waiting, unanswered, go back to their terminals. */
+    _passAgentAsks() {
+        const asks = [this._alert, ...this._queue].filter(alert => alert?.onDismissed && !alert.answered);
+        this._queue = this._queue.filter(alert => !asks.includes(alert));
+        for (const alert of asks) {
+            alert.answered = true;
+            alert.onDismissed();
+        }
+    }
+
     _nextAlert() {
-        if (!this._island.visible || this._expandWanted || this._voiceOpen || !this._queue.length) {
+        // One shows already (the command asked as the assistant closed): the queue waits behind it.
+        if (this._alert || !this._island.visible || this._expandWanted || this._voiceOpen || !this._queue.length) {
             this._render();
             return;
         }
@@ -1290,7 +1329,8 @@ export class Controller {
         const track = Playback.hasTrack(nowPlaying) ? `${nowPlaying.title}\u001f${nowPlaying.artist}` : null;
         const changed = track !== this._lastTrack;
         this._lastTrack = track;
-        if (changed && track && Playback.isPlaying(nowPlaying) && this._settings.get_boolean('track-peek'))
+        if (changed && track && Playback.isPlaying(nowPlaying) && this._settings.get_boolean('track-peek') &&
+            !this._notifications.dnd)
             this._post(Alerts.track(nowPlaying));
     }
 
@@ -1324,9 +1364,11 @@ export class Controller {
     _syncSharing() {
         this._shelf.sharing = this._sharing;
         this._expanded.pageNamed('notifications').sharing = this._sharing;
-        // A message on screen as sharing starts loses its text at once.
+        // A message on screen as sharing starts loses its text at once; one gone meanwhile goes.
         const redone = this._alert?.fresh?.(this._sharing);
-        if (redone && redone !== this._alert)
+        if (this._alert?.fresh && !redone)
+            this._dismissAlert(true);
+        else if (redone && redone !== this._alert)
             this._showAlert(redone, {inPlace: true});
     }
 
@@ -1336,10 +1378,10 @@ export class Controller {
         this._daemon.call('updates', 'SetEnabled', this._settings.get_boolean('check-updates'));
     }
 
-    /** A newer Isle is out: said once per version. */
+    /** A newer Isle is out: said once per version; in Do Not Disturb, next time Isle starts. */
     _onLatest() {
         const latest = this._daemon.state.updates;
-        if (!latest || latest === this._settings.get_string('update-shown'))
+        if (!latest || latest === this._settings.get_string('update-shown') || this._notifications.dnd)
             return;
         this._settings.set_string('update-shown', latest);
         this._post(Alerts.update(latest, () => Gio.AppInfo.launch_default_for_uri(UPDATE_HELP,
@@ -1418,9 +1460,7 @@ export class Controller {
         this._cancel('expand');
         this._cancel('collapse');
         this._expandWanted = false;
-        if (this._alert && !this._alert.transient)
-            this._queue.unshift(this._alert);
-        this._dismissAlert(false);
+        this._shelveAlert();
         this._voiceOpen = true;
         this._voiceInBackground = false;
         this._voiceTurn = this._daemon.state.assistant?.turn ?? 0;
@@ -1492,6 +1532,7 @@ export class Controller {
         this._cancel('expand');
         this._cancel('collapse');
         this._expandWanted = false;
+        this._shelveAlert();
         this._voiceOpen = true;
         this._voiceInBackground = false;
         this._voiceTarget = global.display.focus_window;
@@ -1687,13 +1728,15 @@ export class Controller {
     }
 
     _askInAlert(action) {
-        this._post(Alerts.taskAsks(action, this._botLook, run => this._deciding?.done(run)));
+        // Its buttons answer its own command, never one asked after it.
+        this._post(Alerts.taskAsks(action, this._botLook, run => this._deciding?.action === action && this._deciding.done(run)));
     }
 
-    /** Takes the alert with `key` away, shown or waiting its turn. */
+    /** Takes the alert with `key` away, shown or waiting its turn; one answered on screen goes once its answer
+     * has shown ("Running"). */
     _withdrawAlert(key) {
         this._queue = this._queue.filter(alert => alert.key !== key);
-        if (this._alert?.key === key) {
+        if (this._alert?.key === key && !this._alert.answered) {
             this._alert.answered = true;
             this._dismissAlert(true);
         }
@@ -1869,6 +1912,8 @@ export class Controller {
             this._destroyPartial();
             return;
         }
+        // Turned off (the screen locks too): agents waiting on an answer here ask in their terminals at once.
+        this._passAgentAsks();
         global.display.get_selection().disconnect(this._primaryChanged);
         global.display.disconnect(this._focusChanged);
         global.display.disconnect(this._focusMonitorChanged);
