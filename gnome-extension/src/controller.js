@@ -1252,7 +1252,8 @@ export class Controller {
     }
 
     _nextAlert() {
-        if (!this._island.visible || this._expandWanted || this._voiceOpen || !this._queue.length) {
+        // One shows already (the command asked as the assistant closed): the queue waits behind it.
+        if (this._alert || !this._island.visible || this._expandWanted || this._voiceOpen || !this._queue.length) {
             this._render();
             return;
         }

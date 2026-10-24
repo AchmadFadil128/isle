@@ -17,6 +17,8 @@ All notable changes to Isle are listed here. The format follows
 - An alert that asks (Allow or Deny from Claude or Codex, Run or Deny from the assistant) or has a button
   (Join, a critical notification's) no longer goes 1.5 seconds after the pointer leaves it: it keeps its
   own time. An agent's ask went back to its terminal, and the assistant's command waited unseen.
+- Closing the assistant while its command waits for Run or Deny no longer puts an alert that waited in
+  place of that ask: the ask was gone, and the command waited unseen for ten minutes.
 
 ## [1.0.6] - 2026-10-24
 
