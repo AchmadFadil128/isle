@@ -1470,7 +1470,7 @@ export class Controller {
         this._setKeyboard(true);
         this._voice.followUp = null;
         this._voice.greeting = null;
-        this._voice.startTyping(initial);
+        this._voice.startTyping(initial, this._daemon.state.assistant?.card);
         this._render();
     }
 

@@ -29,6 +29,8 @@ All notable changes to Isle are listed here. The format follows
   it waits on asks again.
 - Once a command it ran has ended, the assistant keeps its Stop button while it still works on the
   request, instead of offering to type a new one.
+- An error no longer shows with the command card of an earlier request, and the assistant's face no longer
+  looks glad over an error that came after its command.
 
 ## [1.0.6] - 2026-10-24
 

@@ -362,7 +362,7 @@ export const VoiceView = GObject.registerClass({
     setState(state) {
         this.stopTyping();
         if (['listening', 'transcribing'].includes(state.phase))
-            this._dropEndedCard();
+            this._dropEndedCard(state.card);
         this._phase = state.phase;
         this._exchange = {heard: state.heard ?? '', reply: clip(state.reply ?? '')};
         const heard = state.heard ? `“${state.heard}”` : '';
@@ -426,7 +426,9 @@ export const VoiceView = GObject.registerClass({
     _syncCard(card) {
         const live = card && ['waiting', 'running'].includes(card.status);
         const asking = ['listening', 'transcribing'].includes(this._phase);
-        if (card && (live || (!this.chatOpen && !asking)))
+        // One that ended before this request is the last one's, which isled may still send (with an error).
+        const stale = card && !live && card.id === this._staleCardId;
+        if (card && !stale && (live || (!this.chatOpen && !asking)))
             this.showCard(card);
         else if (this._card.visible)
             this.showCard(null);
@@ -435,6 +437,9 @@ export const VoiceView = GObject.registerClass({
     /** The form the command card asks for: looking at its buttons, watching it run, glad it worked. */
     _cardForm() {
         if (!this._card.visible)
+            return null;
+        // Glad it worked, but not over an error that came after.
+        if (this._phase === 'error' && !['waiting', 'running'].includes(this._card.status))
             return null;
         return {waiting: 'asking', running: 'running', done: 'success', failed: 'error'}[this._card.status] ?? null;
     }
@@ -453,8 +458,12 @@ export const VoiceView = GObject.registerClass({
         return card && !['waiting', 'running'].includes(card.status) ? card : null;
     }
 
-    // A new request: the card of the last one has had its say (it is in the conversation now).
-    _dropEndedCard() {
+    // A new request: the card of the last one has had its say (it is in the conversation now). It, or
+    // isled's card as the request starts (`card`), never shows again with this one.
+    _dropEndedCard(card = null) {
+        const old = card ?? this.endedCard;
+        if (old)
+            this._staleCardId = old.id;
         if (this.endedCard)
             this.showCard(null);
     }
@@ -617,9 +626,9 @@ export const VoiceView = GObject.registerClass({
         return this._entry.visible;
     }
 
-    /** Shows the field to type a request in, starting with `initial` (a key typed while it listened). */
-    startTyping(initial = '') {
-        this._dropEndedCard();
+    /** Shows the field to type a request in, starting with `initial` (a key typed while it listened); `card` is isled's. */
+    startTyping(initial = '', card = null) {
+        this._dropEndedCard(card);
         this._phase = 'typing';
         this._entry.text = initial;
         this._entry.show();
