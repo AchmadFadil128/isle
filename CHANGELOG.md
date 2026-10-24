@@ -18,6 +18,8 @@ All notable changes to Isle are listed here. The format follows
   conversation no longer leaves the keyboard taken by a closed island.
 - The assistant opened with the shortcut listens in the pill again instead of showing the conversation
   left open last time, and no longer switches to typing once it answers.
+- The assistant reopened at work from the closed island closes again with Esc or a click elsewhere, and
+  Enter or Esc answer a command waiting there for Run or Deny.
 
 ## [1.0.6] - 2026-10-24
 

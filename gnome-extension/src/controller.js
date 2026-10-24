@@ -1506,6 +1506,9 @@ export class Controller {
         this._voice.closeChat();
         this._voice.setState(state);
         this._syncAssistantBusy();
+        // At work, Esc and clicks elsewhere put it back in the background, and Enter or Esc answer its card.
+        if (VOICE_WORKING.includes(state.phase))
+            this._setKeyboard(true);
         this._render();
         if (this._voiceAnswered)
             this._scheduleVoiceClose(VOICE_READ_MS.max);
