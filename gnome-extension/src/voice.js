@@ -24,6 +24,8 @@ import {icon, iconButton, pillButton, wrapLines} from './widgets.js';
 
 
 const FACE_SIZE = 36;
+/** Steps that read oddly once over, as they are kept in the list of steps done. */
+const DONE_AS = {'Asking to run it…': 'Asked to run it'};
 /** The pill while listening, and the panel an answer and the conversation open into: as wide as the open island. */
 const LISTENING_WIDTH = 280;
 const ANSWER_WIDTH = 600;
@@ -669,7 +671,8 @@ export const VoiceView = GObject.registerClass({
                 this._steps = [];
             return;
         }
-        const done = step?.replace(/…$/, '');
+        // Kept as it was said, but for one that reads oddly once over ("Asking to run it").
+        const done = DONE_AS[step] ?? step?.replace(/…$/, '');
         if (done && this._steps.at(-1) !== done)
             this._steps.push(done);
     }

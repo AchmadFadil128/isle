@@ -37,7 +37,7 @@ export function describeActions(actions = []) {
         cancel_reminder: 'Cancelling the reminder…',
         focus: 'Starting the focus timer…',
         terminal: 'Opening a terminal…',
-        run: 'Waiting for you to run it…',
+        run: 'Asking to run it…',
         notifications: 'Opening your notifications…',
         screenshot: 'Taking a screenshot…',
         lock: 'Locking the screen…',
