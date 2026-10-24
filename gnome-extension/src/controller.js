@@ -1795,6 +1795,9 @@ export class Controller {
     _onAssistantLost() {
         // Its request is gone, so is a command card waiting for it.
         this._deciding?.done(false);
+        // isled counts its answers and batches of actions from 0 again.
+        this._voiceTurn = 0;
+        this._voiceStep = 0;
         if (this._voiceInBackground) {
             this._voiceInBackground = false;
             this._syncAssistantBusy();

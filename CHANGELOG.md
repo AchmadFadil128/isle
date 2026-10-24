@@ -35,6 +35,8 @@ All notable changes to Isle are listed here. The format follows
   earlier request was at work.
 - Undo after starting a new chat no longer pops the conversation open on a later change when the old one
   did not come back, nor while the island is closed.
+- After Isle's service restarts, the assistant's first answer does what it says (opening an app, say)
+  instead of sometimes skipping it.
 
 ## [1.0.6] - 2026-10-24
 
