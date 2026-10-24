@@ -671,6 +671,10 @@ export const VoiceView = GObject.registerClass({
                 this._steps = [];
             return;
         }
+        // Work starting again after an answer is a new request, typed in the conversation too (no listening
+        // between): the last one's steps, its words among them, are not this one's.
+        if (!WORKING.includes(this._lastPhase ?? ''))
+            this._steps = [];
         // Kept as it was said, but for one that reads oddly once over ("Asking to run it").
         const done = DONE_AS[step] ?? step?.replace(/…$/, '');
         if (done && this._steps.at(-1) !== done)
