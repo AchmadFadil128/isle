@@ -264,6 +264,8 @@ fn installed_already(answer: &Answer) -> bool {
         "already there",
         "already on your",
         "already have",
+        "already got",
+        "installed already",
         "sudah terpasang",
         "udah terpasang",
         "udah ada",
@@ -752,6 +754,30 @@ fn cases() -> Vec<Case> {
             }
             charge_limit(a, "60")
         }),
+        // A command that changes something: with ISLE_EVAL_REAL_RUN it really runs, and must be followed to done.
+        case(
+            &["buat file /tmp/isle-eval-run/catatan.txt isinya halo dari isle"],
+            |answers| {
+                let a = last(answers);
+                ensure(
+                    answers.iter().any(|a| run_command(a).is_ok()),
+                    "no command was run",
+                )?;
+                if real_runs() {
+                    let text = std::fs::read_to_string(format!("{REAL_RUN_DIR}/catatan.txt"))
+                        .map_err(|err| format!("the file is not there: {err}"))?;
+                    ensure(text.contains("halo"), "the file does not say halo")?;
+                    ensure(
+                        answers
+                            .iter()
+                            .flat_map(|a| a.ran.iter())
+                            .any(|(_, how)| how == "done"),
+                        "the command was not followed to done",
+                    )?;
+                }
+                indonesian(a)
+            },
+        ),
         case(&["batesin charge baterai sampai 80 persen aja"], |a| {
             charge_limit(last(a), "80")
         }),
@@ -1021,8 +1047,20 @@ async fn run(case: &Case) -> Result<Vec<Answer>, String> {
         let taken = tokio::spawn(async move {
             let mut taken = Vec::new();
             while let Some(act) = acts.recv().await {
-                // A command is "run" at once: its log says it went well, as systemd's would.
+                let mut started = Vec::new();
+                // With ISLE_EVAL_REAL_RUN, a user's command really starts, as the extension starts it, and
+                // isled follows it to its end; else it is "run" at once, its log saying it went well.
                 for run in act.actions.iter().filter(|a| a["type"] == "run") {
+                    let argv: Vec<&str> = run["spawn"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_str)
+                        .collect();
+                    if real_runs() && argv.contains(&"--user") {
+                        started.push(start_unit(&argv).await);
+                        continue;
+                    }
                     let log = run["spawn"]
                         .as_array()
                         .into_iter()
@@ -1038,10 +1076,25 @@ async fn run(case: &Case) -> Result<Vec<Answer>, String> {
                         std::fs::write(log, "Done.\n[isle-exit 0]\n").ok();
                     }
                 }
+                let mut started = started.into_iter();
                 let results = act
                     .actions
                     .iter()
-                    .map(|a| serde_json::json!({"type": a["type"], "ok": true, "detail": if a["type"] == "run" { "started" } else { "" }}))
+                    .map(|a| {
+                        if a["type"] != "run" {
+                            return serde_json::json!({"type": a["type"], "ok": true, "detail": ""});
+                        }
+                        let (ok, detail) = if real_runs()
+                            && a["spawn"]
+                                .as_array()
+                                .is_some_and(|s| s.iter().any(|x| x == "--user"))
+                        {
+                            started.next().unwrap_or((false, "not started".into()))
+                        } else {
+                            (true, "started".into())
+                        };
+                        serde_json::json!({"type": "run", "ok": ok, "detail": detail})
+                    })
                     .collect();
                 act.results.send(results).ok();
                 taken.extend(act.actions);
@@ -1092,10 +1145,43 @@ async fn run(case: &Case) -> Result<Vec<Answer>, String> {
     }
 }
 
+/// Whether commands really run (ISLE_EVAL_REAL_RUN=1), as the user, through systemd-run.
+fn real_runs() -> bool {
+    std::env::var("ISLE_EVAL_REAL_RUN").is_ok_and(|v| v == "1")
+}
+
+/// Starts `argv` (systemd-run) as the extension does: whether it started, and what it said if not.
+async fn start_unit(argv: &[&str]) -> (bool, String) {
+    let Some((program, args)) = argv.split_first() else {
+        return (false, "not started: no command".into());
+    };
+    match tokio::process::Command::new(program)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .output()
+        .await
+    {
+        Ok(out) if out.status.success() => (true, "started".into()),
+        Ok(out) => (
+            false,
+            format!(
+                "not started: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ),
+        ),
+        Err(err) => (false, format!("not started: {err}")),
+    }
+}
+
+/// Where the real-run case writes, cleared before the cases.
+const REAL_RUN_DIR: &str = "/tmp/isle-eval-run";
+
 #[tokio::test]
 #[ignore = "asks the real agy"]
 async fn eval() {
     fixture();
+    std::fs::remove_dir_all(REAL_RUN_DIR).ok();
     let limit = Arc::new(Semaphore::new(PARALLEL));
     let quick = std::env::var("ISLE_EVAL_QUICK").is_ok_and(|v| v == "1");
     // ISLE_EVAL_ONLY=text runs the cases whose first request contains it.
