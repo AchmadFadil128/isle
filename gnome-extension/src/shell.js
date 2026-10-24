@@ -50,12 +50,12 @@ export class TopBar extends Signals.EventEmitter {
 
         this._heightChanged = Main.panel.connect('notify::height', () => this.emit('height-changed'));
 
-        // The calendar shortcut opens the island instead, and the menu is
-        // closed again should anything else open it; unless Super+V is left to GNOME (Settings).
+        // The calendar shortcut opens the island instead, and the hidden clock's menu is closed again
+        // should anything else open it; unless Super+V is left to GNOME (Settings).
         this._superVChanged = settings.connect('changed::super-v', () => this._syncCalendar());
         this._syncCalendar();
         this._menuChanged = this._dateMenu.menu.connect('open-state-changed', (menu, open) => {
-            if (open && this._settings.get_string('super-v') === 'isle')
+            if (open && !this._clockShown && this._settings.get_string('super-v') === 'isle')
                 menu.close();
         });
     }
@@ -83,10 +83,13 @@ export class TopBar extends Signals.EventEmitter {
 
     /** Shows GNOME's own clock in the top bar while the island is on another display. */
     set clockShown(shown) {
+        this._clockShown = shown;
         this._dateMenu.opacity = shown ? 255 : 0;
         this._dateMenu.reactive = shown;
         if (shown)
             this._dateMenu.set_width(-1);
+        else if (this._settings.get_string('super-v') === 'isle')
+            this._dateMenu.menu.close();
     }
 
     _applyStyle() {

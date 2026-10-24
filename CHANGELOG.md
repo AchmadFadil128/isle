@@ -120,6 +120,8 @@ All notable changes to Isle are listed here. The format follows
   instead of staying open until the pointer went over the island and away.
 - On a touchscreen a tap on the island does what a click does (opens it, or an alert's notification),
   and a tap elsewhere closes it; before, taps did nothing and the clock under it could not be reached.
+- With the island on another display, GNOME's clock in the top bar opens its calendar again instead of
+  closing it the moment it opens.
 
 ## [1.0.6] - 2026-10-24
 
