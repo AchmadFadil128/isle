@@ -65,6 +65,36 @@ All notable changes to Isle are listed here. The format follows
 - A notification updated while it waited its turn shows its new words, not the first ones.
 - Run or Deny on the assistant's command alert answers that command only, never a newer one, and Run shows
   "Running" for its moment before the alert goes. A notification's title on several lines shows on one.
+- Closing the assistant (Esc, or an answer that types or takes a screenshot) right after an answer in the
+  conversation no longer leaves the keyboard taken by a closed island.
+- The assistant opened with the shortcut listens in the pill again instead of showing the conversation
+  left open last time, and no longer switches to typing once it answers.
+- The assistant reopened at work from the closed island closes again with Esc or a click elsewhere, and
+  Enter or Esc answer a command waiting there for Run or Deny.
+- With Isle's service stopped or refusing a request, the assistant says so and closes instead of showing
+  "Listening…" or "Thinking…" forever with the keyboard taken.
+- Typing right after pressing the shortcut, before the assistant has started listening, stops the
+  listening, so the typed request is answered and "Didn't catch that" no longer replaces the field.
+- The mic in the open island shows a request still at work instead of starting one that was lost, and a
+  request at work when the screen locks carries on afterwards: its answer comes as an alert, and a command
+  it waits on asks again.
+- Once a command it ran has ended, the assistant keeps its Stop button while it still works on the
+  request, instead of offering to type a new one.
+- An error no longer shows with the command card of an earlier request, and the assistant's face no longer
+  looks glad over an error that came after its command.
+- A typed request starts its steps and "Still working" time afresh even when the field opened while an
+  earlier request was at work.
+- Undo after starting a new chat no longer pops the conversation open on a later change when the old one
+  did not come back, nor while the island is closed.
+- After Isle's service restarts, the assistant's first answer does what it says (opening an app, say)
+  instead of sometimes skipping it.
+- A command card that comes after one put away while it waited takes no Enter or click in its first half
+  second either, so a key meant for something else never runs it.
+- Opening the island (Super+V, say) while the assistant waits for Run or Deny keeps the question: it shows
+  as an alert once the island closes, instead of going and leaving the command to wait ten minutes.
+- A long answer is cut at the end of a word, never through an emoji or leaving stray bold or code marks;
+  the answer as it is written is cut the same way instead of running past the pill; and a cut answer
+  always has the chevron to read it whole in the conversation.
 
 ## [1.0.6] - 2026-10-24
 

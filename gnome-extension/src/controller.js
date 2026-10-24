@@ -164,12 +164,16 @@ export class Controller {
         this._viewsWarm = false;
         /** Counts `_listen` calls, so only the latest sends its request. */
         this._listenRequest = 0;
+        /** A Listen went to isled and is not over: typing instead cancels it, even before isled says it listens. */
+        this._listenSent = false;
         this._voiceCloseMs = VOICE_ERROR_MS;
         /** The last answer whose actions ran, and the last batch of actions run mid-way (see isled's `step`). */
         this._voiceTurn = 0;
         this._voiceStep = 0;
         /** A request carries on after the island closed; its answer comes as an alert. */
         this._voiceInBackground = false;
+        /** Whether isled's assistant state was seen yet (see `_onAssistant`). */
+        this._assistantSeen = false;
         /** Times in a row it listened again by itself; see `VOICE_MAX_AUTO_LISTENS`. */
         this._autoListens = 0;
         /** The window in front when the assistant opened, for it to write into. */
@@ -322,7 +326,8 @@ export class Controller {
             if (this._presentation === 'expanded')
                 this._island.setTintMotion(time, level);
         });
-        expanded.connect('voice-requested', () => this._openVoice({typing: true}));
+        // A request still at work shows its progress, as from the closed island; a new one would be lost.
+        expanded.connect('voice-requested', () => this._voiceWorking ? this._reopenVoice() : this._openVoice({typing: true}));
         // Settings open in their own window; the island gets out of its way.
         expanded.connect('settings-requested', () => {
             this.collapse();
@@ -1061,14 +1066,15 @@ export class Controller {
         // A close still pending (the pointer just left) would shut it again.
         this._cancel('expand');
         this._cancel('collapse');
-        if (this._voiceOpen)
-            this._closeVoice();
         const target = pageName ?? this._alert?.page ?? this._defaultPage();
         if (target)
             this._expanded.showPage(target, {animate: this._expandWanted});
         // Opening the island takes over from the alert being shown.
         this._dismissAlert(false);
         this._expandWanted = true;
+        // Closed once it is open, a command still waiting for Run or Deny waits its turn as an alert.
+        if (this._voiceOpen)
+            this._closeVoice();
         this._render();
     }
 
@@ -1466,6 +1472,8 @@ export class Controller {
         this._voiceTurn = this._daemon.state.assistant?.turn ?? 0;
         this._voiceStep = this._daemon.state.assistant?.step ?? 0;
         this._autoListens = 0;
+        // The conversation open last time stays shut, unless opened with the mouse (just below).
+        this._voice.closeChat();
         if (!typing) {
             this._listen({greet: true});
             return;
@@ -1491,15 +1499,19 @@ export class Controller {
 
     /** Types the request instead of saying it: listening stops (speech recognition never starts). */
     _startTyping(initial) {
-        if (this._daemon.state.assistant?.phase === 'listening')
+        // Closed, it would take the keyboard from the windows unseen.
+        if (!this._voiceOpen)
+            return;
+        if (this._listenSent || this._daemon.state.assistant?.phase === 'listening')
             this._daemon.call('assistant', 'Cancel');
+        this._listenSent = false;
         this._listenRequest++;
         this._cancel('voice-close');
         this._cancel('voice-listen');
         this._setKeyboard(true);
         this._voice.followUp = null;
         this._voice.greeting = null;
-        this._voice.startTyping(initial);
+        this._voice.startTyping(initial, this._daemon.state.assistant?.card);
         this._render();
     }
 
@@ -1521,7 +1533,21 @@ export class Controller {
             json = JSON.stringify({...aiSettings(this._settings), actions: actionTypes()});
         }
         if (this._voiceOpen && request === this._listenRequest)
-            this._daemon.call('assistant', 'Ask', text, json);
+            this._sendRequest(request, 'Ask', text, json);
+    }
+
+    // Sends a request to isled; not running (or refusing it), it would never answer, so the island says so
+    // rather than listen or think forever.
+    async _sendRequest(request, method, ...args) {
+        const {result, error} = await this._daemon.attempt('assistant', method, ...args);
+        if (result || !this._voiceOpen || request !== this._listenRequest)
+            return;
+        const why = error || (this._daemon.running ? 'Isle couldn’t take that' : 'Isle’s service isn’t running');
+        this._listenSent = false;
+        this._voice.setState({phase: 'error', error: why, hint: this._askAgainHint});
+        this._setKeyboard(false);
+        this._render();
+        this._scheduleVoiceClose(VOICE_ERROR_MS);
     }
 
     /** Shows the assistant again as it is (at work, or with the answer it came to), without listening. */
@@ -1538,8 +1564,13 @@ export class Controller {
         this._voiceTarget = global.display.focus_window;
         this._voice.followUp = null;
         this._voice.greeting = null;
+        // Its progress or answer in the pill; the chevron opens the conversation.
+        this._voice.closeChat();
         this._voice.setState(state);
         this._syncAssistantBusy();
+        // At work, Esc and clicks elsewhere put it back in the background, and Enter or Esc answer its card.
+        if (VOICE_WORKING.includes(state.phase))
+            this._setKeyboard(true);
         this._render();
         if (this._voiceAnswered)
             this._scheduleVoiceClose(VOICE_READ_MS.max);
@@ -1594,14 +1625,26 @@ export class Controller {
             });
         }
         // Closed, or asked to listen again, meanwhile.
-        if (this._voiceOpen && request === this._listenRequest)
-            this._daemon.call('assistant', 'Listen', json);
+        if (this._voiceOpen && request === this._listenRequest) {
+            this._listenSent = true;
+            this._sendRequest(request, 'Listen', json);
+        }
     }
 
     _onAssistant() {
         const state = this._daemon.state.assistant;
         if (!state)
             return;
+        // Built again (turned back on after a lock) while a request was at work: it carries on as if asked
+        // with the island closed. A batch of actions isled still waits on runs again; the last one's results were lost.
+        if (!this._assistantSeen) {
+            this._assistantSeen = true;
+            if (!this._voiceOpen && VOICE_WORKING.includes(state.phase)) {
+                this._voiceInBackground = true;
+                this._voiceTurn = state.turn ?? 0;
+                this._voiceStep = state.phase === 'acting' ? -1 : state.step ?? 0;
+            }
+        }
         const ours = this._voiceOpen || this._voiceInBackground;
         // Actions it takes mid-way, open or closed: each batch once, and what they did goes back.
         if (ours && state.phase === 'acting' && state.step !== this._voiceStep) {
@@ -1617,8 +1660,9 @@ export class Controller {
         }
         if (state.phase === 'idle')
             return;
-        // Typing: the listening it stopped may still report in.
-        if (this._voice.typing && ['listening', 'transcribing'].includes(state.phase))
+        // Typing: the listening it stopped may still report in, "Didn't catch that" too.
+        const stopped = ['listening', 'transcribing'].includes(state.phase) || (state.phase === 'error' && state.heard_nothing);
+        if (this._voice.typing && stopped)
             return;
         // Nothing said back to a follow-up: it just closes, no error.
         if (state.phase === 'error' && state.heard_nothing && this._voice.followUp) {
@@ -1633,14 +1677,17 @@ export class Controller {
                 this._render();
         });
         // Once answered, typing goes back to the windows; the answer closes on its own.
-        if (state.phase === 'reply' || state.phase === 'error')
+        if (state.phase === 'reply' || state.phase === 'error') {
+            this._listenSent = false;
             this._setKeyboard(false);
+        }
         if (state.phase === 'reply' && state.turn !== this._voiceTurn) {
             this._voiceTurn = state.turn;
             runActions(state.actions, this._voiceActions());
             // In the conversation the answer is already in the list: the field is ready for the next word.
             if (this._voice.chatOpen && !state.listen) {
-                this._later('chat-type', CHAT_TYPE_AGAIN_MS, () => this._voice.chatOpen && this._startTyping(''));
+                // Not once closed meanwhile (Esc, or an action that closes it first, as `write` does).
+                this._later('chat-type', CHAT_TYPE_AGAIN_MS, () => this._voiceOpen && this._voice.chatOpen && this._startTyping(''));
             } else if (state.listen && this._autoListens < VOICE_MAX_AUTO_LISTENS) {
                 this._autoListens++;
                 // Asked something back: listen for the reply without a key press.
@@ -1683,21 +1730,25 @@ export class Controller {
     _onHistory() {
         this._voice.setHistory(this._history);
         if (this._openWhenBack) {
+            this._cancel('chat-undo');
             this._openWhenBack = false;
-            this._voice.openChat();
+            if (this._voiceOpen)
+                this._voice.openChat();
         }
     }
 
     // +: isled starts a new conversation; Undo brings the old one back for a moment, then it is deleted.
     _newChat() {
+        this._openWhenBack = false;
         this._daemon.call('assistant', 'NewChat');
         this._voice.showUndo(true);
         this._later('chat-undo', UNDO_MS, () => this._voice.showUndo(false));
     }
 
     _undoNewChat() {
-        this._cancel('chat-undo');
         this._openWhenBack = true;
+        // Not back by then (isled busy, or it dropped it), it never pops open on a later change.
+        this._later('chat-undo', UNDO_MS, () => (this._openWhenBack = false));
         this._daemon.call('assistant', 'UndoNewChat');
     }
 
@@ -1788,6 +1839,9 @@ export class Controller {
     _onAssistantLost() {
         // Its request is gone, so is a command card waiting for it.
         this._deciding?.done(false);
+        // isled counts its answers and batches of actions from 0 again.
+        this._voiceTurn = 0;
+        this._voiceStep = 0;
         if (this._voiceInBackground) {
             this._voiceInBackground = false;
             this._syncAssistantBusy();
@@ -1841,8 +1895,10 @@ export class Controller {
     _closeVoice() {
         this._cancel('voice-close');
         this._cancel('voice-listen');
+        this._cancel('chat-type');
         this._cancel('voice-page');
         this._voiceOpen = false;
+        this._listenSent = false;
         // A command still waiting for Run or Deny is asked in an alert now.
         if (this._deciding)
             this._askInAlert(this._deciding.action);
@@ -1920,6 +1976,8 @@ export class Controller {
         stopPending();
         if (this._voiceBound)
             Main.wm.removeKeybinding('voice-shortcut');
+        // A command waiting for Run or Deny ends with Isle; built again, it is asked again (see `_onAssistant`).
+        this._deciding?.done(false);
         if (this._voiceOpen)
             this._closeVoice();
         // Releasing the keyboard may schedule a collapse; cancel it after. Tearing down schedules nothing.

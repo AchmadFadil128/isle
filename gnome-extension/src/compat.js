@@ -39,6 +39,11 @@ export function unmaximize(window) {
     return SHELL_MAJOR >= 49 ? window.unmaximize() : window.unmaximize(Meta.MaximizeFlags.BOTH);
 }
 
+/** The actor `event` is for: the stage says where it can, as `Clutter.Event.get_source` is going from Clutter. */
+export function eventActor(event) {
+    return global.stage.get_event_actor?.(event) ?? event.get_source?.() ?? null;
+}
+
 /** Whether the shell runs on Wayland; GNOME 50 dropped X11 and the check. */
 export function isWayland() {
     return Meta.is_wayland_compositor?.() ?? true;
