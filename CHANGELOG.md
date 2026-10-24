@@ -168,6 +168,9 @@ All notable changes to Isle are listed here. The format follows
   under a resting pointer no longer counts as hovered: an alert no longer opened the island ("open on
   hover") or stayed until the pointer moved. A pointer resting on the island as Isle starts again after
   unlocking opens it once it moves, instead of only after leaving it and coming back.
+- Notifications still waiting their turn (behind an alert, or while the island was open) no longer pop up
+  once Do Not Disturb is on, as when a focus session starts from the open island; they stay unread in the
+  list, as those that come in Do Not Disturb do.
 
 ## [1.0.6] - 2026-10-24
 
