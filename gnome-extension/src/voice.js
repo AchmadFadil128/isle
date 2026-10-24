@@ -43,6 +43,9 @@ const MAX_HEIGHT = 230;
 const CHAT_MAX_HEIGHT = 420;
 /** The pill grows to this with a command card in it. */
 const CARD_MAX_HEIGHT = 320;
+/** What comes into the pill fades in as its shape grows to it, rather than show cut off by the edge (ms). */
+const FADE_IN_MS = 220;
+const FADE_IN_DELAY_MS = 40;
 /** With no new step for this long (s), a quiet "Still working · 0:12" shows it hasn't stalled. */
 const STILL_WORKING_S = 8;
 /** What to try, under an empty field: the chip, the words it puts in, and whether it asks at once. */
@@ -100,6 +103,13 @@ const NOT_HEARD = /^(Didn[’']t catch that|The microphone is muted|No microphon
 const KEY_LEVEL = 0.32;
 
 // The character (see bot.js), on screen: it looks at the pointer, or reads along as you type.
+/** Fades `actor` in from nothing, where it already is. */
+function fadeIn(actor) {
+    actor.remove_transition('opacity');
+    actor.opacity = 0;
+    actor.ease({opacity: 255, duration: FADE_IN_MS, delay: FADE_IN_DELAY_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+}
+
 const Face = GObject.registerClass(
 class Face extends St.DrawingArea {
     _init(look) {
@@ -358,6 +368,8 @@ export const VoiceView = GObject.registerClass({
         this._lastTick = 0;
         this._flow = 0;
         this.connect('destroy', () => this._timeline.stop());
+        /** The parts shown at the last `fit`, so ones new since fade in. */
+        this._shownParts = new Set();
         this.setState({phase: 'listening'});
     }
 
@@ -390,7 +402,8 @@ export const VoiceView = GObject.registerClass({
         // By the clock, not the animation's time: that starts over when the view opens again mid-request.
         if (WORKING.includes(state.phase) && !WORKING.includes(this._lastPhase ?? ''))
             this._workingAt = Date.now() / 1000;
-        if (step !== this._lastStep)
+        const newStep = step !== this._lastStep;
+        if (newStep)
             this._stepAt = Date.now() / 1000;
         this._lastStep = step;
         this._lastPhase = state.phase;
@@ -425,6 +438,12 @@ export const VoiceView = GObject.registerClass({
         const form = searching ? 'searching' : notHeard ? 'confused' : {transcribing: 'thinking'}[state.phase] ?? state.phase;
         this._face.setForm(this._cardForm() ?? form);
         this._syncCard(state.card);
+        // The answer takes the place of its steps, and each step of the last: the words fade in, not cut.
+        const group = working ? 'working' : state.phase;
+        if ((group !== this._lastGroup || (working && step && newStep)) && this._shownParts.has(this._text) &&
+            this._text.visible && this.mapped && St.Settings.get().enable_animations)
+            fadeIn(this._text);
+        this._lastGroup = group;
     }
 
     // The command card as isled has it. Once over, it stays until the next request; in an open
@@ -606,6 +625,7 @@ export const VoiceView = GObject.registerClass({
     }
 
     _showSteps(done) {
+        const before = this._stepsBox.visible ? this._stepsBox.get_n_children() : 0;
         this._stepsBox.destroy_all_children();
         for (const step of done) {
             const row = new St.BoxLayout({style_class: 'isle-voice-step'});
@@ -617,6 +637,9 @@ export const VoiceView = GObject.registerClass({
             this._stepsBox.add_child(row);
         }
         this._stepsBox.visible = done.length > 0;
+        // A step just done joins the list fading in (a list that just appeared fades in whole, see `fit`).
+        if (before > 0 && done.length > before && this.mapped && St.Settings.get().enable_animations)
+            fadeIn(this._stepsBox.get_last_child());
     }
 
     /** `text` naming the shortcut as set instead of the default one isled's hints name. */
@@ -744,6 +767,7 @@ export const VoiceView = GObject.registerClass({
         const parts = [this._undo, this._heardButton, this._entry, this._ideas, this._text, this._card, this._stepsBox, this._still,
             this._hint, this._signIn, this._setUp];
         const natural = parts.filter(part => part.visible).reduce((sum, part) => sum + part.get_preferred_height(width)[1], 0);
+        this._fadeInNew(parts);
         // A command card needs room for its buttons.
         const most = (this._card.visible ? CARD_MAX_HEIGHT : MAX_HEIGHT) * scale;
         // Set outright: the row kept an earlier, shorter height for them.
@@ -758,6 +782,18 @@ export const VoiceView = GObject.registerClass({
         const chat = this._chat.naturalHeight(this.preferredWidth, CHAT_MAX_HEIGHT * scale - row);
         this._chat.height = chat;
         return row + chat;
+    }
+
+    // What comes into view fades in as the shape grows to it, rather than show cut off by its edge.
+    _fadeInNew(parts) {
+        const shown = new Set(parts.filter(part => part.visible));
+        if (this.mapped && St.Settings.get().enable_animations) {
+            for (const part of shown) {
+                if (!this._shownParts.has(part))
+                    fadeIn(part);
+            }
+        }
+        this._shownParts = shown;
     }
 
     /** Animates while shown; rests otherwise. With animations off in GNOME, the face and glow hold still. */
