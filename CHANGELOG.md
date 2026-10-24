@@ -112,6 +112,8 @@ All notable changes to Isle are listed here. The format follows
 - With the island following the display in use, it no longer stays hidden after moving off a display
   with a fullscreen window (alerts waited forever and Super+V did nothing), nor shows over a fullscreen
   video on the display it moves to.
+- A screen share that began before Isle started (turned on again after unlocking, or updated during
+  a call) now keeps notification text, the clipboard and the shelf hidden as one begun later does.
 
 ## [1.0.6] - 2026-10-24
 
