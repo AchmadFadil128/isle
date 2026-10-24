@@ -6,6 +6,12 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The assistant's pill moves more smoothly: what comes into it (its steps, a command card, a hint) fades
+  in as the island grows to it instead of showing cut off by the edge, and the answer fades in where its
+  steps were rather than replacing them in one frame.
+
 ## [1.1.0] - 2026-10-24
 
 ### Changed
