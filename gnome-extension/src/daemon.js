@@ -330,7 +330,9 @@ export class Daemon extends Signals.EventEmitter {
                 proxy[`${method}Remote`](...args, (result, error) => {
                     if (error)
                         console.warn(`Isle: ${method} failed: ${error.message}`);
-                    const refused = error && Gio.DBusError.get_remote_error(error) === 'org.freedesktop.DBus.Error.Failed';
+                    // isled's own words: why it would not (Failed), or what was wrong with what it was asked (InvalidArgs).
+                    const refused = error && ['org.freedesktop.DBus.Error.Failed', 'org.freedesktop.DBus.Error.InvalidArgs']
+                        .includes(Gio.DBusError.get_remote_error(error));
                     // "GDBus.Error:org.freedesktop.DBus.Error.Failed: <isled's words>"
                     resolve({result: error ? null : result, error: refused ? error.message.replace(/^GDBus\.Error:[\w.]+:\s*/, '') : null});
                 });

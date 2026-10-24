@@ -14,7 +14,7 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-import {describeActions, failed, outcomeOf, runnable, slotsFor, stoppable, TILES} from './actionRules.js';
+import {TILES, describeActions, failed, namesProject, outcomeOf, runnable, slotsFor, stoppable} from './actionRules.js';
 import {Bot} from './bot.js';
 import {ChatView, CommandCard, answerMarkup, elapsed} from './chat.js';
 import {isTerminal} from './clipboard.js';
@@ -402,7 +402,7 @@ export const VoiceView = GObject.registerClass({
         else
             this._text.remove_style_class_name('isle-voice-text-long');
         const working = WORKING.includes(state.phase);
-        const hint = state.phase === 'error' ? this._withShortcut(state.hint ?? '') : '';
+        const hint = state.phase === 'error' ? this.withShortcut(state.hint ?? '') : '';
         this._hint.text = hint;
         this._hint.visible = Boolean(hint);
         // While it works, the steps already done, dimmed below the current one.
@@ -600,11 +600,12 @@ export const VoiceView = GObject.registerClass({
     }
 
     /** `text` naming the shortcut as set instead of the default one isled's hints name. */
-    _withShortcut(text) {
+    withShortcut(text) {
         if (this.shortcut)
             return text.replaceAll('Super+I', this.shortcut);
-        // No shortcut set: "Press Super+I and speak again." is "Speak again."
-        return text.replace(/Press Super\+I and (\w)/, (_match, first) => first.toUpperCase());
+        // No shortcut set: "Press Super+I and speak again." is "Speak again."; any other mention, the mic.
+        return text.replace(/Press Super\+I and (\w)/, (_match, first) => first.toUpperCase())
+            .replace(/press Super\+I/gi, match => `${match[0] === 'P' ? 'P' : 'p'}ress the mic in the island`);
     }
 
     /** Whether a request is being typed. */
@@ -840,15 +841,17 @@ export function openSignIn(provider, found = '') {
 }
 
 /** Opens a terminal that downloads the speech `model` (isle-setup-voice) and stays open to show how it went. */
-export function openSetUp(model) {
+export function openSetUp(model, shortcut = 'Super+I') {
     const program = GLib.find_program_in_path('isle-setup-voice') ??
         GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'isle-setup-voice']);
-    return GLib.file_test(program, GLib.FileTest.IS_EXECUTABLE) && inTerminal(['bash', '-c', SET_UP, 'isle', program,
-        ...model ? [model] : []]);
+    // What to do next, naming the shortcut as set (passed as an argument, never part of the script).
+    const next = shortcut ? `Press ${shortcut} and speak.` : 'Press the mic in the island and speak.';
+    return GLib.file_test(program, GLib.FileTest.IS_EXECUTABLE) && inTerminal(['bash', '-c', SET_UP, 'isle', next,
+        program, ...model ? [model] : []]);
 }
 
-// Runs isle-setup-voice, then says what next; a shell stays open afterwards.
-const SET_UP = '"$@" && printf "\\nIsle: done. Press Super+I and speak.\\n" || ' +
+// Runs isle-setup-voice ($2…), then says what next ($1); a shell stays open afterwards.
+const SET_UP = 'next="$1"; shift; "$@" && printf "\\nIsle: done. %s\\n" "$next" || ' +
     'printf "\\nIsle: that did not finish; run isle-setup-voice again.\\n"; exec bash';
 
 /** How each AI CLI signs in, run in a terminal (`agy` and `claude` ask on start). */
@@ -1062,8 +1065,9 @@ const ACTIONS = {
     },
     media: ({command}, {daemon, launched}) => {
         const method = {play_pause: 'PlayPause', next: 'Next', previous: 'Previous'}[command];
-        if (method)
-            whenPlayerOf(daemon, launched, () => daemon.call('media', method));
+        if (!method)
+            return failed('not a media command');
+        return whenPlayerOf(daemon, launched, () => called(daemon, 'media', method));
     },
     focus: ({command}, {daemon}) => daemon.call('pomodoro', command === 'stop' ? 'Stop' : 'Start'),
     add_task: ({text}, {daemon}) => text && daemon.call('todo', 'Add', text),
@@ -1073,16 +1077,22 @@ const ACTIONS = {
     cancel_reminder: ({id}, {daemon}) => Number.isInteger(id) && daemon.call('reminders', 'Dismiss', id),
     remove_event: ({id}, {daemon}) => Number.isInteger(id) && daemon.call('calendar', 'Remove', id),
     remind: ({minutes, text}, {daemon}) => {
-        if (text && minutes > 0)
-            daemon.call('reminders', 'Add', Math.round(minutes * 60000), text);
+        if (!text || !(minutes > 0))
+            return failed('a reminder needs its minutes and its words');
+        return called(daemon, 'reminders', 'Add', Math.round(minutes * 60000), text);
     },
     volume: ({level, command}, {audio}) => {
+        if (!audio.hasOutput)
+            return failed('there is no sound output');
         if (typeof level === 'number')
             audio.volume = level / 100;
         else if (command === 'up' || command === 'down')
             audio.volume += command === 'up' ? 0.1 : -0.1;
-        else if ((command === 'mute') !== audio.muted && ['mute', 'unmute'].includes(command))
-            audio.toggleMuted();
+        else if (['mute', 'unmute'].includes(command))
+            (command === 'mute') !== audio.muted && audio.toggleMuted();
+        else
+            return failed('not a volume command');
+        return undefined;
     },
     wifi: ({on}) => spawn(['nmcli', 'radio', 'wifi', on === false ? 'off' : 'on']),
     bluetooth: ({on}) => setBluetooth(on !== false),
@@ -1131,7 +1141,10 @@ const ACTIONS = {
     run: async (action, {decide}) => {
         if (!runnable(action, shellUser()))
             return failed('Isle refused to start it: it was not the command shown');
-        if (!await decide(action))
+        const answer = await decide(action);
+        if (answer === 'unanswered')
+            return failed('no answer in time');
+        if (!answer)
             return failed('denied');
         return startUnit(action.spawn);
     },
@@ -1181,25 +1194,34 @@ function whenPlayerOf(daemon, app, run) {
         return playing?.available && (playing.desktop_entry.toLowerCase() === id ||
             playing.identity.toLowerCase() === app.get_name().toLowerCase());
     };
-    if (!app || ready()) {
-        run();
-        return;
-    }
-    const entry = {};
-    const changed = daemon.connect('changed', (_daemon, key) => {
-        if (key === 'nowPlaying' && ready()) {
+    if (!app || ready())
+        return Promise.resolve(run());
+    return new Promise(resolve => {
+        const entry = {};
+        const changed = daemon.connect('changed', (_daemon, key) => {
+            if (key === 'nowPlaying' && ready()) {
+                entry.stop();
+                resolve(run());
+            }
+        });
+        const giveUp = after(PLAYER_WAIT_MS, () => {
             entry.stop();
-            run();
-        }
+            resolve(failed(`${app.get_name()} did not start playing in time`));
+        });
+        entry.stop = () => {
+            if (!pending.delete(entry))
+                return;
+            daemon.disconnect(changed);
+            giveUp();
+        };
+        pending.add(entry);
     });
-    const giveUp = after(PLAYER_WAIT_MS, () => entry.stop());
-    entry.stop = () => {
-        if (!pending.delete(entry))
-            return;
-        daemon.disconnect(changed);
-        giveUp();
-    };
-    pending.add(entry);
+}
+
+/** What an isled call did, for the AI: its reply, else failed with isled's own words. */
+async function called(daemon, ...args) {
+    const {result, error} = await daemon.attempt(...args);
+    return result === null ? failed(error ?? `${args[1]} did not work`) : result;
 }
 
 
@@ -1304,8 +1326,16 @@ function openWindows() {
 /** The open window whose title contains `title`, ignoring case. */
 function windowTitled(title) {
     const wanted = title.toLowerCase().trim();
-    return global.get_window_actors().map(actor => actor.meta_window)
-        .find(window => !window.skip_taskbar && window.title?.toLowerCase().includes(wanted)) ?? null;
+    if (!wanted)
+        return null;
+    // Frontmost first (the actors run bottom to top); the closest match wins: the whole title, a word in it,
+    // then any part ("youtube" is the browser's YouTube tab before "youtube_notes.txt").
+    const windows = global.get_window_actors().map(actor => actor.meta_window)
+        .filter(window => !window.skip_taskbar).reverse();
+    const titled = window => (window.title ?? '').toLowerCase();
+    return windows.find(window => titled(window) === wanted) ??
+        windows.find(window => namesProject(titled(window), wanted)) ??
+        windows.find(window => titled(window).includes(wanted)) ?? null;
 }
 
 /** Folders the assistant may open or show files in, as isled's own file tools do. */
@@ -1455,38 +1485,53 @@ function setDarkMode(dark) {
 /** The screen's brightness: `level` 0..100, or `command` up or down by a tenth. */
 function setBrightness(level, command) {
     const step = {up: 10, down: -10}[command];
+    if (typeof level !== 'number' && !step)
+        return failed('not a brightness command');
     // GNOME 48 and later.
     const scale = Main.brightnessManager?.globalScale;
     if (scale) {
-        const value = typeof level === 'number' ? level / 100 : scale.value + (step ?? 0) / 100;
+        const value = typeof level === 'number' ? level / 100 : scale.value + step / 100;
         scale.value = Math.max(0.01, Math.min(1, value));
-        return;
+        return undefined;
     }
-    const call = (method, args, callback) => Gio.DBus.session.call('org.gnome.SettingsDaemon.Power',
-        '/org/gnome/SettingsDaemon/Power', 'org.freedesktop.DBus.Properties', method, args, null,
-        Gio.DBusCallFlags.NONE, -1, null, callback);
-    const set = percent => call('Set', new GLib.Variant('(ssv)', ['org.gnome.SettingsDaemon.Power.Screen', 'Brightness',
-        new GLib.Variant('i', Math.round(Math.max(1, Math.min(100, percent))))]), null);
-    if (typeof level === 'number') {
-        set(level);
-    } else if (step) {
-        call('Get', new GLib.Variant('(ss)', ['org.gnome.SettingsDaemon.Power.Screen', 'Brightness']), (bus, result) => {
-            try {
-                set(bus.call_finish(result).deep_unpack()[0].deep_unpack() + step);
-            } catch (e) {
-                console.warn(`Isle: could not change the brightness: ${e.message}`);
-            }
-        });
-    }
+    const SERVICE = ['org.gnome.SettingsDaemon.Power', '/org/gnome/SettingsDaemon/Power'];
+    const IFACE = 'org.gnome.SettingsDaemon.Power.Screen';
+    const set = percent => propertySet(...SERVICE, IFACE, 'Brightness',
+        new GLib.Variant('i', Math.round(Math.max(1, Math.min(100, percent)))));
+    if (typeof level === 'number')
+        return set(level);
+    return new Promise(resolve => {
+        Gio.DBus.session.call(...SERVICE, 'org.freedesktop.DBus.Properties', 'Get',
+            new GLib.Variant('(ss)', [IFACE, 'Brightness']), null, Gio.DBusCallFlags.NONE, -1, null, (bus, result) => {
+                try {
+                    resolve(set(bus.call_finish(result).deep_unpack()[0].deep_unpack() + step));
+                } catch (e) {
+                    resolve(failed(`this screen's brightness can't be read (${e.message})`));
+                }
+            });
+    });
 }
 
 /** Turns Bluetooth on or off as Quick Settings does, through GNOME's rfkill service. */
 function setBluetooth(on) {
-    Gio.DBus.session.call('org.gnome.SettingsDaemon.Rfkill', '/org/gnome/SettingsDaemon/Rfkill',
-        'org.freedesktop.DBus.Properties', 'Set',
-        new GLib.Variant('(ssv)', ['org.gnome.SettingsDaemon.Rfkill', 'BluetoothAirplaneMode',
-            new GLib.Variant('b', !on)]),
-        null, Gio.DBusCallFlags.NONE, -1, null, null);
+    return propertySet('org.gnome.SettingsDaemon.Rfkill', '/org/gnome/SettingsDaemon/Rfkill',
+        'org.gnome.SettingsDaemon.Rfkill', 'BluetoothAirplaneMode', new GLib.Variant('b', !on));
+}
+
+/** Sets a D-Bus property of a GNOME service: resolves undefined once done, else failed with why. */
+function propertySet(name, path, iface, property, value) {
+    return new Promise(resolve => {
+        Gio.DBus.session.call(name, path, 'org.freedesktop.DBus.Properties', 'Set',
+            new GLib.Variant('(ssv)', [iface, property, value]), null, Gio.DBusCallFlags.NONE, -1, null,
+            (bus, result) => {
+                try {
+                    bus.call_finish(result);
+                    resolve(undefined);
+                } catch (e) {
+                    resolve(failed(e.message.replace(/^GDBus\.Error:[\w.]+:\s*/, '')));
+                }
+            });
+    });
 }
 
 /** What this extension can do: isled offers the AI nothing else. */

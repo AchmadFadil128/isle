@@ -65,6 +65,11 @@ export class AudioOutputs extends Signals.EventEmitter {
         return this._sink?.is_muted ?? false;
     }
 
+    /** Whether there is a sound output to set at all. */
+    get hasOutput() {
+        return Boolean(this._sink);
+    }
+
     toggleMuted() {
         this._sink?.change_is_muted(!this.muted);
     }
