@@ -25,6 +25,9 @@ All notable changes to Isle are listed here. The format follows
   Isle with `isle-uninstall` rather than the Extensions app's Remove button.
 - With the assistant's AI on Automatic, Settings list the models of the AI it answers with (the first
   you are signed in to), not of the first one installed.
+- Settings → AI Usage finds Claude Code and Codex where Isle does: in `CLAUDE_CONFIG_DIR` and
+  `CODEX_HOME` when set, and Codex's sessions in Isle's assistant, so "Show AI usage" is no longer
+  greyed out while the island shows the usage.
 
 ## [1.0.6] - 2026-10-24
 

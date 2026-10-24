@@ -753,8 +753,7 @@ function nvmBins(home) {
 
 /** The models Codex lists, from the cache it keeps (Isle's own home for it, else the user's). */
 function codexModels() {
-    const home = GLib.get_home_dir();
-    for (const dir of [[GLib.get_user_data_dir(), 'isle', 'codex'], [home, '.codex']]) {
+    for (const dir of [[GLib.get_user_data_dir(), 'isle', 'codex'], [codexHome()]]) {
         try {
             const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([...dir, 'models_cache.json']));
             const models = JSON.parse(new TextDecoder().decode(bytes)).models ?? [];
@@ -767,18 +766,19 @@ function codexModels() {
 }
 
 /** The AI providers signed in here, as rows to switch: Claude Code's sign-in, and Codex's logs. */
+// Where isled reads them (usage.rs): Claude Code's config dir, the user's Codex home and Isle's own.
 function usageProviders() {
-    const home = GLib.get_home_dir();
     const providers = [];
     try {
-        const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([home, '.claude', '.credentials.json']));
+        const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([claudeConfigDir(), '.credentials.json']));
         const plan = JSON.parse(new TextDecoder().decode(bytes)).claudeAiOauth?.subscriptionType ?? '';
         providers.push({key: 'usage-claude', title: 'Claude',
             subtitle: `${plan ? `${plan[0].toUpperCase()}${plan.slice(1)} plan, ` : ''}signed in with Claude Code`});
     } catch {
         // Not signed in to Claude Code.
     }
-    if (GLib.file_test(GLib.build_filenamev([home, '.codex', 'sessions']), GLib.FileTest.IS_DIR))
+    const sessions = [[codexHome(), 'sessions'], [GLib.get_user_data_dir(), 'isle', 'codex', 'sessions']];
+    if (sessions.some(dir => GLib.file_test(GLib.build_filenamev(dir), GLib.FileTest.IS_DIR)))
         providers.push({key: 'usage-codex', title: 'ChatGPT', subtitle: 'As Codex last saw it'});
     return providers;
 }
