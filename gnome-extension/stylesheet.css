@@ -44,16 +44,16 @@
   transition-duration: 120ms;
 }
 
-/* Buttons: translucent grey, white text, lighter under the pointer. */
+/* Buttons: grey (solid, so an alert's glow never tints it), white text, lighter under the pointer. */
 .isle-pill-small {
   font-size: 12px;
   padding: 6px 14px;
   color: #ffffff;
-  background-color: rgba(255, 255, 255, 0.16);
+  background-color: #2c2c2e;
 }
 
-.isle-pill-small:hover { background-color: rgba(255, 255, 255, 0.24); }
-.isle-pill-small:active { background-color: rgba(255, 255, 255, 0.3); }
+.isle-pill-small:hover { background-color: #3a3a3c; }
+.isle-pill-small:active { background-color: #48484a; }
 
 /* An alert's one thing to do now (Join), in the accent colour. */
 .isle-pill-accent { background-color: #0a84ff; }
@@ -92,7 +92,7 @@
 }
 
 .isle-entry:focus { background-color: #2c2c2e; }
-.isle-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.55); }
+.isle-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.45); }
 
 /* Blur my Shell restyles every entry in the shell from an ancestor, with
  * !important (light entries on a black island); the island's keep theirs. */
@@ -101,7 +101,7 @@
   background-color: #2c2c2e !important;
   box-shadow: none !important;
 }
-#isleIsland .isle-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.55) !important; }
+#isleIsland .isle-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.45) !important; }
 
 /* ── Top bar ──────────────────────────────────────────── */
 
@@ -297,8 +297,7 @@
 .isle-card-button-box { spacing: 8px; }
 .isle-card-button-label { font-size: 12px; font-weight: 600; }
 .isle-card-key { font-size: 11px; font-weight: 500; padding: 0 1px; }
-.isle-card-ghost { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
-.isle-card-ghost:hover { background-color: rgba(255, 255, 255, 0.16); }
+.isle-card-ghost { color: #ffffff; }
 .isle-card-ghost .isle-card-key { color: rgba(255, 255, 255, 0.45); }
 .isle-card-run, .isle-pill-white { color: #000000; background-color: #ffffff; }
 .isle-card-run:hover, .isle-pill-white:hover { background-color: rgba(255, 255, 255, 0.86); }
@@ -358,7 +357,7 @@
 }
 #isleIsland .isle-voice-entry:focus,
 #isleIsland .isle-voice-entry:focus:hover { border: 1px solid rgba(255, 255, 255, 0.16) !important; }
-#isleIsland .isle-voice-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.38) !important; }
+#isleIsland .isle-voice-entry StLabel.hint-text { color: rgba(255, 255, 255, 0.45) !important; }
 .isle-compact-assistant { color: #8f66ff; }
 .isle-compact-warning { color: #ff453a; }
 .isle-header-mic { padding: 4px; color: rgba(255, 255, 255, 0.75); }
@@ -636,7 +635,7 @@
 .isle-reminder-remove { padding: 3px; border-radius: 99px; color: rgba(255, 255, 255, 0.5); }
 .isle-reminder-remove:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
 
-.isle-reminders-empty { font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.55); padding-top: 22px; }
+.isle-reminders-empty { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.55); padding-top: 22px; }
 
 /* Plain text fields, inside the row (Blur my Shell restyles entries with !important). */
 #isleIsland .isle-reminder-field,
@@ -653,8 +652,10 @@
   selected-color: #ffffff;
 }
 
-/* GNOME indents the placeholder (more since 49); here it lines up with the titles above. */
-#isleIsland .isle-reminder-field StLabel.hint-text { color: rgba(255, 255, 255, 0.35); margin-left: 0; padding-left: 0; }
+/* GNOME indents the placeholder (more since 49); here it lines up with the titles above, and in the other
+ * fields with what is typed. */
+#isleIsland .isle-reminder-field StLabel.hint-text { color: rgba(255, 255, 255, 0.45); margin-left: 0; padding-left: 0; }
+#isleIsland .isle-entry StLabel.hint-text, #isleIsland .isle-voice-entry StLabel.hint-text { margin-left: 0; padding-left: 0; }
 
 /* ── Calendar ─────────────────────────────────────────── */
 
@@ -738,7 +739,7 @@
 .isle-cal-event-bar { width: 3px; border-radius: 2px; margin: 4px 0 4px 5px; }
 .isle-cal-event-title { font-size: 13px; font-weight: 600; }
 .isle-cal-event-time { font-size: 11px; font-weight: 500; color: rgba(255, 255, 255, 0.65); }
-.isle-cal-empty { font-size: 13px; color: rgba(255, 255, 255, 0.55); }
+.isle-cal-empty { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.55); }
 .isle-cal-accounts { font-size: 12px; color: rgba(10, 132, 255, 1); padding: 4px 8px; border-radius: 8px; }
 .isle-cal-accounts:hover { background-color: rgba(255, 255, 255, 0.08); }
 .isle-cal-accounts:focus { color: #ffffff; }
@@ -748,8 +749,7 @@
 /* As the rows' insides: the heading over their icons, Clear over their times. */
 .isle-notifications-bar { spacing: 6px; padding: 0 8px 4px 8px; }
 .isle-notifications-heading { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.6); }
-.isle-notifications-clear { font-size: 12px; font-weight: 600; padding: 5px 12px; background-color: #1c1c1e; }
-.isle-notifications-clear:hover { background-color: #2c2c2e; }
+.isle-notifications-clear { font-size: 12px; font-weight: 600; padding: 5px 12px; }
 .isle-dnd-toggle { padding: 6px; border-radius: 999px; color: rgba(255, 255, 255, 0.6); }
 .isle-dnd-toggle:checked { color: #ffffff; background-color: #5e5ce6; }
 .isle-dnd-toggle:checked:hover { background-color: #6e6cf0; }
