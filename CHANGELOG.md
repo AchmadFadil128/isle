@@ -24,6 +24,10 @@ All notable changes to Isle are listed here. The format follows
   the history's size limit.
 - A password a password manager copies, and clears again soon after, now leaves the clipboard history
   too, unless pinned.
+- Dropping more files than the shelf has room for is turned away as you hover, with "Only 2 more fit",
+  instead of some of them going missing while the island showed them landing.
+- Dropping only links or files online on the shelf says "Only files on this computer" instead of
+  lighting up as if they landed.
 
 ## [1.0.6] - 2026-10-24
 

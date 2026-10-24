@@ -52,6 +52,8 @@ class FilesView extends St.Widget {
         this._helperAvailable = false;
         this._dropping = false;
         this._dropOver = false;
+        /** The files on their way can't all land (see ShelfPage's `_refusal`). */
+        this._refused = false;
         /** How lit the zone is (0..1), with the island's drop light, and in which colours. */
         this._light = 0;
         this._glow = ZONE_GLOW;
@@ -122,6 +124,13 @@ class FilesView extends St.Widget {
         this._updateEmptyText();
     }
 
+    set refused(refused) {
+        if (refused === this._refused)
+            return;
+        this._refused = refused;
+        this._zone.queue_repaint();
+    }
+
     /** How lit the zone is (0..1); it follows the island's drop light. */
     set light(level) {
         this._light = level;
@@ -138,7 +147,7 @@ class FilesView extends St.Widget {
     _paintZone(area) {
         const cr = area.get_context();
         const [width, height] = area.get_surface_size();
-        const full = (this._daemon.state.shelf ?? []).length >= SHELF_CAPACITY;
+        const full = this._refused;
         const dragging = this._dropping && this._helperAvailable;
         const [from, to] = [ZONE[dragging ? 'near' : 'idle'], ZONE.over];
         const t = full ? 0 : Math.min(1, this._light);

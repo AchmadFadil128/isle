@@ -52,7 +52,7 @@ const INTERFACE: &str = r#"
       <arg name="active" type="b"/>
     </signal>
     <!-- The files dragged over the window, so the island can light in their
-         colours; none once they leave. -->
+         colours (and since 1.1 links and files online too, which can't land); none once they leave. -->
     <signal name="Hovering">
       <arg name="uris" type="as"/>
     </signal>
