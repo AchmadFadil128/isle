@@ -278,7 +278,7 @@ after 10 minutes, and a command is stopped after 30.
    | [Antigravity](https://antigravity.google) | its installer | run `agy` | Its terms bar third-party tools from the service; Isle only runs the official `agy`, at your own risk |
 
 2. Set up speech recognition, once: press **Set up** when the assistant asks
-   for it, or run `isle-setup-voice` in a terminal (from the source folder:
+   for it, or run `~/.local/bin/isle-setup-voice` in a terminal (from the source folder:
    `scripts/setup-voice.sh`). It downloads the speech
    model chosen in Settings, `small` by default (265 MB; `tiny` 44 MB, `base`
    82 MB, `medium` 823 MB; `isle-setup-voice base` names one and picks it in
@@ -293,7 +293,7 @@ after 10 minutes, and a command is stopped after 30.
 3. Pick the AI in **Settings → Assistant**, or leave it on Automatic, which
    uses the first one you are signed in to: Claude Code, then Codex, then
    Antigravity. An AI installed later is found by itself.
-4. Check with `isled --doctor`: it lists speech recognition (the models
+4. Check with `~/.local/bin/isled --doctor`: it lists speech recognition (the models
    downloaded, and the GPU or processor it runs on) and each AI, where it is
    installed and whether you are signed in, as Isle itself sees them.
    Isle finds AIs installed with npm (also a prefix of your own), nvm,
@@ -451,17 +451,17 @@ drag-and-drop helper; when building from source, install `libgtk-4-dev`
 top bar (Dash to Panel, Hide Top Bar, other islands) can get in the way;
 turn them off in the Extensions app.
 
-**The voice assistant does not answer.** Run `isled --doctor`: it says what
+**The voice assistant does not answer.** Run `~/.local/bin/isled --doctor`: it says what
 is missing (speech recognition, an AI, or its sign-in) and what to run.
 
-**Something else.** Run `isled --report` (or Settings → About → Copy a bug
+**Something else.** Run `~/.local/bin/isled --report` (or Settings → About → Copy a bug
 report): it gathers the versions, what works and recent logs, without your
 data. Please [open an issue](../../issues) and paste it there.
 
 ## Uninstalling
 
 ```sh
-isle-uninstall
+~/.local/bin/isle-uninstall
 ```
 
 (or `./uninstall.sh` from the release package or the source folder). This

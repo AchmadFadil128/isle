@@ -228,3 +228,8 @@ if [ "${XDG_SESSION_TYPE:-}" = "x11" ] && [ -n "$SHELL_VERSION" ] && [ "$SHELL_V
 else
     echo "Log out and back in once so GNOME Shell loads the new extension."
 fi
+# Some systems put ~/.local/bin on the PATH only once it exists, at the next login; others never.
+case ":$PATH:" in
+    *":$BINDIR:"*) ;;
+    *) echo "Note: $BINDIR is not on your PATH, so run Isle's commands with it: $BINDIR/isled --doctor, $BINDIR/isle-setup-voice." ;;
+esac

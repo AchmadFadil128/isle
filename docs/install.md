@@ -66,7 +66,7 @@ Super+I:
    card is used through Vulkan when there is one, else the processor:
 
    ```sh
-   isle-setup-voice
+   ~/.local/bin/isle-setup-voice
    ```
 
    Set up with an older Isle, speech recognition used a Python environment
@@ -82,8 +82,11 @@ Super+I:
 any time:
 
 ```sh
-isled --doctor
+~/.local/bin/isled --doctor
 ```
+
+(Isle's commands are in `~/.local/bin`. When that folder is on your PATH,
+which the installer checks, their names alone do.)
 
 It lists speech recognition (its models, and the GPU or processor it runs
 on) and each AI, where it is installed and whether
@@ -108,7 +111,7 @@ To install a particular version instead, put `ISLE_VERSION` before `bash`:
 ## Uninstalling
 
 ```sh
-isle-uninstall
+~/.local/bin/isle-uninstall
 ```
 
 This removes the extension, its programs, its service and its font, the
@@ -238,7 +241,7 @@ to 51.
 **Music does not show.** Check the background service:
 `systemctl --user status isled`.
 
-**The voice assistant does not answer.** Run `isled --doctor`: it says what
+**The voice assistant does not answer.** Run `~/.local/bin/isled --doctor`: it says what
 is missing (speech recognition, an AI, or its sign-in) and what to run.
 
 **Anything else.** GNOME Shell's log shows extension errors:

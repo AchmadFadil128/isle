@@ -28,6 +28,8 @@ All notable changes to Isle are listed here. The format follows
 - Settings → AI Usage finds Claude Code and Codex where Isle does: in `CLAUDE_CONFIG_DIR` and
   `CODEX_HOME` when set, and Codex's sessions in Isle's assistant, so "Show AI usage" is no longer
   greyed out while the island shows the usage.
+- The installer says when `~/.local/bin` is not on the PATH, and the guide gives Isle's commands
+  with that folder (`~/.local/bin/isled --doctor`), so they run where their names alone are not found.
 
 ## [1.0.6] - 2026-10-24
 
