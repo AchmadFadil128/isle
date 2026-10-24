@@ -12,7 +12,7 @@ import {vividColorOfFile} from '../colors.js';
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import * as Playback from '../playback.js';
-import {Art, Bars, Slider, fence, icon, iconButton, label, ownIcon, restsAt, setButtonIcon, smallCover} from '../widgets.js';
+import {Art, Bars, Slider, fence, icon, iconButton, label, ownIcon, restsAt, setButtonIcon, setEnabled, smallCover, coverKey} from '../widgets.js';
 import {LyricsPane} from './lyrics.js';
 import {Page} from './page.js';
 
@@ -411,12 +411,14 @@ class MediaPage extends Page {
     }
 
     _updateTint(path) {
-        if (path === this._tintPath)
+        // A player may write the next song's cover under the same name: its time tells them apart.
+        const key = coverKey(path);
+        if (key === this._tintPath)
             return;
-        this._tintPath = path;
+        this._tintPath = key;
         // From the small copy the art shows: the cover itself may be big.
         smallCover(path).then(cover => {
-            if (path !== this._tintPath || this._destroyed)
+            if (key !== this._tintPath || this._destroyed)
                 return;
             this._tint = vividColorOfFile(cover ?? path);
             if (this._shown('lyrics'))

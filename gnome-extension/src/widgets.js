@@ -465,6 +465,11 @@ function fileKey(path) {
     }
 }
 
+/** What a cover at `path` shows, as `fileKey` tells it (the path while unreadable); '' for none. */
+export function coverKey(path) {
+    return path ? fileKey(path) ?? path : '';
+}
+
 /** Remembers the last few results of `compute(path)`, by `fileKey`, so a cover is decoded once. */
 export function memoByFile(compute, size = 20) {
     const cache = new Map();
@@ -625,6 +630,8 @@ export const Art = GObject.registerClass({
         });
         this._radius = radius;
         this._path = null;
+        /** `coverKey` of the cover shown: a player may write the next song's under the same name. */
+        this._key = null;
         this._showsIcon = false;
         this._placeholder = new St.Icon({
             gicon: icon('isle-music'),
@@ -645,22 +652,23 @@ export const Art = GObject.registerClass({
         this.set_size(size, size);
         this._placeholder.icon_size = Math.round(size * 0.42);
         this._radius = radius;
-        const path = this._path;
-        this._path = null;
-        this.setPath(path);
+        this._key = null;
+        this.setPath(this._path);
     }
 
     /** Shows the cover at `path`, once its small copy is ready (see `smallCover`); until then the last one. */
     setPath(path) {
-        if (path === this._path)
+        const key = coverKey(path);
+        if (key === this._key)
             return;
         this._path = path;
+        this._key = key;
         if (!path) {
             this._show(null);
             return;
         }
         smallCover(path).then(cover => {
-            if (path === this._path && !this._destroyed)
+            if (key === this._key && !this._destroyed)
                 this._show(cover ?? path);
         });
     }
