@@ -181,6 +181,8 @@ All notable changes to Isle are listed here. The format follows
 - The assistant opened (Super+I) over its answer's alert no longer brings that alert back once it closes,
   and clicking an answer that is over opens the conversation instead of an empty assistant that never
   closed.
+- A request typed and sent just before the assistant was closed (its AI still starting) is answered as
+  an alert and its actions run, instead of being worked on unseen and its answer dropped.
 
 ## [1.0.6] - 2026-10-24
 
