@@ -16,6 +16,8 @@ All notable changes to Isle are listed here. The format follows
 - Maximizing and arranging windows by voice no longer logs warnings on GNOME 49 and later.
 - Closing the assistant (Esc, or an answer that types or takes a screenshot) right after an answer in the
   conversation no longer leaves the keyboard taken by a closed island.
+- The assistant opened with the shortcut listens in the pill again instead of showing the conversation
+  left open last time, and no longer switches to typing once it answers.
 
 ## [1.0.6] - 2026-10-24
 

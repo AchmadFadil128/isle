@@ -1426,6 +1426,8 @@ export class Controller {
         this._voiceTurn = this._daemon.state.assistant?.turn ?? 0;
         this._voiceStep = this._daemon.state.assistant?.step ?? 0;
         this._autoListens = 0;
+        // The conversation open last time stays shut, unless opened with the mouse (just below).
+        this._voice.closeChat();
         if (!typing) {
             this._listen({greet: true});
             return;
@@ -1500,6 +1502,8 @@ export class Controller {
         this._voiceTarget = global.display.focus_window;
         this._voice.followUp = null;
         this._voice.greeting = null;
+        // Its progress or answer in the pill; the chevron opens the conversation.
+        this._voice.closeChat();
         this._voice.setState(state);
         this._syncAssistantBusy();
         this._render();
