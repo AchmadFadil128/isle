@@ -32,6 +32,8 @@ All notable changes to Isle are listed here. The format follows
   with that folder (`~/.local/bin/isled --doctor`), so they run where their names alone are not found.
 - The one-line install works where `/tmp` is mounted `noexec`: it ran the package's installer from
   there directly, which such a system refuses.
+- Installing from source goes on without the shelf's drag-and-drop helper when it does not build (it
+  needs Rust 1.92), instead of stopping the whole install.
 
 ## [1.0.6] - 2026-10-24
 

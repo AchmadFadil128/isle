@@ -49,8 +49,12 @@ else
     cargo build --release -p isle-daemon
     if pkg-config --exists gtk4; then
         step "Building isle-shelf"
-        cargo build --release -p isle-shelf
-        SHELF=1
+        # It needs a newer Rust than isled (1.92); without it the rest still installs.
+        if cargo build --release -p isle-shelf; then
+            SHELF=1
+        else
+            echo "isle-shelf did not build (it needs Rust 1.92 or newer: 'rustup update'); skipping drag and drop on the shelf."
+        fi
     else
         echo "GTK 4 development files not found: skipping isle-shelf (drag and drop on the shelf)."
         echo "Install them with 'sudo apt install libgtk-4-dev' and run this script again."
