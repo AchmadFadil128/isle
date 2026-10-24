@@ -204,6 +204,7 @@ All notable changes to Isle are listed here. The format follows
   locked on suspend): the connection going with sleep is not one lost.
 - The guides say to lift a battery charge limit the assistant set (`isle-charge-limit 100`) before
   removing a .deb, .rpm or AUR package: the limit stayed, with nothing of Isle left to lift it.
+- Searching the clipboard history finds words anywhere in a copied text, not only near its start.
 
 ## [1.0.6] - 2026-10-24
 

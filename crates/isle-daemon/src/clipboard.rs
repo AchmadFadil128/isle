@@ -224,6 +224,34 @@ impl ClipboardService {
         })
     }
 
+    /// The ids of the items whose whole text (or files' names) holds `query`, ignoring case, in the list's
+    /// order. GNOME Shell's to ask, no other program's: guess after guess, it would tell what was copied.
+    async fn search(
+        &self,
+        query: &str,
+        #[zbus(connection)] connection: &zbus::Connection,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+    ) -> fdo::Result<Vec<u64>> {
+        crate::caller::shell_only(connection, &header).await?;
+        let query = query.to_lowercase();
+        // A copy of the texts, searched off the event loop: they can be long.
+        let items: Vec<(u64, Clip)> = self
+            .history
+            .items()
+            .iter()
+            .filter(|item| item.clip.image_hash().is_none())
+            .map(|item| (item.id, item.clip.clone()))
+            .collect();
+        blocking(move || {
+            items
+                .into_iter()
+                .filter(|(_, clip)| clip.contains(&query))
+                .map(|(id, _)| id)
+                .collect()
+        })
+        .await
+    }
+
     /// Moves an item to the top, as the user just copied it again.
     async fn touch(
         &mut self,
@@ -288,7 +316,7 @@ impl ClipboardService {
 async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> fdo::Result<T> {
     tokio::task::spawn_blocking(work)
         .await
-        .map_err(|err| fdo::Error::Failed(format!("image work failed: {err}")))
+        .map_err(|err| fdo::Error::Failed(format!("clipboard work failed: {err}")))
 }
 
 /// The directory of stored images: `<hash>.png`, the image as copied, and
