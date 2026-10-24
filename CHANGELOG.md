@@ -16,6 +16,11 @@ All notable changes to Isle are listed here. The format follows
 - Isle is always set in Inter, the typeface it installs; it no longer
   switches to another company's font when that one is installed.
 
+### Fixed
+
+- When the password dialog for a command is closed, the assistant says so,
+  instead of saying you pressed Deny.
+
 ## [1.0.3] - 2026-10-24
 
 ### Fixed
