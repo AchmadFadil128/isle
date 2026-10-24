@@ -1168,7 +1168,10 @@ async fn turn(
             for (command, status) in &answer.ran {
                 talk.chat.push(Item::command(command, status, now));
             }
-            talk.chat.push(Item::answer(&answer.say, now));
+            // An answer of actions alone ("lock the screen") says nothing to keep.
+            if !answer.say.trim().is_empty() {
+                talk.chat.push(Item::answer(&answer.say, now));
+            }
             talk.save(session);
             show_history(iface, &talk.chat).await;
             // Those that ran already (and worked) are not run again.

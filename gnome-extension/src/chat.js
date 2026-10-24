@@ -169,11 +169,13 @@ class Sweep extends St.DrawingArea {
  */
 export function answerMarkup(text) {
     return text.split('\n').map(line => {
-        let out = GLib.markup_escape_text(line, -1);
-        out = out.replace(/^\s*[-*•]\s+/, '  •  ');
-        out = out.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
-        out = out.replace(/`([^`]+)`/g, '<span font_family="monospace" background="#ffffff" bgalpha="12%">$1</span>');
-        return out;
+        const bullet = /^\s*[-*•]\s+/;
+        const listed = bullet.test(line);
+        // Code spans first, as written; bold only in the words between them, so the markup always nests.
+        const body = (listed ? line.replace(bullet, '') : line).split(/(`[^`]+`)/).map((part, i) => i % 2
+            ? `<span font_family="monospace" background="#ffffff" bgalpha="12%">${GLib.markup_escape_text(part.slice(1, -1), -1)}</span>`
+            : GLib.markup_escape_text(part, -1).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')).join('');
+        return listed ? `  •  ${body}` : body;
     }).join('\n');
 }
 
@@ -540,7 +542,7 @@ export const ChatView = GObject.registerClass({
     _row(item, withFace) {
         if (item.role === 'user') {
             const bubble = new Bubble({style_class: 'isle-chat-user', x_align: Clutter.ActorAlign.END}, BUBBLE_MAX);
-            const text = label(item.text, 'isle-chat-user-text', {x_expand: true});
+            const text = label(item.text ?? '', 'isle-chat-user-text', {x_expand: true});
             copyable(text, () => this._copied(), () => this.emit('settled'));
             wrapLines(text);
             bubble.add_child(text);
@@ -570,7 +572,7 @@ export const ChatView = GObject.registerClass({
         const text = label('', 'isle-chat-reply', {x_expand: true});
         copyable(text, () => this._copied(), () => this.emit('settled'));
         text.clutter_text.set({line_wrap: true, line_wrap_mode: Pango.WrapMode.WORD_CHAR, ellipsize: Pango.EllipsizeMode.NONE});
-        text.clutter_text.set_markup(answerMarkup(item.text));
+        text.clutter_text.set_markup(answerMarkup(item.text ?? ''));
         row.add_child(text);
         return row;
     }
