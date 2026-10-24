@@ -19,9 +19,13 @@ const SECRET_HINT = 'x-kde-passwordManagerHint';
 const FILES_TYPE = 'x-special/gnome-copied-files';
 const URI_LIST_TYPE = 'text/uri-list';
 const IMAGE_TYPE = 'image/png';
+/** Plain text as St reads it, best first. */
+const TEXT_TYPES = ['text/plain;charset=utf-8', 'UTF8_STRING', 'text/plain', 'STRING'];
 /** Larger copies are not kept (isled refuses them too). */
 const MAX_TEXT_BYTES = 512 * 1024;
 const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+/** A password manager clears what it copied this soon after; the item then leaves the history too. */
+const SECRET_CLEARED_MS = 90 * 1000;
 /** Time for the window in front to get the keyboard back before pasting. */
 const PASTE_DELAY_MS = 120;
 /** Terminals paste with Ctrl+Shift+V. Matched against the window's class and app id. */
@@ -78,6 +82,9 @@ export class ClipboardHistory {
         /** Set while we put something on the clipboard ourselves. */
         this._ownCopy = false;
         this._timeouts = new Set();
+        this._cancellable = new Gio.Cancellable();
+        /** The text last added: {id, appId, at}, until something else is copied. */
+        this._lastText = null;
         // Made now: a new virtual device joins the seat a moment later, and drops the first paste.
         this._keyboard = clutterBackend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
 
@@ -100,44 +107,89 @@ export class ClipboardHistory {
         if (!this.enabled)
             return;
         const mimetypes = this._clipboard.get_mimetypes(CLIPBOARD);
-        if (mimetypes.length === 0 || mimetypes.includes(SECRET_HINT))
+        if (mimetypes.includes(SECRET_HINT))
             return;
         const app = Shell.WindowTracker.get_default().focus_app;
         // Windows without a desktop file get made-up ids ("window:5").
         const appId = app && !app.is_window_backed() ? app.get_id() : '';
         if (this._settings.get_strv('clipboard-ignored-apps').includes(appId))
             return;
+        this._addCopy(mimetypes, appId).catch(e => console.warn(`Isle: could not keep a copy: ${e.message}`));
+    }
 
+    // Files first; then plain text (a spreadsheet's cells come with a picture of them too), else an image.
+    async _addCopy(mimetypes, appId) {
         const filesType = [FILES_TYPE, URI_LIST_TYPE].find(type => mimetypes.includes(type));
-        if (filesType)
-            this._clipboard.get_content(CLIPBOARD, filesType, (_clipboard, bytes) => this._addFiles(bytes, filesType, appId));
-        else if (mimetypes.includes(IMAGE_TYPE))
-            this._clipboard.get_content(CLIPBOARD, IMAGE_TYPE, (_clipboard, bytes) => this._addImage(bytes, appId));
-        else
-            this._clipboard.get_text(CLIPBOARD, (_clipboard, text) => this._addText(text, appId));
+        if (filesType) {
+            const bytes = await this._read(filesType, MAX_TEXT_BYTES);
+            if (this._destroyed)
+                return;
+            const uris = bytes ? parseUris(decode(bytes), filesType) : [];
+            if (uris.length > 0) {
+                this._lastText = null;
+                this._daemon.call('clipboard', 'AddFiles', uris, appId);
+                return;
+            }
+            // e.g. a link dragged from a browser; kept as text
+        }
+        const textType = TEXT_TYPES.find(type => mimetypes.includes(type));
+        const bytes = textType ? await this._read(textType, MAX_TEXT_BYTES) : null;
+        const text = bytes ? decode(bytes) : '';
+        // Only the picture's address (a browser's Copy Image gives it as text too) yields to the picture.
+        const address = mimetypes.includes(IMAGE_TYPE) && /^\s*(https?|data|file):\S*\s*$/.test(text);
+        if (text.replaceAll('\0', '').trim() && !address) {
+            this._addText(text, appId);
+        } else if (mimetypes.includes(IMAGE_TYPE)) {
+            const png = await this._read(IMAGE_TYPE, MAX_IMAGE_BYTES);
+            if (png?.get_size() && !this._destroyed) {
+                this._lastText = null;
+                this._daemon.call('clipboard', 'AddImage', png.get_data(), appId);
+            }
+        } else if (mimetypes.length === 0 || bytes) {
+            this._forgetSecret(appId);
+        }
     }
 
-    _addFiles(bytes, mimetype, appId) {
-        const uris = bytes ? parseUris(new TextDecoder().decode(bytes.get_data() ?? []), mimetype) : [];
-        if (uris.length > 0)
-            this._daemon.call('clipboard', 'AddFiles', uris, appId);
-        else // e.g. a link dragged from a browser; keep it as text
-            this._clipboard.get_text(CLIPBOARD, (_clipboard, text) => this._addText(text, appId));
-    }
-
-    _addImage(bytes, appId) {
-        const size = bytes?.get_size() ?? 0;
-        if (size > 0 && size <= MAX_IMAGE_BYTES)
-            this._daemon.call('clipboard', 'AddImage', bytes.get_data(), appId);
-    }
-
-    _addText(text, appId) {
-        if (!text?.trim())
+    async _addText(text, appId) {
+        if (this._destroyed)
             return;
-        // The limit is in bytes; only long texts need counting.
-        if (text.length * 3 > MAX_TEXT_BYTES && new TextEncoder().encode(text).length > MAX_TEXT_BYTES)
+        this._lastText = null;
+        const [id] = await this._daemon.call('clipboard', 'AddText', text, appId) ?? [];
+        if (id !== undefined)
+            this._lastText = {id, appId, at: Date.now()};
+    }
+
+    // The clipboard emptied (or blanked) by the app that just copied text: a password manager
+    // clearing a password, which then leaves the history too, unless pinned.
+    _forgetSecret(appId) {
+        const last = this._lastText;
+        this._lastText = null;
+        if (!last || last.appId !== appId || Date.now() - last.at > SECRET_CLEARED_MS || this._destroyed)
             return;
-        this._daemon.call('clipboard', 'AddText', text, appId);
+        const item = (this._daemon.state.clipboard ?? []).find(other => other.id === last.id);
+        if (item && !item.pinned)
+            this._daemon.call('clipboard', 'Remove', last.id);
+    }
+
+    /** At most `max` bytes of the clipboard's `mimetype`; null if there is more, or it could not be read. */
+    _read(mimetype, max) {
+        return new Promise(resolve => {
+            const stream = Gio.MemoryOutputStream.new_resizable();
+            // Read only one byte past the limit: a huge copy never comes into the shell whole.
+            this._selection.transfer_async(Meta.SelectionType.SELECTION_CLIPBOARD, mimetype, max + 1, stream,
+                this._cancellable, (selection, result) => {
+                    try {
+                        selection.transfer_finish(result);
+                        stream.close(null);
+                        const bytes = stream.steal_as_bytes();
+                        resolve(bytes.get_size() > max ? null : bytes);
+                    } catch (e) {
+                        if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                            console.warn(`Isle: could not read the clipboard's ${mimetype}: ${e.message}`);
+                        resolve(null);
+                    }
+                });
+        });
     }
 
     // Puts `item` (from `Daemon.state.clipboard`) back on the clipboard. `touch: false` leaves it in place
@@ -227,12 +279,17 @@ export class ClipboardHistory {
 
     destroy() {
         this._destroyed = true;
+        this._cancellable.cancel();
         this._selection.disconnect(this._ownerChanged);
         this._timeouts.forEach(id => GLib.source_remove(id));
         this._timeouts.clear();
         this._keyboard?.run_dispose();
         this._keyboard = null;
     }
+}
+
+function decode(bytes) {
+    return new TextDecoder().decode(bytes.get_data() ?? new Uint8Array());
 }
 
 /** The file at `path`, read off the main loop's way. */

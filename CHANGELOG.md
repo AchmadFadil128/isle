@@ -18,6 +18,12 @@ All notable changes to Isle are listed here. The format follows
   only a drag of files (or links) does.
 - If the shelf's drag-and-drop helper crashes, the Files tab shows its files again instead of staying
   blank, and a new helper starts; one that quits just as a file is dragged in no longer misses the drag.
+- Cells copied from a spreadsheet are kept in the clipboard history as their text, not as a picture of
+  them (a browser's Copy Image still keeps the picture).
+- A very large copy is no longer read whole into GNOME Shell only to be turned away; reading stops at
+  the history's size limit.
+- A password a password manager copies, and clears again soon after, now leaves the clipboard history
+  too, unless pinned.
 
 ## [1.0.6] - 2026-10-24
 
