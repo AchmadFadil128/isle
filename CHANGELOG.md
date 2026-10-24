@@ -161,6 +161,9 @@ All notable changes to Isle are listed here. The format follows
 - With the island on another display, GNOME's clock in the top bar opens its calendar again instead of
   closing it the moment it opens.
 - Turning Isle off, or leaving Super+V to GNOME, no longer undoes another extension's own Super+V calendar.
+- The next alert after one that grew under a resting pointer, or one updated in place under it, runs out
+  as it should instead of staying until the pointer moves (or for good, once the island shrank from under
+  it), and the assistant's answer closes on its own when the pill grew under a pointer that never moved.
 
 ## [1.0.6] - 2026-10-24
 

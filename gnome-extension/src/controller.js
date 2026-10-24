@@ -895,18 +895,15 @@ export class Controller {
 
     // Pointer
 
+    /** Whether the pointer is on the island as a hover: not one it grew under that has not moved since. */
+    get _pointerOn() {
+        return this._island.hovered && !this._hoverUnmoved;
+    }
+
     _onHoverChanged(moved = false) {
         const unmoved = this._hoverUnmoved;
         this._hoverUnmoved = false;
         this._cancel('hover');
-        // An answer stays while the pointer is on it, and as long again once it leaves.
-        if (this._voiceOpen) {
-            if (this._island.hovered)
-                this._cancel('voice-close');
-            else
-                this._scheduleVoiceClose(Math.min(this._voiceCloseMs, VOICE_LEAVE_MS));
-            return;
-        }
         // Grown under a still pointer is no hover yet: it counts once the pointer moves (see `_hoverOnMove`).
         if (this._island.hovered && !moved && this._island.grewUnderPointer && !this._expandWanted) {
             this._hoverUnmoved = true;
@@ -915,6 +912,14 @@ export class Controller {
         }
         if (!this._island.hovered && unmoved && !this._expandWanted)
             return;
+        // An answer stays while the pointer is on it, and as long again once it leaves.
+        if (this._voiceOpen) {
+            if (this._island.hovered)
+                this._cancel('voice-close');
+            else
+                this._scheduleVoiceClose(Math.min(this._voiceCloseMs, VOICE_LEAVE_MS));
+            return;
+        }
         // An alert waits while the pointer is on it, as a notification should; not the volume's.
         if (this._alert && !this._alert.transient && this._presentation === 'peek') {
             if (this._island.hovered)
@@ -1312,7 +1317,7 @@ export class Controller {
         if (!alert)
             return;
         // Not while someone reads it (see `_onHoverChanged`), nor while no one is there for a sticky one.
-        if ((this._island.hovered && !alert.transient) || (alert.sticky && this._compact.idle)) {
+        if ((this._pointerOn && !alert.transient) || (alert.sticky && this._compact.idle)) {
             this._cancel('alert');
             return;
         }
@@ -1932,7 +1937,7 @@ export class Controller {
         // An action may have closed it already; an open conversation stays until put away.
         if (!this._voiceOpen || this._voice.chatOpen)
             return;
-        if (this._voiceAnswered && !this._island.hovered)
+        if (this._voiceAnswered && !this._pointerOn)
             this._later('voice-close', ms, () => this.collapse());
     }
 
