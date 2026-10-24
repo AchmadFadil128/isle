@@ -14,6 +14,20 @@ All notable changes to Isle are listed here. The format follows
   go anywhere on the island still lands on the shelf, and the island's tabs keep their clicks.
 - In the Activities overview the Files tab shows its files instead of an empty tray.
 - Maximizing and arranging windows by voice no longer logs warnings on GNOME 49 and later.
+- Browsing the calendar to another month no longer empties today's events or stops the "starts soon"
+  alerts; a meeting alert still comes after the computer sleeps, and not a second time after unlocking.
+- The calendar writes the month as it stands alone, tells weekdays apart in every language ("CN T2"
+  in Vietnamese), gives its example time as "8:00 PM" whatever the locale, shows an evening event's end
+  on the day clocks go back, and redraws its times when the clock switches between 12 and 24 hours.
+- A reminder renamed and left by closing the island shows its title again, not an empty field.
+- Scrolling on the volume slider over 100% no longer drops the volume to 100%.
+- Previous, Next and Play are dimmed when the player can't do them.
+- A song's new cover (and lyrics colour) shows when its player saves it under the last one's name.
+- A usage limit's colour follows the percent it shows; a notification's title stays on one line.
+- An agent's alert wraps its title at its full width, with the assistant level with it.
+- Tidier pages: every page's content starts and ends on the same edges, secondary buttons share one
+  grey, placeholders one brightness and no indent, empty lists one style, the Focus buttons one height;
+  calendar times, usage percents and header icons line up, and a song counts down with a minus sign.
 
 ## [1.0.6] - 2026-10-24
 
