@@ -878,6 +878,9 @@ export class Controller {
         if (this._alert && !this._alert.transient && this._presentation === 'peek') {
             if (this._island.hovered)
                 this._cancel('alert');
+            // One that waits for an answer or has a button (Allow, Join) keeps its own time; a plain one goes soon.
+            else if (this._alert.sticky || this._alert.action || this._alert.actions?.length)
+                this._timeAlert();
             else
                 this._later('alert', Math.min(ALERT_LEAVE_MS, this._alert.duration ?? ALERT_LEAVE_MS),
                     () => this._dismissAlert(true));

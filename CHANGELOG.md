@@ -14,6 +14,9 @@ All notable changes to Isle are listed here. The format follows
   go anywhere on the island still lands on the shelf, and the island's tabs keep their clicks.
 - In the Activities overview the Files tab shows its files instead of an empty tray.
 - Maximizing and arranging windows by voice no longer logs warnings on GNOME 49 and later.
+- An alert that asks (Allow or Deny from Claude or Codex, Run or Deny from the assistant) or has a button
+  (Join, a critical notification's) no longer goes 1.5 seconds after the pointer leaves it: it keeps its
+  own time. An agent's ask went back to its terminal, and the assistant's command waited unseen.
 
 ## [1.0.6] - 2026-10-24
 
