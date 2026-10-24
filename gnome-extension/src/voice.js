@@ -18,7 +18,7 @@ import {TILES, describeActions, failed, namesProject, outcomeOf, runnable, slots
 import {Bot} from './bot.js';
 import {ChatView, CommandCard, answerMarkup, elapsed} from './chat.js';
 import {isTerminal} from './clipboard.js';
-import {VERTICAL, maximize, unmaximize} from './compat.js';
+import {VERTICAL, eventActor, maximize, unmaximize} from './compat.js';
 import {plainBody} from './notifications.js';
 import {icon, iconButton, pillButton, wrapLines} from './widgets.js';
 
@@ -570,7 +570,8 @@ export const VoiceView = GObject.registerClass({
             this.openChat();
             return Clutter.EVENT_STOP;
         }
-        if (dy > 0.3 && this.chatOpen && this._row.contains(event.get_source())) {
+        const actor = dy > 0.3 && this.chatOpen ? eventActor(event) : null;
+        if (actor && this._row.contains(actor)) {
             this.closeChat();
             return Clutter.EVENT_STOP;
         }
