@@ -859,6 +859,12 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 None => std::future::pending().await,
             }
         };
+        // With no conversation to end, nothing is looked at before midnight: isled stays asleep.
+        let check_chat = if talk.chat.is_empty() {
+            until_midnight()
+        } else {
+            until_midnight().min(CHECK_CHAT)
+        };
         let undo_at = talk.undo.as_ref().map(|(_, at)| *at);
         let undo_over = async move {
             match undo_at {
@@ -873,7 +879,7 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                     Some(command) => command,
                     None => return,
                 },
-                () = tokio::time::sleep(until_midnight().min(CHECK_CHAT)) => {
+                () = tokio::time::sleep(check_chat) => {
                     if talk.end_if_over(&mut session, keep) {
                         show_history(&iface, &talk.chat).await;
                     }

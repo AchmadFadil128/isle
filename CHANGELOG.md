@@ -183,6 +183,7 @@ All notable changes to Isle are listed here. The format follows
   endpoint Claude does not document.
 - isled no longer keeps a note of every Claude Code and Codex session it ever heard from, which grew
   for as long as it ran.
+- With no conversation to keep, isled no longer wakes every minute to check whether it is over.
 
 ## [1.0.6] - 2026-10-24
 
