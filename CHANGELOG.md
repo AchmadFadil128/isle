@@ -28,6 +28,8 @@ All notable changes to Isle are listed here. The format follows
   instead of some of them going missing while the island showed them landing.
 - Dropping only links or files online on the shelf says "Only files on this computer" instead of
   lighting up as if they landed.
+- The clipboard history's list, which any program can read, now gives only the 160 characters of
+  each text a card shows, not 400.
 
 ## [1.0.6] - 2026-10-24
 

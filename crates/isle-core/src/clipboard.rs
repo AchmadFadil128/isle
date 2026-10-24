@@ -24,9 +24,9 @@ pub enum PinError {
 /// Longest text accepted, in bytes; anything bigger is likely a file copied by accident.
 pub const MAX_TEXT_BYTES: usize = 512 * 1024;
 
-/// Characters of text shown in previews. The full text is only sent when
-/// the item is copied again, which keeps the item list small.
-pub const PREVIEW_CHARS: usize = 400;
+/// Characters of text shown in previews: what a card shows, and no more, as any program can read the
+/// list. The full text is only sent to GNOME Shell when the item is copied again.
+pub const PREVIEW_CHARS: usize = 160;
 
 /// What was copied.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
