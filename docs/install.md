@@ -38,7 +38,8 @@ curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash
 ```
 
 It downloads the latest release, checks its checksum and installs it for
-your user. It ends with `==> Isle 0.x.y is installed`. Run it as yourself,
+your user. It ends with `==> Isle 1.x.y is installed` and what to do next:
+log out and back in, and how to check or remove Isle. Run it as yourself,
 **without sudo**: everything goes in your own home folder, and it refuses to
 run as root. On a GNOME Shell version Isle was not made for it stops before
 changing anything.
@@ -106,7 +107,7 @@ curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash
 ```
 
 To install a particular version instead, put `ISLE_VERSION` before `bash`:
-`… | ISLE_VERSION=0.1.2 bash`.
+`… | ISLE_VERSION=1.0.5 bash`.
 
 ## Uninstalling
 
@@ -235,8 +236,10 @@ switch), it switches them on.
 gnome-extensions info isle@zickrian.github.io   # State: ACTIVE (or ENABLED)
 ```
 
-If it says `ERROR` or `OUT OF DATE`, your GNOME Shell version is outside 46
-to 51.
+If it says `OUT OF DATE`, your GNOME Shell version is outside 46 to 51. If
+it says `ERROR`, that is most likely a bug in Isle: please
+[open an issue](https://github.com/zickrian/isle/issues) with GNOME Shell's
+log (see **Anything else** below).
 
 **Music does not show.** Check the background service:
 `systemctl --user status isled`.

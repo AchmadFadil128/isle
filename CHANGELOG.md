@@ -36,6 +36,9 @@ All notable changes to Isle are listed here. The format follows
   needs Rust 1.92), instead of stopping the whole install.
 - The installer no longer stops without a word when isled cannot be set to start with the session; it
   says so and finishes.
+- The installation guide and settings descriptions are up to date: the installer's last lines, a
+  current version to pin, an `ERROR` state as a bug to report, the link for building from source, and
+  the voice assistant's AI as Claude Code, Codex or Antigravity rather than only agy.
 
 ## [1.0.6] - 2026-10-24
 

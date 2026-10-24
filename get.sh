@@ -2,7 +2,7 @@
 # Installs the latest Isle release for the current user, with no building:
 #   curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash
 #
-# ISLE_VERSION=0.1.1 picks a release; ISLE_PACKAGE=path/to/isle-….tar.gz installs a package already
+# ISLE_VERSION=1.0.5 picks a release; ISLE_PACKAGE=path/to/isle-….tar.gz installs a package already
 # downloaded; ISLE_FORCE=1 installs on a GNOME Shell version Isle was not made for.
 set -euo pipefail
 
@@ -85,7 +85,7 @@ find_package() {
         echo "The release is still being published; trying again in $RETRY_WAIT s." >&2
         sleep "$RETRY_WAIT"
     done
-    fail "no ready-built Isle for $ARCH; build it from source instead (see github.com/$REPO#from-source)."
+    fail "no ready-built Isle for $ARCH; build it from source instead (see github.com/$REPO#other-ways-to-install)."
 }
 
 main() {
