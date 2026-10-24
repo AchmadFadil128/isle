@@ -322,6 +322,8 @@ export function reminder({id, text}, onShown) {
         icon: 'isle-bell',
         motion: 'ring',
         title: text,
+        // Its words are the point: two lines, as a meeting's title.
+        titleLines: 2,
         subtitle: 'Reminder',
         tone: 'neutral',
         duration: REMINDER_DURATION,
@@ -442,6 +444,7 @@ export function agentDone(event, look, show) {
         key: `agent:${event.provider}:${event.session || event.project}`,
         bot: {look, glyph: 'check', form: 'success'},
         title: summary,
+        titleLines: 2,
         subtitle: `${[event.project, AGENT_APPS[event.provider]].filter(Boolean).join(' · ')} finished`,
         tone: 'good',
         glow: DONE_GLOW,
@@ -461,7 +464,7 @@ function firstSentence(text) {
         .replace(/(^|[^\w])_([^_]+)_(?=[^\w]|$)/g, '$1$2')
         .replace(/(^|[^\w*])\*([^*]+)\*(?=[^\w*]|$)/g, '$1$2')
         .trim();
-    return first.length > 90 ? `${first.slice(0, 89).trimEnd()}…` : first;
+    return first.length > 140 ? `${first.slice(0, 139).trimEnd()}…` : first;
 }
 
 /** Isle's assistant wants to run `card.command` while the island is closed; `answer(run)` decides. */
@@ -576,8 +579,8 @@ export function assistant(state, open) {
         icon: failed ? 'dialog-warning-symbolic' : 'isle-mic-symbolic',
         motion: failed ? 'shake' : 'bounce',
         title: text,
-        // An answer may take two lines, as a notification's text does.
-        titleLines: 2,
+        // An answer may take three lines, so a question at its end still shows.
+        titleLines: 3,
         subtitle: failed ? state.hint ?? '' : 'Isle Assistant',
         tone: failed ? 'bad' : 'good',
         // Long enough to read, as the open island gives it.

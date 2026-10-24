@@ -239,12 +239,12 @@ class PeekView extends St.Widget {
             playMotion(moving, alert.motion, {delay: RING_DELAY});
         this._motionKey = motionKey;
 
-        // Two lines at most for a title that may run long (an answer); the island widens and grows by the
-        // line. Cut here: with wrapping, Pango's own … would keep the first line alone.
+        // A few lines at most for a title that may run long (an answer, a reminder); the island widens and
+        // grows by the line. Cut here: with wrapping, Pango's own … would keep the first line alone.
         let title = alert.title ?? '';
         this._titleLines = 1;
-        if (alert.titleLines === 2)
-            [title, this._titleLines, this._lineHeight] = this._fitLines(title, 2);
+        if (alert.titleLines > 1)
+            [title, this._titleLines, this._lineHeight] = this._fitLines(title, alert.titleLines);
         const wrap = this._titleLines > 1;
         this._title.clutter_text.line_wrap = wrap;
         this._title.clutter_text.ellipsize = wrap ? Pango.EllipsizeMode.NONE : Pango.EllipsizeMode.END;
