@@ -6,6 +6,11 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The closed island no longer runs fades to the opacity its music bars and clock already have each time
+  a song, the timer or a call changes.
+
 ### Fixed
 
 - Ticking a reminder off no longer drops a frame as its strike draws: only its title and tick box are

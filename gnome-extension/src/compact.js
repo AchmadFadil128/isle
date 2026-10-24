@@ -16,7 +16,7 @@ import * as Format from './format.js';
 import * as Palette from './palette.js';
 import * as Playback from './playback.js';
 import {watchClock} from './wallClock.js';
-import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon} from './widgets.js';
+import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon, restsAt} from './widgets.js';
 
 /** The assistant at work, in the right slot. */
 const ASSISTANT_SIZE = 18;
@@ -290,9 +290,12 @@ export const CompactView = GObject.registerClass({
             this._privacyDots.add_style_class_name('isle-privacy-dots-in-slot');
         else
             this._privacyDots.remove_style_class_name('isle-privacy-dots-in-slot');
-        // Paused: the bars rest, dimmed.
-        for (const bars of [this._bars, this._secondBars])
-            bars.ease({opacity: playing ? 255 : PAUSED_OPACITY, duration: 200});
+        // Paused: the bars rest, dimmed. Eased only to a change: each refresh ran two 200 ms eases to nothing.
+        for (const bars of [this._bars, this._secondBars]) {
+            const opacity = playing ? 255 : PAUSED_OPACITY;
+            if (!restsAt(bars, 'opacity', opacity))
+                bars.ease({opacity, duration: 200});
+        }
         this._syncBars();
         const outside = this._privacyDots.visible && !inSlot;
         this._privacyBalance.visible = outside;
@@ -329,7 +332,8 @@ export const CompactView = GObject.registerClass({
                     other.opacity = 0;
                     other.show();
                 }
-                other.ease({opacity: 255, duration: 200});
+                if (!restsAt(other, 'opacity', 255))
+                    other.ease({opacity: 255, duration: 200});
             } else if (other.visible) {
                 other.ease({opacity: 0, duration: 150, onComplete: () => other.hide()});
             }
