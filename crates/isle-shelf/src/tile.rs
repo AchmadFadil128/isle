@@ -137,22 +137,6 @@ pub fn new(item: &Item, fresh: bool, on_remove: impl Fn(String) + 'static) -> gt
     tile.upcast()
 }
 
-/// The empty slot at the front of the shelf while a file is dragged in: the
-/// place where it will land.
-pub fn slot() -> gtk::Widget {
-    let square = preview_square(&["preview", "slot"]);
-    square.append(
-        &gtk::Image::builder()
-            .icon_name("list-add-symbolic")
-            .pixel_size(18)
-            .hexpand(true)
-            .halign(gtk::Align::Center)
-            .valign(gtk::Align::Center)
-            .build(),
-    );
-    tile_box(&frame(&square, None), "Drop here", true).upcast()
-}
-
 fn preview_square(classes: &[&str]) -> gtk::Box {
     gtk::Box::builder()
         .width_request(PREVIEW_SIZE)

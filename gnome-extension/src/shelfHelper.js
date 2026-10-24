@@ -6,6 +6,7 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
 const BUS_NAME = 'io.github.zickrian.isle.ShelfWindow';
@@ -17,6 +18,12 @@ const ShelfWindowProxy = Gio.DBusProxy.makeProxyWrapper(`
     <arg name="width" type="i" direction="in"/><arg name="height" type="i" direction="in"/>
   </method>
   <method name="ShowOver">
+    <arg name="x" type="i" direction="in"/><arg name="y" type="i" direction="in"/>
+    <arg name="width" type="i" direction="in"/><arg name="height" type="i" direction="in"/>
+    <arg name="ax" type="i" direction="in"/><arg name="ay" type="i" direction="in"/>
+    <arg name="awidth" type="i" direction="in"/><arg name="aheight" type="i" direction="in"/>
+  </method>
+  <method name="Place">
     <arg name="x" type="i" direction="in"/><arg name="y" type="i" direction="in"/>
     <arg name="width" type="i" direction="in"/><arg name="height" type="i" direction="in"/>
     <arg name="ax" type="i" direction="in"/><arg name="ay" type="i" direction="in"/>
@@ -57,12 +64,16 @@ export class ShelfHelper extends Signals.EventEmitter {
         this._shownArea = null;
         /** A helper from before 1.0.1 has no ShowOver: the window then only ever covers the tab. */
         this._showsOver = true;
+        /** One from before 1.0.7 has no Place: its window grows over the island only while a file comes in. */
+        this._places = true;
         /** A file is being dragged out of the helper window. */
         this._dragging = false;
         this._cancellable = new Gio.Cancellable();
 
         this._checkAvailable();
         this._watchDrags();
+        // The overview covers windows, this one too: the tab shows its own tiles meanwhile.
+        this._overviewIds = ['showing', 'hidden'].map(signal => Main.overview.connect(signal, () => this.sync()));
     }
 
     /** Whether the helper is installed, so files can be dropped on the shelf. */
@@ -108,7 +119,7 @@ export class ShelfHelper extends Signals.EventEmitter {
             this._candidate = null;
             // Mid-drag a passing layout change must not take the window from under the file:
             // it would leave and come back, and the light would blink.
-            if (!(this._dragNear && this._shownRect && this._page.active && this._page.visible && this._island.mapped))
+            if (Main.overview.visible || !(this._dragNear && this._shownRect && this._page.active && this._page.visible && this._island.mapped))
                 this._hide();
             return;
         }
@@ -135,6 +146,12 @@ export class ShelfHelper extends Signals.EventEmitter {
         const shown = (_result, error) => {
             if (!this._proxy) // destroyed meanwhile
                 return;
+            if (error?.matches(Gio.DBusError, Gio.DBusError.UNKNOWN_METHOD) && this._places) {
+                this._places = false;
+                this._shownRect = this._shownArea = null;
+                this.sync();
+                return;
+            }
             if (error?.matches(Gio.DBusError, Gio.DBusError.UNKNOWN_METHOD) && this._showsOver) {
                 this._showsOver = false;
                 this._shownRect = this._shownArea = null;
@@ -165,29 +182,39 @@ export class ShelfHelper extends Signals.EventEmitter {
             this._shownRect = this._shownArea = null;
             this._page.helperActive = false;
         };
-        if (same(rect, area))
+        if (this._places)
+            this._proxy.PlaceRemote(rect.x, rect.y, rect.width, rect.height, area.x, area.y, area.width, area.height, shown);
+        else if (same(rect, area))
             this._proxy.ShowRemote(rect.x, rect.y, rect.width, rect.height, shown);
         else
             this._proxy.ShowOverRemote(rect.x, rect.y, rect.width, rect.height, area.x, area.y, area.width, area.height, shown);
     }
 
     /** Where the window goes ({rect, area}, the tab's area inside it), once the island's shape covers both; else null.
-     * While a file is dragged in it covers the whole island, so the file lands wherever it is let go. */
+     * It covers the whole island, so a file lands wherever it is let go; it stays put as one comes in (the helper
+     * lets the pointer through outside the tab until then). An older helper covers the island only meanwhile. */
     _wantedRect() {
         const page = this._page;
         const area = page.helperArea;
-        if (!area || !page.active || !page.visible || !area.mapped ||
+        if (!area || Main.overview.visible || !page.active || !page.visible || !area.mapped ||
             page.translation_x !== 0 || page.opacity !== 255 || area.opacity !== 255)
             return null;
+        // First shown once the shape covers it; after that its last bounces (a moment smaller than it
+        // settles) must not take the window down and up again, so it is held while the shape will cover it.
+        const held = Boolean(this._shownRect);
+        const covers = rect => this._island.covers(rect) || (held && this._island.willCover(rect));
         const tab = this._island.restingRect(area);
-        if (!tab?.width || !tab.height || !this._island.covers(tab))
+        if (!tab?.width || !tab.height || !covers(tab))
             return null;
         // A pixel in from the sides and bottom: the shape's edges can fall between pixels.
-        const whole = this._dragNear && this._showsOver ? this._island.restingRect() : null;
+        const whole = this._showsOver && (this._places || this._dragNear) ? this._island.restingRect() : null;
         const body = whole && {x: whole.x + 1, y: whole.y, width: whole.width - 2, height: whole.height - 1};
-        const inside = body?.width && body.height && this._island.covers(body) &&
+        const inside = body?.width && body.height && covers(body) &&
             tab.x >= body.x && tab.y >= body.y && tab.x + tab.width <= body.x + body.width &&
             tab.y + tab.height <= body.y + body.height;
+        // Placed once, where it will stay: not over the tab first and then over the whole island a frame later.
+        if (this._places && body && !inside && !held && this._island.willCover(body))
+            return null;
         return {rect: inside ? body : tab, area: tab};
     }
 
@@ -318,6 +345,7 @@ export class ShelfHelper extends Signals.EventEmitter {
         if (this._recheck)
             GLib.source_remove(this._recheck);
         this._cancellable.cancel();
+        this._overviewIds.forEach(id => Main.overview.disconnect(id));
         this._dnd.disconnect(this._dndPosition);
         this._dnd.disconnect(this._dndLeave);
         this._hide();

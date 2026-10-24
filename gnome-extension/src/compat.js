@@ -29,6 +29,16 @@ export function grabsKeyboard(grab) {
     return !grab.is_revoked();
 }
 
+/** Maximizes `window`; GNOME 49 dropped the flags (its `Meta.MaximizeFlags` is still there, so test the version). */
+export function maximize(window) {
+    return SHELL_MAJOR >= 49 ? window.maximize() : window.maximize(Meta.MaximizeFlags.BOTH);
+}
+
+/** Unmaximizes `window`; see `maximize`. */
+export function unmaximize(window) {
+    return SHELL_MAJOR >= 49 ? window.unmaximize() : window.unmaximize(Meta.MaximizeFlags.BOTH);
+}
+
 /** Whether the shell runs on Wayland; GNOME 50 dropped X11 and the check. */
 export function isWayland() {
     return Meta.is_wayland_compositor?.() ?? true;

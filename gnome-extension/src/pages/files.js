@@ -29,7 +29,6 @@ const FRAME_HEIGHT = PREVIEW_SIZE + 6;
 const COPIED_MS = 1100;
 /** The dashed outlines, as the helper's style.css draws them (St borders cannot dash). */
 const ZONE_RADIUS = 16;
-const SLOT_RADIUS = 12;
 const DASH = [4, 3];
 /** The drop zone's outline and fill (white alphas): at rest, a file on its way, a file over it. */
 const ZONE = {idle: [0.22, 0.025], near: [0.35, 0.035], over: [0.65, 0.06]};
@@ -57,6 +56,8 @@ class FilesView extends St.Widget {
         this._light = 0;
         this._glow = ZONE_GLOW;
         this._lastClick = {uri: null, at: 0};
+        /** Each file's tile, kept while the file stays, so its preview never reloads (and blinks). */
+        this._tileFor = new Map();
 
         // Expanding, as BinLayout only honours START for children that do.
         this._tiles = new St.BoxLayout({
@@ -87,7 +88,7 @@ class FilesView extends St.Widget {
         this.update();
     }
 
-    /** While the helper window covers this tab, draw nothing so the two never mix. */
+    /** While the helper window covers this tab, show nothing of its own so the two never mix. */
     set helperActive(active) {
         if (active === this._helperActive)
             return;
@@ -103,12 +104,13 @@ class FilesView extends St.Widget {
         this.update();
     }
 
-    /** A file is on its way: show where it will land, as the helper does. */
+    /** A file is on its way: the zone and words say where it will land; the tiles stay as they are. */
     set dropping(dropping) {
         if (dropping === this._dropping)
             return;
         this._dropping = dropping;
-        this.update();
+        this._syncZone();
+        this._updateEmptyText();
     }
 
     /** The file is right over the drop zone. */
@@ -170,27 +172,44 @@ class FilesView extends St.Widget {
         // Not while isled is away (no list), or every preview would go.
         if (this._daemon.state.shelf)
             this._thumbnails.keepOnly(items.map(item => item.uri));
-        this._tiles.destroy_all_children();
-        const dragging = this._dropping && this._helperAvailable;
-        const full = items.length >= SHELF_CAPACITY;
-        // At rest it marks an empty shelf. Under the helper only its fill and light show: the helper,
-        // which can't know the files' colours, draws the dashes.
-        this._zone.visible = dragging || items.length === 0;
-        this._zone.queue_repaint();
-
-        if (this._helperActive) {
-            this._tiles.hide();
-            this._empty.hide();
-            return;
-        }
-        if (dragging && !full && items.length > 0)
-            this._tiles.add_child(this._slot());
-        for (const item of items)
-            this._tiles.add_child(this._tile(item));
+        this._syncTiles(items);
+        this._syncZone();
         this._tiles.visible = items.length > 0;
         this._empty.visible = items.length === 0;
-
+        // Under the helper's window they stay laid out but unseen: hidden, the tab would shrink to nothing,
+        // the window (placed by it) would go, they would show again, and round it would go, blinking.
+        for (const actor of [this._tiles, this._empty])
+            actor.opacity = this._helperActive ? 0 : 255;
         this._updateEmptyText();
+    }
+
+    /** At rest it marks an empty shelf. Under the helper only its fill and light show: the helper,
+     * which can't know the files' colours, draws the dashes. */
+    _syncZone() {
+        const dragging = this._dropping && this._helperAvailable;
+        this._zone.visible = dragging || (this._daemon.state.shelf ?? []).length === 0;
+        this._zone.queue_repaint();
+    }
+
+    /** A tile per file, newest first; a file's tile is made once and kept while it stays. */
+    _syncTiles(items) {
+        const wanted = new Set(items.map(item => item.uri));
+        for (const [uri, tile] of this._tileFor) {
+            if (!wanted.has(uri)) {
+                tile.destroy();
+                this._tileFor.delete(uri);
+            }
+        }
+        items.forEach((item, index) => {
+            let tile = this._tileFor.get(item.uri);
+            if (!tile) {
+                tile = this._tile(item);
+                this._tileFor.set(item.uri, tile);
+                this._tiles.insert_child_at_index(tile, index);
+            } else if (this._tiles.get_child_at_index(index) !== tile) {
+                this._tiles.set_child_at_index(tile, index);
+            }
+        });
     }
 
     /** What the empty shelf says, as the helper does: where to drop, and what then. */
@@ -241,31 +260,6 @@ class FilesView extends St.Widget {
                 preview.child = new St.Icon({gicon: shown.gicon, icon_size: ICON_SIZE});
             }
         });
-        return tile;
-    }
-
-    /** The empty slot a dragged file will land in. */
-    _slot() {
-        const square = new St.Widget({
-            style_class: 'isle-shelf-preview isle-shelf-slot',
-            layout_manager: new Clutter.BinLayout(),
-            width: PREVIEW_SIZE,
-            height: PREVIEW_SIZE,
-        });
-        const dashes = new St.DrawingArea({x_expand: true, y_expand: true});
-        dashes.connect('repaint', area => {
-            const cr = area.get_context();
-            const [width, height] = area.get_surface_size();
-            roundedRect(cr, width, height, SLOT_RADIUS, 0.5);
-            cr.setSourceRGBA(1, 1, 1, 0.45);
-            strokeDashed(cr);
-            cr.$dispose();
-        });
-        square.add_child(dashes);
-        square.add_child(new St.Icon({gicon: icon('isle-plus-symbolic'), icon_size: 18,
-            x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER}));
-        const tile = this._tileBox(this._frame(square), 'Drop here');
-        tile.reactive = false;
         return tile;
     }
 

@@ -45,13 +45,14 @@ struct Inner {
     daemon: RefCell<Option<gio::DBusProxy>>,
     /// Where the window belongs (x, y, width, height), kept for re-placing.
     area: Cell<Option<(i32, i32, i32, i32)>>,
+    /// The files' area inside the window (x, y, width, height): with `Place`, the only part that takes
+    /// the pointer until a file is dragged in, so the island around it keeps its clicks.
+    input: Cell<Option<(i32, i32, i32, i32)>>,
     /// The files on the shelf, newest first.
     items: RefCell<Vec<Item>>,
     /// Each file's tile, kept while the file stays, so its thumbnail loads
     /// once; files without one are new and fade in.
     tile_cache: RefCell<HashMap<String, gtk::Widget>>,
-    /// Where a dragged file will land.
-    slot: gtk::Widget,
     /// A file is being dragged towards the island (the extension says so).
     near: Cell<bool>,
     /// A file is being dragged over this window.
@@ -108,7 +109,7 @@ impl ShelfWindow {
             area: Cell::default(),
             items: RefCell::default(),
             tile_cache: RefCell::default(),
-            slot: tile::slot(),
+            input: Cell::default(),
             near: Cell::default(),
             over: Cell::default(),
             idle_quit: RefCell::default(),
@@ -119,7 +120,10 @@ impl ShelfWindow {
             if let Some(inner) = weak.upgrade() {
                 // Just after GDK's own placement on mapping, so this one wins.
                 let shelf = ShelfWindow(inner);
-                glib::idle_add_local_once(move || shelf.place());
+                glib::idle_add_local_once(move || {
+                    shelf.place();
+                    shelf.limit_input();
+                });
             }
         });
         shelf.connect_daemon();
@@ -135,20 +139,53 @@ impl ShelfWindow {
         self.show_over((x, y, width, height), (x, y, width, height));
     }
 
+    /// Like `show_over`, for the whole time the tab is open: the window stays put as a file is dragged
+    /// in (nothing moves or jumps), and only `area` takes the pointer until one is.
+    pub fn place_over(&self, window: (i32, i32, i32, i32), area: (i32, i32, i32, i32)) {
+        let (x, y, ..) = window;
+        let (ax, ay, awidth, aheight) = area;
+        self.0.input.set(Some((ax - x, ay - y, awidth, aheight)));
+        self.set_margins(window, area);
+        self.place_window(window);
+        self.limit_input();
+    }
+
     /// Shows the window over `window`, with the files in `area` inside it; the rest is see-through
     /// and still takes drops.
     pub fn show_over(&self, window: (i32, i32, i32, i32), area: (i32, i32, i32, i32)) {
-        let (x, y, width, height) = window;
-        let (ax, ay, awidth, aheight) = area;
+        self.0.input.set(None);
+        self.set_margins(window, area);
+        self.place_window(window);
+        self.limit_input();
+    }
+
+    fn set_margins(
+        &self,
+        (x, y, width, height): (i32, i32, i32, i32),
+        (ax, ay, awidth, aheight): (i32, i32, i32, i32),
+    ) {
         let stack = &self.0.stack;
         stack.set_margin_start(ax - x);
         stack.set_margin_top(ay - y);
         stack.set_margin_end(x + width - (ax + awidth));
         stack.set_margin_bottom(y + height - (ay + aheight));
-        self.place_window(x, y, width, height);
     }
 
-    fn place_window(&self, x: i32, y: i32, width: i32, height: i32) {
+    /// Lets the pointer through outside the files' area, but while a file is dragged in.
+    fn limit_input(&self) {
+        let Some(surface) = self.0.window.surface() else {
+            return;
+        };
+        match self.0.input.get() {
+            Some((x, y, width, height)) if !self.0.near.get() => {
+                let rect = gtk::cairo::RectangleInt::new(x, y, width, height);
+                surface.set_input_region(Some(&gtk::cairo::Region::create_rectangle(&rect)));
+            }
+            _ => surface.set_input_region(None),
+        }
+    }
+
+    fn place_window(&self, (x, y, width, height): (i32, i32, i32, i32)) {
         if let Some(quit) = self.0.idle_quit.take() {
             quit.remove();
         }
@@ -198,6 +235,7 @@ impl ShelfWindow {
     /// shows where it will land before the pointer even gets here.
     pub fn set_dropping(&self, dropping: bool) {
         if self.0.near.replace(dropping) != dropping {
+            self.limit_input();
             self.render();
         }
     }
@@ -360,16 +398,7 @@ impl ShelfWindow {
         set_class(&inner.stack, "full", dragging && full);
         set_class(&inner.stack, "empty", count == 0 && !dragging);
 
-        // Where the file will land: the newest file comes first. The tiles stay as they are.
-        let slot = dragging && !full && count > 0;
-        if slot != inner.slot.parent().is_some() {
-            if slot {
-                inner.tiles.prepend(&inner.slot);
-            } else {
-                inner.tiles.remove(&inner.slot);
-            }
-        }
-
+        // The tiles stay as they are while a file comes in: nothing makes room or moves.
         let (title, hint) = if inner.over.get() && !full {
             (
                 "Release to add it",
@@ -394,7 +423,7 @@ impl ShelfWindow {
     }
 
     /// Lays out a tile per file, newest first, reusing the tiles of files
-    /// already shown. With `mark_new`, tiles for new files fade in. Then `render` adds the slot back.
+    /// already shown. With `mark_new`, tiles for new files fade in.
     fn render_tiles(&self, mark_new: bool) {
         let inner = &self.0;
         while let Some(child) = inner.tiles.first_child() {

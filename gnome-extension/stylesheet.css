@@ -892,9 +892,6 @@
 .isle-shelf-preview { border-radius: 12px; }
 .isle-shelf-preview.thumbnail { background-color: #2c2c2e; background-size: cover; }
 
-/* Where a dragged file will land. */
-.isle-shelf-slot { color: rgba(255, 255, 255, 0.8); }
-
 .isle-shelf-copied { border-radius: 12px; background-color: rgba(0, 0, 0, 0.6); }
 
 /* Always there, so a file can always be taken off the shelf. */

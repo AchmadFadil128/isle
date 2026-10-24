@@ -6,6 +6,15 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Dragging files onto the shelf is smooth: the Files tab no longer blinks while the island opens on it
+  (its window went away and came back about ten times), nor jumps as a file comes near (the window grew
+  over the whole island and back), and the "Drop here" tile no longer pushes the files aside. A file let
+  go anywhere on the island still lands on the shelf, and the island's tabs keep their clicks.
+- In the Activities overview the Files tab shows its files instead of an empty tray.
+- Maximizing and arranging windows by voice no longer logs warnings on GNOME 49 and later.
+
 ## [1.0.6] - 2026-10-24
 
 ### Fixed

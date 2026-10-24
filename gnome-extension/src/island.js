@@ -213,6 +213,17 @@ export const Island = GObject.registerClass({
             y + height <= top + Math.max(0, this._height.value);
     }
 
+    /** Whether the island's shape will cover `rect` once it settles: its body is centred on the monitor. */
+    willCover({x, y, width, height}) {
+        if (!this._monitor)
+            return false;
+        const {x: monitorX, y: top, width: monitorWidth} = this._monitor;
+        const bodyWidth = Math.max(0, this._width.target);
+        const bodyLeft = monitorX + (monitorWidth - bodyWidth) / 2;
+        return x >= bodyLeft && x + width <= bodyLeft + bodyWidth && y >= top &&
+            y + height <= top + Math.max(0, this._height.target);
+    }
+
     /** Animates to `size` ({width, height, radius, shoulder}) and shows `view`, already sized to fit. */
     morph(size, view) {
         // Content travels with the shape: out with it as it grows, in from it as it shrinks.

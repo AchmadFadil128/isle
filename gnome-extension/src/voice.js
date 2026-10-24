@@ -18,7 +18,7 @@ import {TILES, describeActions, failed, namesProject, outcomeOf, runnable, slots
 import {Bot} from './bot.js';
 import {ChatView, CommandCard, answerMarkup, elapsed} from './chat.js';
 import {isTerminal} from './clipboard.js';
-import {VERTICAL} from './compat.js';
+import {VERTICAL, maximize, unmaximize} from './compat.js';
 import {plainBody} from './notifications.js';
 import {icon, iconButton, pillButton, wrapLines} from './widgets.js';
 
@@ -1232,13 +1232,13 @@ async function called(daemon, ...args) {
 }
 
 
-// What `window` does to a window; GNOME 49 dropped the flags to maximize with.
+// What `window` does to a window.
 const WINDOW_COMMANDS = {
     focus: window => Main.activateWindow(window),
     close: window => window.delete(global.get_current_time()),
     minimize: window => window.minimize(),
-    maximize: window => (Meta.MaximizeFlags ? window.maximize(Meta.MaximizeFlags.BOTH) : window.maximize()),
-    unmaximize: window => (Meta.MaximizeFlags ? window.unmaximize(Meta.MaximizeFlags.BOTH) : window.unmaximize()),
+    maximize,
+    unmaximize,
     fullscreen: window => window.make_fullscreen(),
     unfullscreen: window => window.unmake_fullscreen(),
     ...Object.fromEntries(Object.entries(TILES).map(([name, slot]) => [name, window => tile(window, slot)])),
