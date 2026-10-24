@@ -189,7 +189,8 @@
 /* ── Alerts (peek) ────────────────────────────────────── */
 
 .isle-peek-row { padding: 0 14px; spacing: 10px; }
-.isle-peek-row-asks { padding: 0 22px 0 20px; spacing: 14px; }
+/* At the top, as its texts and the assistant beside them are (peek.js): the room above them that centring gave. */
+.isle-peek-row-asks { padding: 13px 22px 0 20px; spacing: 14px; }
 
 /* The badge's colour comes from the alert (peek.js); a hairline on top
  * gives it depth. */
