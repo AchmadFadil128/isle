@@ -28,6 +28,8 @@ const OWN_COLOR = [255, 159, 10];
 const PILL_ALPHA = 0.18;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** An event's ×: a 10 px icon and 3 px around it. */
+const REMOVE_SIZE = 16;
 
 /** "2026-10-21" for a local Date. */
 function dayKey(date) {
@@ -54,8 +56,10 @@ function timeText(date) {
     return Format.timeOfDay(dateTime(date));
 }
 
-/** Its alarm is planned again at least this often, as a sleeping computer stops the time-outs' clock. */
-const ALARM_CHECK_MS = 10 * 60 * 1000;
+/** An alarm's wait is cut into naps this long at most: a sleeping computer stops the time-outs' clock. */
+const ALARM_NAP_MS = 30 * 1000;
+/** The events already alarmed, by id (or title) and start; kept as the screen locks and Isle starts again. */
+const alarmed = new Set();
 
 // Signals: `event-soon` (json): an event with a time starts in `alarmLead` minutes, {id, title, start_ms,
 // end_ms}; `id` is GNOME's (source, event and recurrence, a line each), null for one of Isle's own.
@@ -89,35 +93,27 @@ export const CalendarPage = GObject.registerClass({
         this.connect('destroy', () => this._unbindSource());
         /** How long before an event its alarm goes, in ms; 0: none. */
         this._alarmLeadMs = 0;
-        /** The events already alarmed, by id (or title) and start. */
-        this._alarmed = new Set();
         this._refresh();
     }
 
     /** Minutes before an event with a time that `event-soon` is emitted; 0 turns it off. */
     set alarmLead(minutes) {
         this._alarmLeadMs = Math.max(0, minutes) * 60000;
-        // The desktop's events of this month, to know what comes even if the page never opens.
+        // The desktop's events of today and tomorrow, to know what comes even if the page never opens.
         this._bindSource();
-        this._requestThisMonth();
+        this._requestRange();
         this._scheduleAlarm();
         // Each new day (and month) asked for, opened or not.
         this._scheduleMidnight();
     }
 
-    /** Asks the desktop's calendars for the current month, where today's events are. */
-    _requestThisMonth() {
-        const today = new Date();
-        this._requestRange(new Date(today.getFullYear(), today.getMonth(), 1));
-    }
-
-    /** Asks for the month from `begin` and, for this month, tomorrow too: on its last day, the alarms look
-     * a day ahead. The calendars answer with `changed`. */
-    _requestRange(begin) {
+    /** Asks the desktop's calendars for the month shown, the day picked, and today and tomorrow for the alarms:
+     * GNOME's source keeps only the range asked for last. They answer with `changed`. */
+    _requestRange() {
         const today = startOfDay(new Date());
-        let end = new Date(begin.getFullYear(), begin.getMonth() + 1, 1);
-        if (begin.getFullYear() === today.getFullYear() && begin.getMonth() === today.getMonth())
-            end = new Date(Math.max(end, addDays(today, 2)));
+        const monthEnd = new Date(this._month.getFullYear(), this._month.getMonth() + 1, 1);
+        const begin = new Date(Math.min(this._month, this._selected, today));
+        const end = new Date(Math.max(monthEnd, addDays(this._selected, 1), addDays(today, 2)));
         try {
             this._source?.requestRange(begin, end);
         } catch (e) {
@@ -134,23 +130,24 @@ export const CalendarPage = GObject.registerClass({
         const today = startOfDay(new Date());
         const key = event => `${event.id ?? event.title}@${event.start.getTime()}`;
         // Forget the alarms of events gone by.
-        for (const done of this._alarmed) {
+        for (const done of alarmed) {
             if (Number(done.slice(done.lastIndexOf('@') + 1)) < now)
-                this._alarmed.delete(done);
+                alarmed.delete(done);
         }
         const next = [...this._eventsOn(today), ...this._eventsOn(addDays(today, 1))]
-            .filter(event => !event.allDay && event.start.getTime() > now && !this._alarmed.has(key(event)))
+            .filter(event => !event.allDay && event.start.getTime() > now && !alarmed.has(key(event)))
             .sort((a, b) => a.start - b.start)[0];
         if (!next)
             return;
-        const due = next.start.getTime() - this._alarmLeadMs - now;
+        const at = next.start.getTime() - this._alarmLeadMs;
         // Kept while the page is closed: the alarms are for the desktop, not the page.
-        if (due > ALARM_CHECK_MS) {
-            this.later('alarm', ALARM_CHECK_MS, () => this._scheduleAlarm(), {keep: true});
-            return;
-        }
-        this.later('alarm', Math.max(0, due), () => {
-            this._alarmed.add(key(next));
+        this.later('alarm', Math.min(Math.max(0, at - now), ALARM_NAP_MS), () => {
+            // Not yet: after a nap, planned again from the events as they are now.
+            if (at > Date.now()) {
+                this._scheduleAlarm();
+                return;
+            }
+            alarmed.add(key(next));
             // Late past its start (the computer slept): too late to remind of it.
             if (next.start.getTime() > Date.now()) {
                 this.emit('event-soon', JSON.stringify({id: next.id, title: next.title,
@@ -174,6 +171,8 @@ export const CalendarPage = GObject.registerClass({
         title.add_child(this._year);
         const titleButton = new St.Button({style_class: 'isle-cal-month-title', child: title, can_focus: true, accessible_name: 'Go to today', x_expand: true, x_align: Clutter.ActorAlign.START});
         titleButton.connect('clicked', () => this._goToToday());
+        // Its text on the page's edge, as the other pages' titles; the pill it lights on hover reaches past it.
+        titleButton.translation_x = -4;
         header.add_child(titleButton);
         header.add_child(iconButton('isle-chevron-left-symbolic', 'isle-button-flat isle-cal-arrow',
             () => this._moveMonth(-1), {size: 11, accessibleName: 'Previous month'}));
@@ -184,13 +183,16 @@ export const CalendarPage = GObject.registerClass({
         const weekdays = new St.BoxLayout({style_class: 'isle-cal-weekdays'});
         this._weekStart = Shell.util_get_week_start();
         this._weekend = Format.weekendDays(GLib.getenv('LC_ALL') || GLib.getenv('LC_TIME') || GLib.getenv('LANG') || '');
-        for (let i = 0; i < 7; i++) {
-            // 4 Jan 1970 was a Sunday.
-            const day = new Date(1970, 0, 4 + (this._weekStart + i) % 7);
-            const letter = dateTime(day).format('%a').slice(0, 1).toUpperCase();
+        // 4 Jan 1970 was a Sunday.
+        const days = [...Array(7).keys()].map(i => new Date(1970, 0, 4 + (this._weekStart + i) % 7));
+        const names = days.map(day => dateTime(day).format('%a'));
+        // A letter each, unless that says too little: two where most days share one ("CN T2 T3" in Vietnamese).
+        const initials = names.map(name => name.slice(0, 1).toUpperCase());
+        const short = new Set(initials).size < 4 ? names.map(name => name.slice(0, 2).toUpperCase()) : initials;
+        days.forEach((day, i) => {
             const weekend = this._weekend.includes(day.getDay());
-            weekdays.add_child(label(letter, `isle-cal-weekday${weekend ? ' weekend' : ''}`, {x_align: Clutter.ActorAlign.CENTER}));
-        }
+            weekdays.add_child(label(short[i], `isle-cal-weekday${weekend ? ' weekend' : ''}`, {x_align: Clutter.ActorAlign.CENTER}));
+        });
         column.add_child(weekdays);
 
         this._grid = new St.BoxLayout({...VERTICAL, style_class: 'isle-cal-grid', height: GRID_HEIGHT, y_align: Clutter.ActorAlign.START});
@@ -352,7 +354,7 @@ export const CalendarPage = GObject.registerClass({
     warmUp() {
         this._bindSource();
         this._followToday();
-        this._requestMonth();
+        this._requestRange();
         this._refresh(true);
     }
 
@@ -385,6 +387,7 @@ export const CalendarPage = GObject.registerClass({
         const events = this._eventsOn(this._selected);
         const agenda = JSON.stringify([
             this._selected.getTime(),
+            Format.uses12Hour(),
             events.map(e => [e.title, +e.start, +e.end, e.allDay, e.ownId, !e.allDay && (e.end ?? e.start) < now]),
         ]);
         if (agenda !== this._shownAgenda) {
@@ -397,7 +400,8 @@ export const CalendarPage = GObject.registerClass({
     _renderMonth(busy) {
         const month = this._month;
         const now = GLib.DateTime.new_local(month.getFullYear(), month.getMonth() + 1, 1, 0, 0, 0);
-        this._monthName.text = now.format('%B').toUpperCase();
+        // The month's name standing alone, as some languages write it apart from a date.
+        this._monthName.text = now.format('%OB').toUpperCase();
         this._year.text = String(month.getFullYear());
 
         const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
@@ -469,8 +473,8 @@ export const CalendarPage = GObject.registerClass({
         this._dayName.text = `${name}, ${dateTime(day).format('%-d %B')}`;
         this._todayButton.visible = offset !== 0 || this._month.getMonth() !== this._today.getMonth() ||
             this._month.getFullYear() !== this._today.getFullYear();
-        // "8:00 pm" or "20:00", as the clock is set.
-        const eight = Format.timeOfDay(GLib.DateTime.new_local(2000, 1, 1, 20, 0, 0)).toLowerCase();
+        // "8:00 PM" or "20:00", as the clock is set; written the way Isle reads it, not the locale's "8:00 p. m.".
+        const eight = Format.uses12Hour() ? '8:00 PM' : '20:00';
         this._entry.hint_text = `Add event · e.g. Dinner ${eight}`;
     }
 
@@ -482,13 +486,15 @@ export const CalendarPage = GObject.registerClass({
             this._scroll.vadjustment.value = 0;
         this._listedDay = day;
         const now = new Date();
+        // With Isle's own events (×) among them, the others keep the ×'s room, so all their times line up.
+        const removable = events.some(event => event.ownId !== null);
         for (const event of events)
-            this._list.add_child(this._eventRow(event, now));
+            this._list.add_child(this._eventRow(event, now, removable));
         this._noEvents.visible = events.length === 0;
         this._scroll.visible = events.length > 0;
     }
 
-    _eventRow(event, now) {
+    _eventRow(event, now, removable) {
         // Only Isle's own events take the pointer (for ×); the desktop's calendars' are to read, not open.
         const row = new St.BoxLayout({style_class: 'isle-cal-event', reactive: event.ownId !== null});
         const [r, g, b] = event.color;
@@ -508,7 +514,7 @@ export const CalendarPage = GObject.registerClass({
             // An event that began on an earlier day shows when it ends.
             const startsToday = event.start >= startOfDay(this._selected);
             when = startsToday ? timeText(event.start) : `until ${timeText(event.end)}`;
-            if (startsToday && event.end && event.end > event.start && event.end - startOfDay(this._selected) < DAY_MS)
+            if (startsToday && event.end && event.end > event.start && event.end < addDays(startOfDay(this._selected), 1))
                 when += ` – ${timeText(event.end)}`;
         }
         row.add_child(label(when, 'isle-cal-event-time'));
@@ -521,10 +527,13 @@ export const CalendarPage = GObject.registerClass({
                     removing = true;
                     this.daemon.call('calendar', 'Remove', event.ownId);
                 }
-            }, {size: 10, accessibleName: 'Remove event'});
+            }, {size: REMOVE_SIZE - 6, accessibleName: 'Remove event'});
             remove.opacity = 0;
             onHover(row, hovered => remove.ease({opacity: hovered ? 255 : 0, duration: 120}));
             row.add_child(remove);
+        } else if (removable) {
+            // As wide as the ×: its icon and padding (see .isle-task-remove).
+            row.add_child(new St.Widget({width: REMOVE_SIZE}));
         }
         return row;
     }
@@ -535,23 +544,18 @@ export const CalendarPage = GObject.registerClass({
         this._selected = day;
         if (day.getMonth() !== this._month.getMonth() || day.getFullYear() !== this._month.getFullYear())
             this._month = new Date(day.getFullYear(), day.getMonth(), 1);
-        this._requestMonth();
+        this._requestRange();
         this._refresh();
     }
 
     _moveMonth(step) {
         this._month = new Date(this._month.getFullYear(), this._month.getMonth() + step, 1);
-        this._requestMonth();
+        this._requestRange();
         this._refresh();
     }
 
     _goToToday() {
         this._select(startOfDay(new Date()));
-    }
-
-    /** Asks the desktop's calendars for the month shown; they answer with `changed`. */
-    _requestMonth() {
-        this._requestRange(this._month);
     }
 
     async _add() {
@@ -576,8 +580,8 @@ export const CalendarPage = GObject.registerClass({
         this.later('midnight', addDays(startOfDay(now), 1) - now + 1000, () => {
             if (!this._followToday())
                 this._refresh();
-            // A new month: its events, for the alarms; the same range answers nothing, so plan anew too.
-            this._requestThisMonth();
+            // A new day: its events, for the alarms; the same range answers nothing, so plan anew too.
+            this._requestRange();
             this._scheduleAlarm();
             this._scheduleMidnight();
         }, {keep: true});
@@ -586,7 +590,7 @@ export const CalendarPage = GObject.registerClass({
     onActivate() {
         this._bindSource();
         if (!this._followToday()) {
-            this._requestMonth();
+            this._requestRange();
             this._refresh();
         }
         this._scheduleMidnight();
@@ -594,8 +598,5 @@ export const CalendarPage = GObject.registerClass({
 
     onDeactivate() {
         this._stopAdding();
-        // Left on another month: the alarms need this one's events.
-        if (this._alarmLeadMs)
-            this._requestThisMonth();
     }
 });

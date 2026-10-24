@@ -122,7 +122,7 @@ class TasksPage extends Page {
         const row = new St.BoxLayout({style_class: 'isle-reminder isle-reminder-new', y_expand: false});
         row.add_child(new St.Widget({style_class: 'isle-reminder-check faint', y_align: Clutter.ActorAlign.CENTER}));
         const column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true});
-        this._entry = new St.Entry({style_class: 'isle-reminder-field', hint_text: 'New Reminder', can_focus: true, x_expand: true});
+        this._entry = new St.Entry({style_class: 'isle-reminder-field', hint_text: 'New reminder', can_focus: true, x_expand: true});
         const content = new St.BoxLayout({style_class: 'isle-reminder-content', y_expand: true});
         content.add_child(this._entry);
         column.add_child(content);
@@ -226,7 +226,7 @@ class TasksPage extends Page {
         }
         this._known = new Set(shown.map(task => task.id));
         this._empty.visible = shown.length === 0;
-        this._empty.text = tasks.length > shown.length ? 'All Done' : 'No Reminders';
+        this._empty.text = tasks.length > shown.length ? 'All done' : 'No reminders';
     }
 
     /** Opens `row` from nothing to its height, fading in, while the rows below make room. */
@@ -398,11 +398,12 @@ class TasksPage extends Page {
                 this._renaming = null;
             if (save && text && text !== task.title)
                 this.daemon.call('todo', 'Rename', task.id, text);
-            // After this event: it may come as focus moves, and the entry must outlive the move.
+            // After this event: it may come as focus moves, and the entry must outlive the move. Kept as the page
+            // goes (a click outside closes it): its title must come back in place of the field.
             this.later('renamed', 0, () => {
                 this._update();
                 this._releaseKeyboard();
-            });
+            }, {keep: true});
         };
         entry.clutter_text.connect('activate', () => finish(true));
         // Clicking elsewhere keeps the new name, as in Files.

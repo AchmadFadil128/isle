@@ -12,7 +12,7 @@ import {vividColorOfFile} from '../colors.js';
 import {VERTICAL} from '../compat.js';
 import * as Format from '../format.js';
 import * as Playback from '../playback.js';
-import {Art, Bars, Slider, fence, icon, iconButton, label, ownIcon, restsAt, setButtonIcon, smallCover} from '../widgets.js';
+import {Art, Bars, Slider, fence, icon, iconButton, label, ownIcon, restsAt, setButtonIcon, setEnabled, smallCover, coverKey} from '../widgets.js';
 import {LyricsPane} from './lyrics.js';
 import {Page} from './page.js';
 
@@ -48,6 +48,7 @@ class MediaPage extends Page {
         this._remaining = [];
         this._scrubbers = [];
         this._playButtons = [];
+        this._transports = [];
 
         this._player = this._buildPlayer();
         this._lyricsLayout = this._buildLyricsLayout();
@@ -143,7 +144,7 @@ class MediaPage extends Page {
     _progress() {
         const row = new St.BoxLayout({style_class: 'isle-player-progress'});
         const elapsed = label('0:00', 'isle-time');
-        const remaining = label('-0:00', 'isle-time isle-time-end');
+        const remaining = label('\u22120:00', 'isle-time isle-time-end');
         const scrubber = new Slider();
         scrubber.connect('released', (_slider, fraction) => {
             const length = this.daemon.state.nowPlaying?.length_us ?? 0;
@@ -163,12 +164,14 @@ class MediaPage extends Page {
         const row = new St.BoxLayout({style_class: 'isle-transport', y_align: Clutter.ActorAlign.CENTER});
         const play = iconButton('isle-play-symbolic', 'isle-button-flat isle-play',
             () => this.daemon.call('media', 'PlayPause'), {size: 22, accessibleName: 'Play or pause'});
-        row.add_child(iconButton('isle-backward-symbolic', 'isle-button-flat',
-            () => this.daemon.call('media', 'Previous'), {size: 18, accessibleName: 'Previous'}));
-        row.add_child(play);
-        row.add_child(iconButton('isle-forward-symbolic', 'isle-button-flat',
-            () => this.daemon.call('media', 'Next'), {size: 18, accessibleName: 'Next'}));
+        const previous = iconButton('isle-backward-symbolic', 'isle-button-flat',
+            () => this.daemon.call('media', 'Previous'), {size: 18, accessibleName: 'Previous'});
+        const next = iconButton('isle-forward-symbolic', 'isle-button-flat',
+            () => this.daemon.call('media', 'Next'), {size: 18, accessibleName: 'Next'});
+        for (const button of [previous, play, next])
+            row.add_child(button);
         this._playButtons.push(play);
+        this._transports.push({previous, play, next});
         return row;
     }
 
@@ -250,7 +253,12 @@ class MediaPage extends Page {
         this._muteButton = iconButton('audio-volume-high-symbolic', 'isle-button-flat',
             () => this._audio.toggleMuted(), {size: 18, accessibleName: 'Mute'});
         this._volumeSlider = new Slider({scrollStep: 0.05});
-        this._volumeSlider.connect('value-changed', (_slider, value) => (this._audio.volume = value));
+        this._volumeSlider.connect('value-changed', (_slider, value) => {
+            // Over 100% (boosted in Settings) the slider stays full: its end leaves the boost be.
+            if (value >= 1 && this._audio.volume > 1)
+                return;
+            this._audio.volume = value;
+        });
         this._volumeText = label('', 'isle-volume-text');
         volume.add_child(this._muteButton);
         volume.add_child(this._volumeSlider);
@@ -336,6 +344,12 @@ class MediaPage extends Page {
         const playIcon = nowPlaying.status === 'Playing' ? 'isle-pause-symbolic' : 'isle-play-symbolic';
         for (const button of this._playButtons)
             setButtonIcon(button, playIcon);
+        // Dimmed where the player can't (no next song, a stream that can't pause).
+        for (const {previous, play, next} of this._transports) {
+            setEnabled(previous, nowPlaying.can_go_previous);
+            setEnabled(play, nowPlaying.can_play_pause);
+            setEnabled(next, nowPlaying.can_go_next);
+        }
 
         this._syncBadges();
 
@@ -411,12 +425,14 @@ class MediaPage extends Page {
     }
 
     _updateTint(path) {
-        if (path === this._tintPath)
+        // A player may write the next song's cover under the same name: its time tells them apart.
+        const key = coverKey(path);
+        if (key === this._tintPath)
             return;
-        this._tintPath = path;
+        this._tintPath = key;
         // From the small copy the art shows: the cover itself may be big.
         smallCover(path).then(cover => {
-            if (path !== this._tintPath || this._destroyed)
+            if (key !== this._tintPath || this._destroyed)
                 return;
             this._tint = vividColorOfFile(cover ?? path);
             if (this._shown('lyrics'))
@@ -431,7 +447,8 @@ class MediaPage extends Page {
         const position = Playback.positionMs(nowPlaying);
         const length = Playback.lengthMs(nowPlaying);
         const elapsed = Format.duration(position);
-        const remaining = length > 0 ? `-${Format.duration(length - position)}` : '';
+        // A minus sign, not a hyphen, as a Mac's player shows it.
+        const remaining = length > 0 ? `\u2212${Format.duration(length - position)}` : '';
         this._elapsed.forEach(text => (text.text = elapsed));
         this._remaining.forEach(text => (text.text = remaining));
         for (const scrubber of this._scrubbers)

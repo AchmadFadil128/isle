@@ -149,7 +149,8 @@ class NotificationsPage extends Page {
         content.add_child(notificationBadge(notificationIcon(notification)));
 
         const line = new St.BoxLayout({style_class: 'isle-notification-line', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        const title = label(notification.title || notification.source?.title || '', 'isle-notification-title');
+        // On one line, as the body: a title may hold line breaks too.
+        const title = label((notification.title || notification.source?.title || '').replace(/\s+/g, ' ').trim(), 'isle-notification-title');
         // While the screen is shared, only who wrote, not what.
         const text = this._sharing ? '' : plainBody(notification).replace(/\s+/g, ' ').trim();
         const body = label(text, 'isle-notification-body', {x_expand: true});

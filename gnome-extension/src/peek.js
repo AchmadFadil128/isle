@@ -25,6 +25,8 @@ const TITLE_WRAP_WIDTH = MAX_WIDTH - 70;
 /** An alert that asks (Allow, Deny…) is this wide, with the assistant this big beside it. */
 const DECISION_WIDTH = 440;
 const BOT_SIZE = 46;
+/** Its texts' width: less its padding (20 + 22), the assistant and the spacing (14); see .isle-peek-row-asks. */
+const DECISION_TEXT_WIDTH = DECISION_WIDTH - BOT_SIZE - 56;
 /** Its answer shows this long (ms), the assistant hopping or shaking, before the alert goes. */
 const ANSWERED_MS = 850;
 /** Buttons that answer (Allow, Run) take no press this soon after they show. */
@@ -181,9 +183,11 @@ class PeekView extends St.Widget {
 
         this._asks = Boolean(alert.actions?.length);
         this._shown = alert;
-        // One that asks reads from the left, like a dialog; the others sit centred.
-        this._row.x_align = this._asks || alert.code ? Clutter.ActorAlign.FILL : Clutter.ActorAlign.CENTER;
-        this._row.style_class = this._asks || alert.code ? 'isle-peek-row isle-peek-row-asks' : 'isle-peek-row';
+        // One that asks reads from the left, like a dialog, the assistant level with its title; the others sit centred.
+        const decision = this._asks || Boolean(alert.code);
+        this._row.x_align = decision ? Clutter.ActorAlign.FILL : Clutter.ActorAlign.CENTER;
+        this._row.style_class = decision ? 'isle-peek-row isle-peek-row-asks' : 'isle-peek-row';
+        this._badge.y_align = this._texts.y_align = decision ? Clutter.ActorAlign.START : Clutter.ActorAlign.CENTER;
         if (alert.bot) {
             this._bot.look = alert.bot.look;
             this._bot.form = alert.bot.form ?? 'attentive';
@@ -244,7 +248,7 @@ class PeekView extends St.Widget {
         let title = alert.title ?? '';
         this._titleLines = 1;
         if (alert.titleLines > 1)
-            [title, this._titleLines, this._lineHeight] = this._fitLines(title, alert.titleLines);
+            [title, this._titleLines, this._lineHeight] = this._fitLines(title, alert.titleLines, decision ? DECISION_TEXT_WIDTH : TITLE_WRAP_WIDTH);
         const wrap = this._titleLines > 1;
         this._title.clutter_text.line_wrap = wrap;
         this._title.clutter_text.ellipsize = wrap ? Pango.EllipsizeMode.NONE : Pango.EllipsizeMode.END;
@@ -366,27 +370,27 @@ class PeekView extends St.Widget {
     get preferredHeight() {
         // One that asks: as tall as its lines, code and buttons, with even room above and below.
         if (this._asks || this._code.visible) {
-            const [, natural] = this._texts.get_preferred_height(DECISION_WIDTH - BOT_SIZE - 38);
+            const [, natural] = this._texts.get_preferred_height(DECISION_TEXT_WIDTH);
             return Math.round(Math.max(BOT_SIZE + 24, natural + 26));
         }
         const height = this._subtitle.visible ? HEIGHT.two : HEIGHT.one;
         return height + Math.round((this._titleLines - 1) * this._lineHeight);
     }
 
-    /** `text` cut to whole words that fit in `max` lines of a two-line title, with … if cut (by letters when
-     * one word is too long: a link): [text, lines, line height]. */
-    _fitLines(text, max) {
+    /** `text` cut to whole words that fit in `max` lines `width` wide, with … if cut (by letters when one word is
+     * too long: a link): [text, lines, line height]. */
+    _fitLines(text, max, width) {
         const layout = Pango.Layout.new(this._title.get_pango_context());
         layout.set_font_description(this._title.get_theme_node().get_font());
         layout.set_attributes(this._title.clutter_text.get_attributes());
-        layout.set_width(TITLE_WRAP_WIDTH * Pango.SCALE);
+        layout.set_width(width * Pango.SCALE);
         layout.set_wrap(Pango.WrapMode.WORD_CHAR);
         const fits = candidate => {
             layout.set_text(candidate, -1);
             return layout.get_line_count() <= max;
         };
         // No more than the lines could hold of the narrowest letters is measured: a long answer costs no more.
-        const room = Math.ceil(max * TITLE_WRAP_WIDTH / 2.5);
+        const room = Math.ceil(max * width / 2.5);
         const letters = [...text];
         let fitted = letters.length > room ? letters.slice(0, room).join('') : text;
         if (!fits(fitted) || fitted !== text) {
