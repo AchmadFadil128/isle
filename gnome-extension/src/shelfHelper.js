@@ -53,6 +53,8 @@ const CANNOT_START = [
 const DRAG_PROXIMITY = 120;
 /** How soon a new place for the window is looked at again; see `sync`. */
 const RECHECK_MS = 24;
+/** How long the Files tab may take to settle before the window is placed without another change. */
+const SETTLE_MS = 2000;
 /** A drag that opened the shelf and then goes this far off closes it again. */
 const DRAG_AWAY = 260;
 /** What a drag of files offers; browsers' tabs and bookmarks carry a URI list too, and are left alone. */
@@ -168,20 +170,28 @@ export class ShelfHelper extends Signals.EventEmitter {
         const wanted = this._wantedRect();
         if (!wanted) {
             this._candidate = null;
-            // Waiting for the shape to cover the island: looked at again, as no other change may come.
-            if (this._awaitingBody && !this._recheck) {
+            // Mid-drag a passing layout change must not take the window from under the file:
+            // it would leave and come back, and the light would blink.
+            if (Main.overview.visible || !(this._dragNear && this._shownRect && this._page.active && this._page.visible && this._island.mapped))
+                this._hide();
+            // Waiting for the shape to cover the island, or for the Files tab to settle (a fade cut short ends
+            // with no event): looked at again for a while, as no other change may come.
+            const settling = !this._shownRect && !Main.overview.visible && this._page.active && this._page.visible &&
+                Boolean(this._page.helperArea?.mapped);
+            if (!settling && !this._awaitingBody)
+                this._settlingSince = 0;
+            else if (!this._settlingSince)
+                this._settlingSince = Date.now();
+            if ((this._awaitingBody || (settling && Date.now() - this._settlingSince < SETTLE_MS)) && !this._recheck) {
                 this._recheck = GLib.timeout_add(GLib.PRIORITY_DEFAULT, RECHECK_MS, () => {
                     this._recheck = 0;
                     this.sync();
                     return GLib.SOURCE_REMOVE;
                 });
             }
-            // Mid-drag a passing layout change must not take the window from under the file:
-            // it would leave and come back, and the light would blink.
-            if (Main.overview.visible || !(this._dragNear && this._shownRect && this._page.active && this._page.visible && this._island.mapped))
-                this._hide();
             return;
         }
+        this._settlingSince = 0;
         const {rect, area} = wanted;
         const same = (a, b) => a && ['x', 'y', 'width', 'height'].every(key => a[key] === b[key]);
         if (same(this._shownRect, rect) && same(this._shownArea, area) && !this._resend)
