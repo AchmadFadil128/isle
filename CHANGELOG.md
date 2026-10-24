@@ -163,6 +163,8 @@ All notable changes to Isle are listed here. The format follows
 - Turning Isle off, or leaving Super+V to GNOME, no longer undoes another extension's own Super+V calendar.
 - On a 200% display, the Files tab's drag-and-drop window no longer comes out half the island's size
   when the shelf's helper starts before GNOME has told it the display's scale: it is set to match.
+- On a 200% display without fractional scaling, the calendar writes the month whole ("OCTOBER", not
+  "OCTOB…").
 
 ## [1.0.6] - 2026-10-24
 

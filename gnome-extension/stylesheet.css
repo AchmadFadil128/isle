@@ -670,7 +670,9 @@
 .isle-cal-month-title { padding: 1px 4px; border-radius: 6px; }
 .isle-cal-month-title:hover { background-color: rgba(255, 255, 255, 0.06); }
 .isle-cal-month-title-box { spacing: 5px; }
-.isle-cal-month-name { font-size: 12px; font-weight: 700; letter-spacing: 0.4px; color: #ff453a; }
+/* No letter-spacing: St rounds it to whole pixels (none at 100%, 1px at 200%), and Pango then cut the
+ * name at the width St measured for it ("OCTOB…"). */
+.isle-cal-month-name { font-size: 12px; font-weight: 700; color: #ff453a; }
 .isle-cal-year { font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.5); }
 .isle-cal-arrow { padding: 4px; color: rgba(255, 255, 255, 0.75); }
 
