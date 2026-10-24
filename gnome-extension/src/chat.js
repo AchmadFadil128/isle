@@ -495,10 +495,23 @@ export const ChatView = GObject.registerClass({
         this.add_child(this._scroll);
         this._items = [];
         this.connect('destroy', () => this._copiedTimer && GLib.source_remove(this._copiedTimer));
-        // New messages come in at the bottom, and it keeps there.
-        this._scroll.vadjustment.connect('notify::upper', adjustment => {
-            adjustment.value = adjustment.upper - adjustment.page_size;
+        // New messages come in at the bottom, and it keeps there. The panel also shrinks as the command
+        // card below it grows: read to its end then, the end stays in sight.
+        const adjustment = this._scroll.vadjustment;
+        let last = {value: 0, upper: 0, page: 0};
+        const remember = () => (last = {value: adjustment.value, upper: adjustment.upper, page: adjustment.page_size});
+        const toEnd = () => (adjustment.value = adjustment.upper - adjustment.page_size);
+        adjustment.connect('notify::upper', () => {
+            toEnd();
+            remember();
         });
+        adjustment.connect('notify::page-size', () => {
+            if (last.value >= last.upper - last.page - 2)
+                toEnd();
+            remember();
+        });
+        // A value clamped as the page changes is not the reader's: it waits for the page's own notice.
+        adjustment.connect('notify::value', () => adjustment.page_size === last.page && remember());
     }
 
     /** {shape, palette} for the little face beside its answers (see bot.js). */
