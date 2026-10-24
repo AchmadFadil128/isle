@@ -185,6 +185,8 @@ All notable changes to Isle are listed here. The format follows
   an alert and its actions run, instead of being worked on unseen and its answer dropped.
 - Closing the assistant while it turns what was said into text no longer brings a "Didn't catch that"
   alert when nothing was said.
+- "Still working" under a request opened again from the closed island counts from when it began,
+  instead of showing late and short of the time it has taken.
 
 ## [1.0.6] - 2026-10-24
 
