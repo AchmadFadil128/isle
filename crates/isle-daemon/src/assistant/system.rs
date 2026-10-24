@@ -122,23 +122,18 @@ fn battery() -> Vec<String> {
                     .to_lowercase()
             );
             let limit = path.join("charge_control_end_threshold");
-            // From Isle's own install (~/.local/bin) or a system package (/usr/bin).
-            let helper = dirs::home_dir()
-                .map(|home| home.join(".local/bin"))
-                .into_iter()
-                .chain(std::env::var_os("PATH").iter().flat_map(std::env::split_paths))
-                .any(|dir| dir.join("isle-charge-limit").is_file());
-            match read(&limit) {
+            let helper = charge_helper();
+            match (read(&limit), helper) {
                 // The helper keeps it after a restart, which writing the file alone does not.
-                Some(value) if helper => line.push_str(&format!(
-                    "; charge limit {value}% (set it, kept after a restart, with the terminal command \
-                     `isle-charge-limit <percent>`; 100 removes it)"
+                (Some(value), Some(helper)) => line.push_str(&format!(
+                    "; charge limit {value}% (set it as root, kept after a restart, with the command \
+                     `{helper} <percent>`; 100 removes it)"
                 )),
-                Some(value) => line.push_str(&format!(
+                (Some(value), None) => line.push_str(&format!(
                     "; charge limit {value}% (set by writing to {} as root; resets on restart)",
                     limit.display()
                 )),
-                None => line.push_str("; no charge limit setting"),
+                (None, _) => line.push_str("; no charge limit setting"),
             }
             line.push('.');
             line
@@ -171,6 +166,20 @@ fn memory(meminfo: &str) -> Option<(f64, f64)> {
 
 fn gb(bytes: f64) -> String {
     format!("{:.1} GB", bytes / GB)
+}
+
+/// How root runs Isle's charge-limit helper: by name from a system package (/usr/bin), else by its whole
+/// path from Isle's own install in ~/.local/bin, which is not on root's PATH; `None` without it.
+fn charge_helper() -> Option<String> {
+    const NAME: &str = "isle-charge-limit";
+    if ["/usr/local/bin", "/usr/bin"]
+        .iter()
+        .any(|dir| Path::new(dir).join(NAME).is_file())
+    {
+        return Some(NAME.to_owned());
+    }
+    let own = dirs::home_dir()?.join(".local/bin").join(NAME);
+    own.is_file().then(|| own.display().to_string())
 }
 
 #[cfg(test)]
