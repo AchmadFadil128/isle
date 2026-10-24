@@ -455,7 +455,12 @@ export function agentDone(event, look, show) {
 
 /** The first sentence of `text`, cut to a line's worth. */
 function firstSentence(text) {
-    const first = (text ?? '').trim().split(/(?<=[.!?])\s|\n/)[0]?.replace(/[*_`#>]/g, '').trim() ?? '';
+    // Markdown's marks only, not the characters of names (`user_id` keeps its underscore).
+    const first = Format.answerPlain((text ?? '').trim().split(/(?<=[.!?])\s|\n/)[0] ?? '')
+        .replace(/^[#>\s]+/, '')
+        .replace(/(^|[^\w])_([^_]+)_(?=[^\w]|$)/g, '$1$2')
+        .replace(/(^|[^\w*])\*([^*]+)\*(?=[^\w*]|$)/g, '$1$2')
+        .trim();
     return first.length > 90 ? `${first.slice(0, 89).trimEnd()}…` : first;
 }
 

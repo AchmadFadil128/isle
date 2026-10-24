@@ -404,6 +404,13 @@ pub fn explain(provider: Provider, error: &str) -> Failure {
             model: String::new(),
         };
     }
+    // Its own files it may not write (a folder left to root by running it with sudo once): not its plan.
+    if says(&["eacces", "os error 13"]) || (says(&["permission denied"]) && error.contains('/')) {
+        return Failure::from((
+            &*format!("{name} can’t write its own files"),
+            "Its folder may belong to root (after running it with sudo once); give it back to you, then ask again.",
+        ));
+    }
     if says(&[
         "quota",
         "rate limit",
@@ -463,6 +470,20 @@ mod tests {
 
     #[test]
     fn explains_each_providers_failures() {
+        // A folder it may not write (after `sudo claude` once) is not a used-up plan; a refusal from the
+        // service still is.
+        assert_eq!(
+            explain(
+                Provider::Claude,
+                "EACCES: permission denied, mkdir '/home/a/.claude/projects'"
+            )
+            .error,
+            "Claude Code can’t write its own files"
+        );
+        assert_eq!(
+            explain(Provider::Claude, "API Error: 403 permission denied").error,
+            "Claude Code isn’t available"
+        );
         assert_eq!(
             explain(
                 Provider::Agy,

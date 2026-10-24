@@ -50,9 +50,10 @@ fn version(text: &str) -> Option<(u32, u32)> {
     Some((parts.next()??, parts.next()??))
 }
 
-/// Whether Codex runs Isle's hooks (or, an older one, notifies Isle).
+/// Whether Codex runs Isle's hooks (or, an older one, notifies Isle). An older `notify` left after Codex
+/// gained hooks counts as not hooked, so the hooks go in at the next sync.
 pub fn hooked(path: &Path) -> bool {
-    json_hooks::hooked(&hooks_path(), &SPEC) || notifies(path)
+    json_hooks::hooked(&hooks_path(), &SPEC) || (notifies(path) && !has_hooks())
 }
 
 /// Isle's hooks in hooks.json, and an older `notify` of Isle's taken out; an old Codex gets `notify`.
