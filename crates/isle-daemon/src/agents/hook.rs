@@ -81,13 +81,7 @@ fn request(ai: &str, payload: &Value) -> Option<Request> {
         .iter()
         .find_map(|key| input[key].as_str())
         .map(str::to_owned)
-        .unwrap_or_else(|| {
-            if input.is_null() {
-                String::new()
-            } else {
-                input.to_string()
-            }
-        });
+        .unwrap_or_else(|| readable(input));
     // Only what the island can show whole: more lines, hidden characters or more than fits, and the AI
     // asks in its terminal, where all of it shows.
     if !crate::assistant::shows_whole(&line, MAX_SHOWN) {
@@ -110,6 +104,23 @@ fn request(ai: &str, payload: &Value) -> Option<Request> {
         always: !rule_suggestions(payload).is_empty(),
         ..Request::default()
     })
+}
+
+/// A tool's input with no command, path or link (an MCP tool's), as `key: value` pairs, all of them, so the
+/// island shows what is asked without the JSON around it.
+fn readable(input: &Value) -> String {
+    match input {
+        Value::Null => String::new(),
+        Value::Object(fields) => fields
+            .iter()
+            .map(|(key, value)| match value {
+                Value::String(text) => format!("{key}: {text}"),
+                other => format!("{key}: {other}"),
+            })
+            .collect::<Vec<_>>()
+            .join(", "),
+        other => other.to_string(),
+    }
 }
 
 /// Asks the island and waits; "" for no answer. Never starts isled.
@@ -140,7 +151,7 @@ async fn answered_elsewhere(payload: &Value) {
     for _ in 0..FIND_CALL_FOR {
         found = path
             .as_deref()
-            .and_then(|path| find_call(path, &payload["tool_name"], &payload["tool_input"]));
+            .and_then(|path| pending_call(path, &payload["tool_name"], &payload["tool_input"]));
         if found.is_some() {
             break;
         }
@@ -155,6 +166,15 @@ async fn answered_elsewhere(payload: &Value) {
         }
         tokio::time::sleep(ANSWERED_EVERY).await;
     }
+}
+
+/// As `find_call`, but only a call still waiting: an earlier, same call that has its result already means
+/// this one is not written yet.
+fn pending_call(path: &Path, tool: &Value, input: &Value) -> Option<(String, u64)> {
+    let (id, read) = find_call(path, tool, input)?;
+    let mut probe = read;
+    let answered = read_on(path, &mut probe).is_some_and(|text| has_result(&text, &id));
+    (!answered).then_some((id, read))
 }
 
 /// The id of the newest call of `tool` with `input` in the transcript at `path`, and where the lines
@@ -285,11 +305,9 @@ fn from_claude(payload: &Value) -> Option<Event> {
     let text = |key: &str| payload[key].as_str().unwrap_or_default();
     let (kind, message) = match text("hook_event_name") {
         "Notification" => {
+            // A permission too: the island skips it when it asked for that session already (see
+            // `decide`), and shows it when it could not (a long command, too many waiting).
             let kind = notification_kind(text("notification_type"), text("message"))?;
-            // Asked through PermissionRequest already (see `decide`): no second alert for it.
-            if kind == "permission" {
-                return None;
-            }
             (kind, text("message"))
         }
         "Stop" => ("done", first_line(text("last_assistant_message"))),
@@ -390,6 +408,16 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn shows_a_tools_input_readably() {
+        let input = json!({"owner": "zickrian", "repo": "isle", "draft": false});
+        assert_eq!(
+            readable(&input),
+            "owner: zickrian, repo: isle, draft: false"
+        );
+        assert_eq!(readable(&Value::Null), "");
+    }
+
+    #[test]
     fn reads_the_parent_from_a_stat_line() {
         assert_eq!(parent_of("1234 (bash) S 1200 1234 1234 0"), Some(1200));
         // A name with spaces and a closing bracket of its own.
@@ -434,6 +462,15 @@ mod tests {
         assert!(has_result(&read_on(&path, &mut read).unwrap(), &id));
         assert!(read_on(&path, &mut read).is_none());
         assert!(find_call(&path, &json!("Bash"), &json!({"command": "rm -rf /"})).is_none());
+        // The same command again: until its own call is written, the old one (answered) is not taken.
+        assert!(pending_call(&path, &json!("Bash"), &input).is_none());
+        let again = json!({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "toolu_2", "name": "Bash", "input": input}]}});
+        std::io::Write::write_all(&mut file, format!("{again}\n").as_bytes()).unwrap();
+        assert_eq!(
+            pending_call(&path, &json!("Bash"), &input).unwrap().0,
+            "toolu_2"
+        );
 
         std::fs::remove_file(&path).ok();
     }
@@ -447,8 +484,8 @@ mod tests {
             "hook_event_name": "Notification",
             "message": "Claude needs your permission to use Bash"
         }));
-        // The permission itself comes through PermissionRequest; its notification is not shown again.
-        assert!(permission.is_none());
+        // Sent on: the island shows it only if it could not ask through PermissionRequest.
+        assert_eq!(permission.unwrap().kind, "permission");
         let waiting = from_claude(&json!({
             "cwd": "/home/a/code/isle",
             "hook_event_name": "Notification",
@@ -462,7 +499,7 @@ mod tests {
             "notification_type": "permission_prompt",
             "message": "Claude needs your approval"
         }));
-        assert!(typed.is_none());
+        assert_eq!(typed.unwrap().kind, "permission");
         assert!(
             from_claude(
                 &json!({"hook_event_name": "Notification", "notification_type": "auth_success"})

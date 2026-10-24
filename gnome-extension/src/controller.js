@@ -52,6 +52,10 @@ const WARM_STEP_MS = 60;
 const WARM_ALERT = {key: 'warm', title: 'Charging', subtitle: 'Isle', icon: 'isle-bolt', ring: 0, value: '0%', tone: 'good'};
 /** And again this long after the island closes, or a page changes out of sight, while it stays closed... */
 const WARM_AFTER_CLOSE_MS = 1500;
+/** How long a permission notice waits for the island's own ask for it, which may come a moment later. */
+const ASK_SETTLE_MS = 1500;
+/** An ask this recent for the session covers its permission notice. */
+const ASKED_RECENTLY_MS = 60000;
 /** ...but for changes, at most this often: a notification updating every second (a download) costs little. */
 const WARM_GAP_MS = 10000;
 /** Outside an island that shrank under it, the pointer is checked this often, and left this long. */
@@ -136,6 +140,8 @@ export class Controller {
         // Heard once everything listening is built (see `_connectAll`).
         this._daemon.hold();
         this._timeouts = new Map();
+        /** When the island last asked for each agent session (`provider:session`); see `_onAgentEvent`. */
+        this._askedAt = new Map();
         this._presentation = 'compact';
         /** Whether `_warmUp` shows the open island's view out of sight. */
         this._warmShown = false;
@@ -464,6 +470,8 @@ export class Controller {
         this._voice.connect('card-decided', (_view, run) => this._deciding?.done(run));
         this._voice.connect('card-stop', () => stopUnit(this._daemon.state.assistant?.card?.stop));
         this._voice.connect('stop', () => {
+            // A command card still waiting goes with the request: it is never asked again in an alert.
+            this._deciding?.done(false);
             this._daemon.call('assistant', 'Cancel');
             this.collapse();
             // Stopped, not left to carry on.
@@ -479,7 +487,7 @@ export class Controller {
                 this._voice.setState({...state, hint: signInHint(state.provider)});
         });
         this._voice.connect('set-up', () => {
-            if (openSetUp(this._daemon.state.assistant?.model))
+            if (openSetUp(this._daemon.state.assistant?.model, this._voiceShortcut))
                 this.collapse();
         });
         this._voice.connect('frame', (_view, time, level) => this._island.setTintMotion(time, level));
@@ -640,6 +648,21 @@ export class Controller {
     _onAgentEvent(event) {
         if (!this._settings.get_boolean(`agent-alerts-${event.provider}`) || this._notifications.dnd)
             return;
+        // A permission the island asked for itself needs no second alert; one it could not ask (a long
+        // command, too many waiting) does. Its ask may come a moment after this.
+        if (event.kind === 'permission') {
+            const key = `${event.provider}:${event.session}`;
+            this._later(`agent-permission:${key}`, ASK_SETTLE_MS, () => {
+                if (Date.now() - (this._askedAt.get(key) ?? 0) > ASKED_RECENTLY_MS)
+                    this._showAgentEvent(event);
+            });
+            return;
+        }
+        this._showAgentEvent(event);
+    }
+
+    /** The alert for `event`, unless the agent's window is the one in front. */
+    _showAgentEvent(event) {
         const window = this._agentWindow(event);
         if (window && window === global.display.focus_window)
             return;
@@ -648,15 +671,23 @@ export class Controller {
     }
 
     /** The window (a terminal, VS Code) the agent runs in: the one whose process is among the hook's parents
-     * (`pids`); else, with none of them, the latest used whose title names the project as a word of its own. */
+     * (`pids`); else, with none of them, the latest used whose title names the project as a word of its own.
+     * Null when it can't be told, so nothing is held back or sent there by mistake. */
     _agentWindow({project, pids}) {
         const windows = global.get_window_actors().map(actor => actor.meta_window);
-        const latest = list => list.sort((a, b) => b.get_user_time() - a.get_user_time())[0] ?? null;
+        const named = window => namesProject(window.get_title() ?? '', project);
         const parents = new Set(pids ?? []);
-        const own = latest(windows.filter(window => parents.has(window.get_pid())));
-        if (own || !project)
-            return own;
-        return latest(windows.filter(window => namesProject(window.get_title() ?? '', project)));
+        const own = windows.filter(window => parents.has(window.get_pid()));
+        // One process may hold several windows (GNOME Terminal, VS Code): the one naming the project.
+        if (own.length === 1)
+            return own[0];
+        if (own.length > 1) {
+            const mine = own.filter(named);
+            return mine.length === 1 ? mine[0] : null;
+        }
+        if (!project)
+            return null;
+        return windows.filter(named).sort((a, b) => b.get_user_time() - a.get_user_time())[0] ?? null;
     }
 
     _render() {
@@ -1597,7 +1628,7 @@ export class Controller {
         }
         this._voiceInBackground = false;
         this._syncAssistantBusy();
-        this._post(Alerts.assistant(state, () => this._reopenVoice()));
+        this._post(Alerts.assistant({...state, hint: this._voice.withShortcut(state.hint ?? '')}, () => this._reopenVoice()));
     }
 
     /** The conversation, as isled keeps it (see chat.rs). */
@@ -1627,7 +1658,7 @@ export class Controller {
     }
 
     // A command the AI wants run waits for Run or Deny: on its card while the island shows the assistant,
-    // else in an alert; unanswered, it is denied after APPROVAL_MS. Resolves true for Run.
+    // else in an alert. Resolves true for Run, false for Deny, and 'unanswered' after APPROVAL_MS.
     _decide(action) {
         return new Promise(resolve => {
             const entry = {
@@ -1644,7 +1675,7 @@ export class Controller {
             };
             this._deciding?.done(false);
             this._deciding = entry;
-            this._later('decide', APPROVAL_MS, () => entry.done(false));
+            this._later('decide', APPROVAL_MS, () => entry.done('unanswered'));
             if (this._voiceOpen)
                 this._setKeyboard(true);
             else
@@ -1668,6 +1699,12 @@ export class Controller {
     // Claude Code or Codex asks a permission: an alert to answer it, unless the user would not see it
     // (its window in front, Do Not Disturb, alerts off); then it asks in its own terminal.
     _onAgentAsking(request) {
+        const now = Date.now();
+        for (const [key, at] of this._askedAt) {
+            if (now - at > ASKED_RECENTLY_MS)
+                this._askedAt.delete(key);
+        }
+        this._askedAt.set(`${request.provider}:${request.session}`, now);
         const pass = () => this._daemon.call('agents', 'Resolve', request.id, '');
         if (!this._settings.get_boolean(`agent-alerts-${request.provider}`) || this._notifications.dnd ||
             !this._island.visible)
@@ -1703,6 +1740,8 @@ export class Controller {
     // isled restarted (an update) or stopped while listening or thinking: it will never answer, so
     // the island says so rather than wait forever.
     _onAssistantLost() {
+        // Its request is gone, so is a command card waiting for it.
+        this._deciding?.done(false);
         if (this._voiceInBackground) {
             this._voiceInBackground = false;
             this._syncAssistantBusy();
