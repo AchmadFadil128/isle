@@ -83,6 +83,14 @@ export function phaseName(phase) {
 }
 
 /** Wall-clock milliseconds, in the same terms as the daemon's timestamps. */
+/** An answer's light Markdown (**bold**, `code`, "- " lists) as plain words on one line, for a single label. */
+export function answerPlain(text) {
+    return text.split('\n')
+        .map(line => line.replace(/^\s*[-*•]\s+/, '• ').replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').trim())
+        .filter(Boolean)
+        .join(' ');
+}
+
 export function nowMs() {
     return Math.floor(GLib.get_real_time() / 1000);
 }

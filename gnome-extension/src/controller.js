@@ -1499,7 +1499,7 @@ export class Controller {
         this._cancel('voice-close');
         this._cancel('voice-listen');
         // A follow-up shows what was just said back, one dim line above "Listening…".
-        this._voice.followUp = greet ? null : this._voice.exchange?.reply || null;
+        this._voice.followUp = greet ? null : Format.answerPlain(this._voice.exchange?.reply ?? '') || null;
         // Esc and clicks elsewhere close it while it listens and thinks.
         this._setKeyboard(true);
         this._voice.greeting = greet ? GREETING : null;

@@ -16,7 +16,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {describeActions, failed, outcomeOf, runnable, slotsFor, stoppable, TILES} from './actionRules.js';
 import {Bot} from './bot.js';
-import {ChatView, CommandCard, elapsed} from './chat.js';
+import {ChatView, CommandCard, answerMarkup, elapsed} from './chat.js';
 import {isTerminal} from './clipboard.js';
 import {VERTICAL} from './compat.js';
 import {plainBody} from './notifications.js';
@@ -366,15 +366,15 @@ export const VoiceView = GObject.registerClass({
         const heard = state.heard ? `“${state.heard}”` : '';
         const step = state.phase === 'acting' ? describeActions(state.actions) : state.activity || '';
         this._noteStep(state.phase, step);
-        const [top, main, dim] = {
+        const [top, main, dim, markdown] = {
             // The first time it opens it greets you.
             listening: [this.followUp ?? '', this.greeting ?? 'Listening…', !this.greeting],
             transcribing: [this.followUp ?? '', 'One moment…', true],
             // Its answer as it writes it; else an agent's step as it happens ("Searching ~/Downloads for
             // “ttd”…"), else thinking.
-            thinking: [heard, state.draft || step || 'Thinking…', !state.draft],
+            thinking: [heard, state.draft || step || 'Thinking…', !state.draft, Boolean(state.draft)],
             acting: [heard, step, true],
-            reply: [heard, clip(state.reply ?? ''), false],
+            reply: [heard, clip(state.reply ?? ''), false, true],
             error: [heard, state.error || 'Something went wrong', false],
         }[state.phase] ?? ['', '', true];
         this._heard.text = top;
@@ -386,7 +386,13 @@ export const VoiceView = GObject.registerClass({
             this._stepAt = this._lastTick;
         this._lastStep = step;
         this._lastPhase = state.phase;
-        this._text.text = main;
+        // An answer's light Markdown shows as in the conversation; anything else as written.
+        if (markdown) {
+            this._text.clutter_text.set_markup(answerMarkup(main));
+        } else {
+            this._text.clutter_text.use_markup = false;
+            this._text.text = main;
+        }
         if (dim)
             this._text.add_style_class_name('isle-voice-text-dim');
         else

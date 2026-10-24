@@ -565,7 +565,7 @@ export function notificationsSummary(items) {
  * shows it in full. */
 export function assistant(state, open) {
     const failed = state.phase === 'error';
-    const text = failed ? state.error || 'Something went wrong' : state.reply || 'Done';
+    const text = failed ? state.error || 'Something went wrong' : Format.answerPlain(state.reply ?? '') || 'Done';
     return {
         key: 'assistant',
         icon: failed ? 'dialog-warning-symbolic' : 'isle-mic-symbolic',
