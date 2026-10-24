@@ -253,7 +253,12 @@ class MediaPage extends Page {
         this._muteButton = iconButton('audio-volume-high-symbolic', 'isle-button-flat',
             () => this._audio.toggleMuted(), {size: 18, accessibleName: 'Mute'});
         this._volumeSlider = new Slider({scrollStep: 0.05});
-        this._volumeSlider.connect('value-changed', (_slider, value) => (this._audio.volume = value));
+        this._volumeSlider.connect('value-changed', (_slider, value) => {
+            // Over 100% (boosted in Settings) the slider stays full: its end leaves the boost be.
+            if (value >= 1 && this._audio.volume > 1)
+                return;
+            this._audio.volume = value;
+        });
         this._volumeText = label('', 'isle-volume-text');
         volume.add_child(this._muteButton);
         volume.add_child(this._volumeSlider);
