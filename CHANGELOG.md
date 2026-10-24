@@ -14,6 +14,31 @@ All notable changes to Isle are listed here. The format follows
   go anywhere on the island still lands on the shelf, and the island's tabs keep their clicks.
 - In the Activities overview the Files tab shows its files instead of an empty tray.
 - Maximizing and arranging windows by voice no longer logs warnings on GNOME 49 and later.
+- The .deb, .rpm and AUR instructions turn Isle on after logging out and back in, not before: until
+  then GNOME Shell does not know the new extension, so `gnome-extensions enable` failed and Isle stayed off.
+- Installing Isle again after uninstalling it turns it on: the uninstaller left it on GNOME's list of
+  turned-off extensions, which outranks the list of turned-on ones, so it stayed off with no word why.
+- `isle-setup-voice base` (or another model named) also picks that model in Settings: before, it was
+  downloaded but the assistant went on asking for the one chosen there. Settings offer Tiny (44 MB) too.
+- The guide says to run `isled --unhook-all` before removing a .deb, .rpm or AUR package (the AUR
+  package says so too), so Claude Code and Codex are not left calling a removed `isled`, and to remove
+  Isle with `isle-uninstall` rather than the Extensions app's Remove button.
+- With the assistant's AI on Automatic, Settings list the models of the AI it answers with (the first
+  you are signed in to), not of the first one installed.
+- Settings → AI Usage finds Claude Code and Codex where Isle does: in `CLAUDE_CONFIG_DIR` and
+  `CODEX_HOME` when set, and Codex's sessions in Isle's assistant, so "Show AI usage" is no longer
+  greyed out while the island shows the usage.
+- The installer says when `~/.local/bin` is not on the PATH, and the guide gives Isle's commands
+  with that folder (`~/.local/bin/isled --doctor`), so they run where their names alone are not found.
+- The one-line install works where `/tmp` is mounted `noexec`: it ran the package's installer from
+  there directly, which such a system refuses.
+- Installing from source goes on without the shelf's drag-and-drop helper when it does not build (it
+  needs Rust 1.92), instead of stopping the whole install.
+- The installer no longer stops without a word when isled cannot be set to start with the session; it
+  says so and finishes.
+- The installation guide and settings descriptions are up to date: the installer's last lines, a
+  current version to pin, an `ERROR` state as a bug to report, the link for building from source, and
+  the voice assistant's AI as Claude Code, Codex or Antigravity rather than only agy.
 
 ## [1.0.6] - 2026-10-24
 

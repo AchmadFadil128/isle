@@ -97,7 +97,7 @@ Description: $SUMMARY
  with synced lyrics, calls, a focus timer, reminders, a calendar, a file shelf,
  charging and system alerts, and an optional voice assistant.
  .
- Each user turns the extension on once: gnome-extensions enable $UUID
+ Each user logs out and back in, then turns the extension on once: gnome-extensions enable $UUID
 EOF
     dpkg-deb --root-owner-group -Zxz --build "$root" "dist/isle_${VERSION}_amd64.deb" >/dev/null
     echo "dist/isle_${VERSION}_amd64.deb"
@@ -128,7 +128,7 @@ Isle turns the middle of the GNOME Shell top bar into a notch-style island: musi
 with synced lyrics, calls, a focus timer, reminders, a calendar, a file shelf,
 charging and system alerts, and an optional voice assistant.
 
-Each user turns the extension on once: gnome-extensions enable $UUID
+Each user logs out and back in, then turns the extension on once: gnome-extensions enable $UUID
 
 %install
 cp -a "$stage/." "%{buildroot}/"

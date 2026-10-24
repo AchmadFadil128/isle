@@ -37,19 +37,24 @@ install_service() {
 
 SHELF=0
 WHISPER=0
-if [ -x bin/isled ]; then
+# -f, not -x: unpacked where files cannot run (a /tmp mounted noexec), they still install.
+if [ -f bin/isled ]; then
     # A release package: the programs come built.
     BUILT=bin
-    [ -x bin/isle-shelf ] && SHELF=1
-    [ -x bin/isle-whisper ] && WHISPER=1
+    [ -f bin/isle-shelf ] && SHELF=1
+    [ -f bin/isle-whisper ] && WHISPER=1
 else
     BUILT=target/release
     step "Building isled"
     cargo build --release -p isle-daemon
     if pkg-config --exists gtk4; then
         step "Building isle-shelf"
-        cargo build --release -p isle-shelf
-        SHELF=1
+        # It needs a newer Rust than isled (1.92); without it the rest still installs.
+        if cargo build --release -p isle-shelf; then
+            SHELF=1
+        else
+            echo "isle-shelf did not build (it needs Rust 1.92 or newer: 'rustup update'); skipping drag and drop on the shelf."
+        fi
     else
         echo "GTK 4 development files not found: skipping isle-shelf (drag and drop on the shelf)."
         echo "Install them with 'sudo apt install libgtk-4-dev' and run this script again."
@@ -131,7 +136,8 @@ busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DB
 # Without a user service manager (over SSH, say) isled still starts on its
 # own when the extension first calls it.
 if systemctl --user daemon-reload 2>/dev/null; then
-    systemctl --user enable isled.service >/dev/null 2>&1
+    systemctl --user enable isled.service >/dev/null 2>&1 ||
+        echo "isled could not be set to start with your session ('systemctl --user enable isled' says why); it still starts once the island calls it."
     # A failure here is reported, not fatal: the extension still goes in, and isled starts once called.
     systemctl --user restart isled.service ||
         echo "isled did not start; see 'journalctl --user -u isled' (the island still works without it, minus its services)."
@@ -148,6 +154,10 @@ fi
 # A running GNOME Shell on Wayland does not know a new extension until the
 # next login, so add it to the enabled list directly when enabling fails.
 if ! gnome-extensions enable "$UUID" 2>/dev/null; then
+    # On the disabled list (turned off before an uninstall), it would stay off whatever the enabled one says.
+    current=$(gsettings get org.gnome.shell disabled-extensions)
+    updated=$(printf '%s' "$current" | sed -e "s/, '$UUID'//" -e "s/'$UUID', //" -e "s/\['$UUID'\]/@as []/")
+    [ "$updated" = "$current" ] || gsettings set org.gnome.shell disabled-extensions "$updated"
     current=$(gsettings get org.gnome.shell enabled-extensions)
     case "$current" in
         *"'$UUID'"*) ;;
@@ -224,3 +234,8 @@ if [ "${XDG_SESSION_TYPE:-}" = "x11" ] && [ -n "$SHELL_VERSION" ] && [ "$SHELL_V
 else
     echo "Log out and back in once so GNOME Shell loads the new extension."
 fi
+# Some systems put ~/.local/bin on the PATH only once it exists, at the next login; others never.
+case ":$PATH:" in
+    *":$BINDIR:"*) ;;
+    *) echo "Note: $BINDIR is not on your PATH, so run Isle's commands with it: $BINDIR/isled --doctor, $BINDIR/isle-setup-voice." ;;
+esac

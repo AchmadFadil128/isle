@@ -167,7 +167,7 @@
     <key name="voice-assistant" type="b">
       <default>true</default>
       <summary>Voice assistant</summary>
-      <description>Listen for requests on the shortcut and the mic button, and answer them with agy.</description>
+      <description>Listen for requests on the shortcut and the mic button, and answer them with the AI chosen: Claude Code, Codex or Antigravity (agy).</description>
     </key>
     <key name="voice-shortcut" type="as">
       <default><![CDATA[['<Super>i']]]></default>
@@ -177,7 +177,7 @@
     <key name="voice-provider" type="s">
       <default>'auto'</default>
       <summary>AI the voice assistant asks</summary>
-      <description>“agy” (Antigravity), “claude” (Claude Code) or “codex” (Codex), each with its own sign-in; “auto” for the first installed.</description>
+      <description>“agy” (Antigravity), “claude” (Claude Code) or “codex” (Codex), each with its own sign-in; “auto” for the first installed and signed in.</description>
     </key>
     <key name="voice-claude-model" type="s">
       <default>'sonnet'</default>
@@ -246,7 +246,7 @@
     <key name="voice-read-notifications" type="b">
       <default>false</default>
       <summary>Let the voice assistant read notifications</summary>
-      <description>Send the last few notifications with each request, so agy can read them out or summarise them.</description>
+      <description>Send the last few notifications with each request, so the AI (Claude Code, Codex or Antigravity) can read them out or summarise them.</description>
     </key>
     <key name="usage-enabled" type="b">
       <default>true</default>

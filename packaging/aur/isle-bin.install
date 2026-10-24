@@ -1,9 +1,15 @@
 post_install() {
-  echo 'Turn Isle on once as each user, then log out and back in:'
+  echo 'Log out and back in, then turn Isle on once as each user (in the Extensions app, or):'
   echo '  gnome-extensions enable isle@zickrian.github.io'
   echo 'For the voice assistant, each user also runs isle-setup-voice once.'
 }
 
 post_upgrade() {
   echo 'Log out and back in so GNOME Shell loads the new Isle.'
+}
+
+pre_remove() {
+  echo "Isle's alert hooks stay in Claude Code's and Codex's settings, calling the removed isled."
+  echo "Each user who ran Isle runs 'isled --unhook-all' before removing isle-bin"
+  echo "(afterwards: reinstall it, run that, then remove it again)."
 }

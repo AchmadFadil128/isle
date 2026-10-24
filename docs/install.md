@@ -38,7 +38,8 @@ curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash
 ```
 
 It downloads the latest release, checks its checksum and installs it for
-your user. It ends with `==> Isle 0.x.y is installed`. Run it as yourself,
+your user. It ends with `==> Isle 1.x.y is installed` and what to do next:
+log out and back in, and how to check or remove Isle. Run it as yourself,
 **without sudo**: everything goes in your own home folder, and it refuses to
 run as root. On a GNOME Shell version Isle was not made for it stops before
 changing anything.
@@ -61,11 +62,12 @@ Super+I:
    [README](../README.md#voice-assistant) says how; each uses your own plan).
 2. Set up speech recognition once, in a terminal. It downloads the speech
    model picked in Settings → Assistant (`small`, 265 MB, by default; or name
-   one: `isle-setup-voice base`) and needs nothing else installed. A graphics
+   one, which Settings then uses: `isle-setup-voice base`) and needs nothing
+   else installed. A graphics
    card is used through Vulkan when there is one, else the processor:
 
    ```sh
-   isle-setup-voice
+   ~/.local/bin/isle-setup-voice
    ```
 
    Set up with an older Isle, speech recognition used a Python environment
@@ -81,8 +83,11 @@ Super+I:
 any time:
 
 ```sh
-isled --doctor
+~/.local/bin/isled --doctor
 ```
+
+(Isle's commands are in `~/.local/bin`. When that folder is on your PATH,
+which the installer checks, their names alone do.)
 
 It lists speech recognition (its models, and the GPU or processor it runs
 on) and each AI, where it is installed and whether
@@ -102,12 +107,12 @@ curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash
 ```
 
 To install a particular version instead, put `ISLE_VERSION` before `bash`:
-`… | ISLE_VERSION=0.1.2 bash`.
+`… | ISLE_VERSION=1.0.5 bash`.
 
 ## Uninstalling
 
 ```sh
-isle-uninstall
+~/.local/bin/isle-uninstall
 ```
 
 This removes the extension, its programs, its service and its font, the
@@ -116,6 +121,10 @@ battery charge limit Isle set (asking for your password), and takes Isle's
 hooks out of Claude Code's and Codex's settings. Your tasks,
 calendar events, clipboard history and timer settings stay in
 `~/.local/share/isle`; delete it too to remove everything.
+
+Remove Isle this way, not with the Extensions app's Remove button: that
+deletes only the extension, and leaves `isled`, its service and its hooks.
+A system-wide package is removed as [below](#both-a-package-and-the-one-line-install).
 
 ## Without internet on the computer
 
@@ -144,8 +153,9 @@ sudo dnf install ./isle-1.0.0-1.x86_64.rpm      # Fedora 40 and newer
 
 They put the programs in `/usr/bin`, the extension in
 `/usr/share/gnome-shell/extensions`, and the rest where the system expects
-it. GNOME turns extensions on per user, so each user then runs this once and
-logs out and back in:
+it. GNOME Shell only finds a new extension at login, and turns extensions
+on per user: so each user logs out and back in, then turns Isle on once, in
+the Extensions app or with:
 
 ```sh
 gnome-extensions enable isle@zickrian.github.io
@@ -168,9 +178,16 @@ makepkg -si
 A copy installed with `get.sh`, in your home folder, takes precedence for
 you over a system-wide package: GNOME Shell, D-Bus and systemd all look in
 your home folder first. Run `isle-uninstall` to remove your own copy; the
-package's then takes over, with your settings and data kept. Remove the
-package itself with `sudo apt remove isle`, `sudo dnf remove isle` or
-`sudo pacman -R isle-bin`.
+package's then takes over, with your settings and data kept.
+
+Before removing the package itself, each user who ran Isle takes its alert
+hooks out of Claude Code's and Codex's settings, which would otherwise call
+an `isled` that is gone:
+
+```sh
+isled --unhook-all
+sudo apt remove isle        # or: sudo dnf remove isle, sudo pacman -R isle-bin
+```
 
 ### Checking a download
 
@@ -219,13 +236,15 @@ switch), it switches them on.
 gnome-extensions info isle@zickrian.github.io   # State: ACTIVE (or ENABLED)
 ```
 
-If it says `ERROR` or `OUT OF DATE`, your GNOME Shell version is outside 46
-to 51.
+If it says `OUT OF DATE`, your GNOME Shell version is outside 46 to 51. If
+it says `ERROR`, that is most likely a bug in Isle: please
+[open an issue](https://github.com/zickrian/isle/issues) with GNOME Shell's
+log (see **Anything else** below).
 
 **Music does not show.** Check the background service:
 `systemctl --user status isled`.
 
-**The voice assistant does not answer.** Run `isled --doctor`: it says what
+**The voice assistant does not answer.** Run `~/.local/bin/isled --doctor`: it says what
 is missing (speech recognition, an AI, or its sign-in) and what to run.
 
 **Anything else.** GNOME Shell's log shows extension errors:
