@@ -247,7 +247,9 @@ pub async fn think(
                 return Ok(answer);
             }
         }
-        // What it says while it works ("Opening Files first…") shows as a step.
+        // What it says while it works ("Opening Files first…") shows as a step, no longer as words being
+        // written: those would hide each step after it until the next answer starts.
+        out.draft.send(String::new()).ok();
         if !answer.say.trim().is_empty() {
             activity.send(answer.say.trim().to_owned()).ok();
         }
@@ -638,6 +640,23 @@ mod tests {
             "{}",
             brain.prompts[1]
         );
+    }
+
+    #[tokio::test]
+    async fn a_step_taken_puts_its_written_words_away() {
+        let mut brain = Scripted::new([
+            json!({"say": "Opening Files first", "done": false, "actions": [{"type": "open_app", "app": "Files"}]}),
+        ]);
+        let (activity, _steps) = tokio::sync::mpsc::unbounded_channel();
+        let (draft, mut drafts) = tokio::sync::mpsc::unbounded_channel();
+        let out = Out {
+            activity: &activity,
+            draft: &draft,
+            cards: &unbounded_cards(),
+        };
+        let (desk, _handled) = desk();
+        think(&mut brain, "x", &out, &desk).await.unwrap();
+        assert_eq!(drafts.try_recv().unwrap(), "");
     }
 
     #[tokio::test]

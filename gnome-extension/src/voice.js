@@ -387,10 +387,11 @@ export const VoiceView = GObject.registerClass({
         this._heard.text = top;
         this._heardButton.visible = Boolean(top) && !this.chatOpen;
         this._syncEarlier();
+        // By the clock, not the animation's time: that starts over when the view opens again mid-request.
         if (WORKING.includes(state.phase) && !WORKING.includes(this._lastPhase ?? ''))
-            this._workingAt = this._lastTick;
+            this._workingAt = Date.now() / 1000;
         if (step !== this._lastStep)
-            this._stepAt = this._lastTick;
+            this._stepAt = Date.now() / 1000;
         this._lastStep = step;
         this._lastPhase = state.phase;
         // An answer's light Markdown shows as in the conversation; anything else as written.
@@ -777,9 +778,10 @@ export const VoiceView = GObject.registerClass({
     }
 
     // While it works with no new step for a while: how long it has been at it, once a second.
-    _syncStill(t) {
+    _syncStill() {
+        const now = Date.now() / 1000;
         const working = WORKING.includes(this._phase) && !this._card.visible;
-        const text = working && t - this._stepAt > STILL_WORKING_S ? `Still working · ${elapsed(t - this._workingAt)}` : '';
+        const text = working && now - this._stepAt > STILL_WORKING_S ? `Still working · ${elapsed(now - this._workingAt)}` : '';
         if (text === this._stillShown)
             return;
         const resize = Boolean(text) !== Boolean(this._stillShown);
@@ -828,7 +830,7 @@ export const VoiceView = GObject.registerClass({
         this._face.step(t);
         this._face.queue_repaint();
         this._card.tick(t);
-        this._syncStill(t);
+        this._syncStill();
         // A little faster while it thinks; summed up, so a change of speed never makes the glow jump.
         const speed = WORKING.includes(this._phase) ? 1.6 : 1;
         this._flow += dt * speed;

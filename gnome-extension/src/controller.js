@@ -167,6 +167,8 @@ export class Controller {
         this._listenRequest = 0;
         /** A Listen went to isled and is not over: typing instead cancels it, even before isled says it listens. */
         this._listenSent = false;
+        /** The last request handed to isled (see `_listenRequest`). */
+        this._sentRequest = -1;
         this._voiceCloseMs = VOICE_ERROR_MS;
         /** The last answer whose actions ran, and the last batch of actions run mid-way (see isled's `step`). */
         this._voiceTurn = 0;
@@ -1541,7 +1543,7 @@ export class Controller {
         this._cancel('expand');
         this._cancel('collapse');
         this._expandWanted = false;
-        this._shelveAlert();
+        this._shelveAnswer();
         this._voiceOpen = true;
         this._voiceInBackground = false;
         this._voiceTurn = this._daemon.state.assistant?.turn ?? 0;
@@ -1614,9 +1616,16 @@ export class Controller {
     // Sends a request to isled; not running (or refusing it), it would never answer, so the island says so
     // rather than listen or think forever.
     async _sendRequest(request, method, ...args) {
+        this._sentRequest = request;
         const {result, error} = await this._daemon.attempt('assistant', method, ...args);
-        if (result || !this._voiceOpen || request !== this._listenRequest)
+        if (result || request !== this._listenRequest)
             return;
+        // Closed meanwhile: nothing carries on in the background.
+        if (!this._voiceOpen) {
+            this._voiceInBackground = false;
+            this._syncAssistantBusy();
+            return;
+        }
         const why = error || (this._daemon.running ? 'Isle couldn’t take that' : 'Isle’s service isn’t running');
         this._listenSent = false;
         this._voice.setState({phase: 'error', error: why, hint: this._askAgainHint});
@@ -1625,15 +1634,28 @@ export class Controller {
         this._scheduleVoiceClose(VOICE_ERROR_MS);
     }
 
+    // As the assistant opens: an answer of its own on show has been seen, so it goes rather than come back
+    // once the assistant closes; any other alert waits its turn.
+    _shelveAnswer() {
+        if (this._alert?.key === 'assistant')
+            this._alert.answered = true;
+        this._shelveAlert();
+    }
+
     /** Shows the assistant again as it is (at work, or with the answer it came to), without listening. */
     _reopenVoice() {
         const state = this._daemon.state.assistant;
         if (!this._voiceBound || !state)
             return;
+        // Ended since (another request, or isled restarted), there is nothing to show again: the conversation.
+        if (!['reply', 'error', ...VOICE_WORKING].includes(state.phase)) {
+            this._openVoice({typing: true});
+            return;
+        }
         this._cancel('expand');
         this._cancel('collapse');
         this._expandWanted = false;
-        this._shelveAlert();
+        this._shelveAnswer();
         this._voiceOpen = true;
         this._voiceInBackground = false;
         this._voiceTarget = global.display.focus_window;
@@ -1799,6 +1821,9 @@ export class Controller {
         }
         this._voiceInBackground = false;
         this._syncAssistantBusy();
+        // Closed as it turned what was said into text, and nothing was: there is nothing to tell.
+        if (state.phase === 'error' && state.heard_nothing)
+            return;
         this._post(Alerts.assistant({...state, hint: this._voice.withShortcut(state.hint ?? '')}, () => this._reopenVoice()));
     }
 
@@ -1986,8 +2011,10 @@ export class Controller {
         // A command still waiting for Run or Deny is asked in an alert now.
         if (this._deciding)
             this._askInAlert(this._deciding.action);
-        // Still at work: it carries on, and its answer comes as an alert.
-        this._voiceInBackground = VOICE_WORKING.includes(this._daemon.state.assistant?.phase);
+        // Still at work, or typed and not yet taken up (its AI still starting): it carries on, and its answer
+        // comes as an alert.
+        const asked = this._voice.phase === 'thinking' && this._sentRequest === this._listenRequest;
+        this._voiceInBackground = asked || VOICE_WORKING.includes(this._daemon.state.assistant?.phase);
         this._syncAssistantBusy();
         this._daemon.call('assistant', 'End');
     }

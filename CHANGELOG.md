@@ -205,6 +205,17 @@ All notable changes to Isle are listed here. The format follows
 - The guides say to lift a battery charge limit the assistant set (`isle-charge-limit 100`) before
   removing a .deb, .rpm or AUR package: the limit stayed, with nothing of Isle left to lift it.
 - Searching the clipboard history finds words anywhere in a copied text, not only near its start.
+- The assistant opened (Super+I) over its answer's alert no longer brings that alert back once it closes,
+  and clicking an answer that is over opens the conversation instead of an empty assistant that never
+  closed.
+- A request typed and sent just before the assistant was closed (its AI still starting) is answered as
+  an alert and its actions run, instead of being worked on unseen and its answer dropped.
+- Closing the assistant while it turns what was said into text no longer brings a "Didn't catch that"
+  alert when nothing was said.
+- "Still working" under a request opened again from the closed island counts from when it began,
+  instead of showing late and short of the time it has taken.
+- While the assistant works step by step, each step shows as it happens ("Searching ~ for “cv”…")
+  instead of the words of its last answer staying until the next one starts.
 
 ## [1.0.6] - 2026-10-24
 
