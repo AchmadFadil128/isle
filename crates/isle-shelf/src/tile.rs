@@ -190,8 +190,14 @@ fn frame(preview: &impl IsA<gtk::Widget>, remove: Option<&gtk::Button>) -> gtk::
 fn tile_box(frame: &gtk::Overlay, name: &str, fresh: bool) -> gtk::Box {
     // Exactly NAME_WIDTH wide, as in the island: the requested width, with
     // the natural one kept below it so a long name never widens the tile.
+    // Two lines, as in the island: only a longer name loses its middle.
     let label = gtk::Label::builder()
         .label(name)
+        .wrap(true)
+        .wrap_mode(pango::WrapMode::WordChar)
+        .lines(2)
+        .justify(gtk::Justification::Center)
+        .valign(gtk::Align::Start)
         .ellipsize(pango::EllipsizeMode::Middle)
         .width_request(NAME_WIDTH)
         .max_width_chars(1)

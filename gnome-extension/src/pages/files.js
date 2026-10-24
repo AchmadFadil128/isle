@@ -289,7 +289,9 @@ class FilesView extends St.Widget {
         const box = new St.BoxLayout({...VERTICAL, style_class: 'isle-shelf-tile-box'});
         box.add_child(frame);
         const text = label(name, 'isle-shelf-name', {width: NAME_WIDTH, x_align: Clutter.ActorAlign.CENTER});
-        text.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
+        // Two lines ("Alex Morgan / CV.pdf" whole); only a longer name loses its middle.
+        text.clutter_text.set({line_wrap: true, line_wrap_mode: Pango.WrapMode.WORD_CHAR,
+            line_alignment: Pango.Alignment.CENTER, ellipsize: Pango.EllipsizeMode.MIDDLE});
         box.add_child(text);
         return new St.Button({
             style_class: 'isle-shelf-tile',
