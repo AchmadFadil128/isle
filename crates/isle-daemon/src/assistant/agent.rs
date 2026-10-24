@@ -367,7 +367,11 @@ async fn run_command(
         // polkit says so too, so this goes first): either way the user chose not to.
         let no_password = report.text.contains("password was not given");
         let denied = !no_password && report.text.contains("run failed: denied");
-        let status = if denied || no_password { "denied" } else { "failed" };
+        let status = if denied || no_password {
+            "denied"
+        } else {
+            "failed"
+        };
         out.cards.send(card(status, None)).ok();
         tasks::clean(&task);
         ran.push((shown.clone(), status.into()));
