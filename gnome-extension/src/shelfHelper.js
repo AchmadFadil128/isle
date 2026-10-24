@@ -66,6 +66,8 @@ export class ShelfHelper extends Signals.EventEmitter {
         this._showsOver = true;
         /** One from before 1.0.7 has no Place: its window grows over the island only while a file comes in. */
         this._places = true;
+        /** Waiting for the island's shape to cover the whole island before placing the window there. */
+        this._awaitingBody = false;
         /** A file is being dragged out of the helper window. */
         this._dragging = false;
         this._cancellable = new Gio.Cancellable();
@@ -117,6 +119,14 @@ export class ShelfHelper extends Signals.EventEmitter {
         const wanted = this._wantedRect();
         if (!wanted) {
             this._candidate = null;
+            // Waiting for the shape to cover the island: looked at again, as no other change may come.
+            if (this._awaitingBody && !this._recheck) {
+                this._recheck = GLib.timeout_add(GLib.PRIORITY_DEFAULT, RECHECK_MS, () => {
+                    this._recheck = 0;
+                    this.sync();
+                    return GLib.SOURCE_REMOVE;
+                });
+            }
             // Mid-drag a passing layout change must not take the window from under the file:
             // it would leave and come back, and the light would blink.
             if (Main.overview.visible || !(this._dragNear && this._shownRect && this._page.active && this._page.visible && this._island.mapped))
@@ -212,8 +222,11 @@ export class ShelfHelper extends Signals.EventEmitter {
         const inside = body?.width && body.height && covers(body) &&
             tab.x >= body.x && tab.y >= body.y && tab.x + tab.width <= body.x + body.width &&
             tab.y + tab.height <= body.y + body.height;
-        // Placed once, where it will stay: not over the tab first and then over the whole island a frame later.
-        if (this._places && body && !inside && !held && this._island.willCover(body))
+        // Placed once, where it will stay: not over the tab first and the whole island a frame later. Only while
+        // the shape still moves; settled short of it (rounding), it goes over the tab.
+        this._awaitingBody = Boolean(this._places && body && !inside && !held && this._island.morphing &&
+            this._island.willCover(body));
+        if (this._awaitingBody)
             return null;
         return {rect: inside ? body : tab, area: tab};
     }
