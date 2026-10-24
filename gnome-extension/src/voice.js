@@ -365,6 +365,8 @@ export const VoiceView = GObject.registerClass({
             this._dropEndedCard(state.card);
         this._phase = state.phase;
         this._exchange = {heard: state.heard ?? '', reply: clip(state.reply ?? '')};
+        /** Whether the answer was cut: the chevron then opens it whole in the conversation. */
+        this._replyCut = state.phase === 'reply' && this._exchange.reply !== (state.reply ?? '').trim();
         const heard = state.heard ? `“${state.heard}”` : '';
         const step = state.phase === 'acting' ? describeActions(state.actions) : state.activity || '';
         this._noteStep(state.phase, step);
@@ -374,7 +376,7 @@ export const VoiceView = GObject.registerClass({
             transcribing: [this.followUp ?? '', 'One moment…', true],
             // Its answer as it writes it; else an agent's step as it happens ("Searching ~/Downloads for
             // “ttd”…"), else thinking.
-            thinking: [heard, state.draft || step || 'Thinking…', !state.draft, Boolean(state.draft)],
+            thinking: [heard, clip(state.draft ?? '') || step || 'Thinking…', !state.draft, Boolean(state.draft)],
             acting: [heard, step, true],
             reply: [heard, clip(state.reply ?? ''), false, true],
             error: [heard, state.error || 'Something went wrong', false],
@@ -508,8 +510,8 @@ export const VoiceView = GObject.registerClass({
     }
 
     _syncEarlier() {
-        // The chevron, for a conversation longer than what the pill shows.
-        const earlier = this._history.length > 2 && !this.chatOpen;
+        // The chevron, for a conversation longer than what the pill shows, or an answer cut short.
+        const earlier = (this._history.length > 2 || (this._replyCut && this._history.length > 0)) && !this.chatOpen;
         this._earlier.visible = earlier;
         this._heardButton.reactive = earlier;
     }
@@ -835,7 +837,18 @@ const MAX_DONE_STEPS = 3;
 
 function clip(text) {
     const trimmed = text.trim();
-    return trimmed.length > MAX_REPLY ? `${trimmed.slice(0, MAX_REPLY - 1).trimEnd()}…` : trimmed;
+    if (trimmed.length <= MAX_REPLY)
+        return trimmed;
+    // At a word's end, so no word or emoji is split (half an emoji is not even text).
+    let cut = trimmed.slice(0, MAX_REPLY - 1);
+    const end = cut.search(/\s+\S*$/);
+    cut = `${(end > MAX_REPLY / 2 ? cut.slice(0, end) : cut.replace(/[\uD800-\uDBFF]$/, '')).trimEnd()}…`;
+    // `Code` or **bold** it cut through closes after the "…", so no stray marks show.
+    if ((cut.match(/`/g) ?? []).length % 2)
+        cut += '`';
+    if ((cut.replace(/`[^`]+`/g, '').match(/\*\*/g) ?? []).length % 2)
+        cut += '**';
+    return cut;
 }
 
 // Terminals to sign in with, most likely first; the CLI's own sign-in runs there (a browser, then a

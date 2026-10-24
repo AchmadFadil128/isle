@@ -41,6 +41,9 @@ All notable changes to Isle are listed here. The format follows
   second either, so a key meant for something else never runs it.
 - Opening the island (Super+V, say) while the assistant waits for Run or Deny keeps the question: it shows
   as an alert once the island closes, instead of going and leaving the command to wait ten minutes.
+- A long answer is cut at the end of a word, never through an emoji or leaving stray bold or code marks;
+  the answer as it is written is cut the same way instead of running past the pill; and a cut answer
+  always has the chevron to read it whole in the conversation.
 
 ## [1.0.6] - 2026-10-24
 
