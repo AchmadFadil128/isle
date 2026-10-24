@@ -363,14 +363,17 @@ async fn run_command(
         .unwrap_or(asked)
         .to_owned();
     if !report.ok {
-        let denied = report.text.contains("denied");
-        let status = if denied { "denied" } else { "failed" };
+        // The Deny button (the extension's own word), or the password dialog closed ("Access denied" from
+        // polkit says so too, so this goes first): either way the user chose not to.
+        let no_password = report.text.contains("password was not given");
+        let denied = !no_password && report.text.contains("run failed: denied");
+        let status = if denied || no_password { "denied" } else { "failed" };
         out.cards.send(card(status, None)).ok();
         tasks::clean(&task);
         ran.push((shown.clone(), status.into()));
         return if denied {
             format!("run `{shown}`: the user denied it. Do not run it; offer another way, or stop.")
-        } else if report.text.contains("password was not given") {
+        } else if no_password {
             format!(
                 "run `{shown}` did not start: the password dialog was closed without the password ({}). \
                  The user chose not to; say so.",
