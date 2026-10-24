@@ -37,9 +37,15 @@ pub async fn watch(system: Connection, iface: InterfaceRef<SystemService>) -> an
         .receive_properties_changed_with_args(&[(0, INTERFACE)])
         .await?;
     let mut previous: Option<Network> = None;
+    let mut sleeps = super::sleep::sleeps();
 
     loop {
         let current = read(&system, &properties).await?;
+        // Going to sleep and waking drop the connection until it is back: no alert for that.
+        if sleeps.has_changed().unwrap_or(false) {
+            sleeps.mark_unchanged();
+            previous = None;
+        }
         let event = previous
             .as_ref()
             .filter(|before| {

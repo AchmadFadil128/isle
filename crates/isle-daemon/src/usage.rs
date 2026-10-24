@@ -156,9 +156,9 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
     let mut claude: Option<Provider> = None;
     let mut asked_claude: Option<Instant> = None;
     let mut claude_wait = CLAUDE_EVERY;
-    // Failures in a row, and whether the last was the server's (then the page cannot hurry it).
+    // Failures in a row, and how the last ask went wrong (`None`: it did not).
     let mut failures = 0;
-    let mut server_failing = false;
+    let mut last_error = None;
     let mut codex = CodexReader::default();
     // Unlocking wakes the loop, to ask Claude if it came due meanwhile.
     let mut locked = crate::system::locked();
@@ -187,9 +187,7 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
         if config.claude && claude_sign_in().exists() {
             let due = |every| asked_claude.is_none_or(|at: Instant| at.elapsed() >= every);
             // Opening the page asks sooner, but never while Claude's server is given time after failing.
-            if (forced && !server_failing && due(OFFLINE_RETRIES[0].min(CLAUDE_AT_MOST)))
-                || (!paused && due(claude_wait))
-            {
+            if (forced && page_wait(last_error).is_some_and(due)) || (!paused && due(claude_wait)) {
                 asked_claude = Some(Instant::now());
                 let fresh = tokio::task::spawn_blocking(read_claude).await.ok();
                 failures = if matches!(fresh, Some(Ok(_))) {
@@ -197,7 +195,10 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
                 } else {
                     failures + 1
                 };
-                server_failing = matches!(fresh, Some(Err(ClaudeError::Busy)));
+                last_error = match &fresh {
+                    Some(Err(why)) => Some(*why),
+                    _ => None,
+                };
                 claude_wait = wait_after(fresh.as_ref().map(|r| r.as_ref().map(|_| ())), failures);
                 claude = match (fresh, claude.take()) {
                     (Some(Ok(fresh)), _) => Some(fresh),
@@ -302,6 +303,17 @@ fn wait_after(outcome: Option<Result<(), &ClaudeError>>, failures: usize) -> Dur
             let doubled = 2u32.saturating_pow(u32::try_from(failures).unwrap_or(u32::MAX));
             CLAUDE_EVERY.saturating_mul(doubled).min(CLAUDE_BACKOFF)
         }
+    }
+}
+
+/// How soon after the last ask opening the page asks Claude again, after `last` went wrong (`None`: it
+/// did not); `None` while its server is given time after failing.
+fn page_wait(last: Option<ClaudeError>) -> Option<Duration> {
+    match last {
+        Some(ClaudeError::Busy) => None,
+        // Nothing reached the server: offline, or only the sign-in file was read.
+        Some(ClaudeError::Offline | ClaudeError::NeedsRefresh) => Some(OFFLINE_RETRIES[0]),
+        Some(ClaudeError::SignIn) | None => Some(CLAUDE_AT_MOST),
     }
 }
 
@@ -713,6 +725,17 @@ mod tests {
             wait_after(Some(Err(&ClaudeError::NeedsRefresh)), 3),
             CLAUDE_AT_MOST
         );
+    }
+
+    #[test]
+    fn opening_the_page_asks_claude_at_most_every_two_minutes() {
+        assert_eq!(page_wait(None), Some(CLAUDE_AT_MOST));
+        assert_eq!(page_wait(Some(ClaudeError::SignIn)), Some(CLAUDE_AT_MOST));
+        assert_eq!(
+            page_wait(Some(ClaudeError::Offline)),
+            Some(OFFLINE_RETRIES[0])
+        );
+        assert_eq!(page_wait(Some(ClaudeError::Busy)), None);
     }
 
     #[test]

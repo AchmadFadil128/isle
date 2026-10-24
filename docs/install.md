@@ -147,8 +147,8 @@ system-wide packages, installed for every user of the computer with the
 system's package manager (so they update and uninstall with it):
 
 ```sh
-sudo apt install ./isle_1.0.0_amd64.deb         # Ubuntu 24.04 and newer, Debian 13
-sudo dnf install ./isle-1.0.0-1.x86_64.rpm      # Fedora 40 and newer
+sudo apt install ./isle_*_amd64.deb        # Ubuntu 24.04 and newer, Debian 13
+sudo dnf install ./isle-*.x86_64.rpm       # Fedora 40 and newer
 ```
 
 They put the programs in `/usr/bin`, the extension in
@@ -182,10 +182,12 @@ package's then takes over, with your settings and data kept.
 
 Before removing the package itself, each user who ran Isle takes its alert
 hooks out of Claude Code's and Codex's settings, which would otherwise call
-an `isled` that is gone:
+an `isled` that is gone. A battery charge limit set with the assistant
+stays after the package goes, so lift it first too:
 
 ```sh
 isled --unhook-all
+isle-charge-limit 100       # only if the assistant set a charge limit
 sudo apt remove isle        # or: sudo dnf remove isle, sudo pacman -R isle-bin
 ```
 
@@ -195,7 +197,7 @@ Release files are built by GitHub Actions from the tagged source, with a
 build provenance attestation. With the [GitHub CLI](https://cli.github.com):
 
 ```sh
-gh attestation verify isle-1.0.0-x86_64-linux.tar.gz --repo zickrian/isle
+gh attestation verify isle-*-x86_64-linux.tar.gz --repo zickrian/isle
 ```
 
 `get.sh` checks each download against its `.sha256` already.
@@ -244,8 +246,9 @@ log (see **Anything else** below).
 **Music does not show.** Check the background service:
 `systemctl --user status isled`.
 
-**The voice assistant does not answer.** Run `~/.local/bin/isled --doctor`: it says what
-is missing (speech recognition, an AI, or its sign-in) and what to run.
+**The voice assistant does not answer.** Run `~/.local/bin/isled --doctor` (with a .deb, .rpm
+or AUR package, `isled --doctor`): it says what is missing (speech recognition, an AI, or its
+sign-in) and what to run.
 
 **Anything else.** GNOME Shell's log shows extension errors:
 `journalctl -b -o cat /usr/bin/gnome-shell | grep -i isle`. Please

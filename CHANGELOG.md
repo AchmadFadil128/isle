@@ -186,6 +186,21 @@ All notable changes to Isle are listed here. The format follows
 - A password a password manager clears again also leaves the clipboard history when you pasted it into
   another app (the manager clears it on a timer, with that app in front), and copying blank text no
   longer takes the last copy out of the history.
+- Opening the Usage page asks Claude for new numbers at most every two minutes, as the guide says (every
+  half minute only while offline); it asked every half minute, four times what the guide promises of an
+  endpoint Claude does not document.
+- isled no longer keeps a note of every Claude Code and Codex session it ever heard from, which grew
+  for as long as it ran.
+- With no conversation to keep, isled no longer wakes every minute to check whether it is over.
+- The guides give the commands of a .deb, .rpm or AUR install by name (`isled --doctor`,
+  `isle-setup-voice`): the `~/.local/bin/…` they gave is only there with the one-line install.
+- The installation guide's .deb and .rpm commands match any release's file, not only 1.0.0's.
+- A battery whose level reads a little up and down around 20%, 10% or 5% warns once at each, as
+  meant, until the charger is plugged in; it warned again at every dip.
+- Waking the computer no longer brings an "Offline" alert while Wi-Fi reconnects (with the screen not
+  locked on suspend): the connection going with sleep is not one lost.
+- The guides say to lift a battery charge limit the assistant set (`isle-charge-limit 100`) before
+  removing a .deb, .rpm or AUR package: the limit stayed, with nothing of Isle left to lift it.
 
 ## [1.0.6] - 2026-10-24
 

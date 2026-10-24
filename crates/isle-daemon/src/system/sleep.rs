@@ -26,6 +26,14 @@ pub fn locked() -> watch::Receiver<bool> {
     LOCKED.subscribe()
 }
 
+/// How often the computer went to sleep or woke, so a watcher can tell what came with that.
+static SLEEPS: LazyLock<watch::Sender<u64>> = LazyLock::new(|| watch::Sender::new(0));
+
+/// Changes as the computer goes to sleep and as it wakes.
+pub fn sleeps() -> watch::Receiver<u64> {
+    SLEEPS.subscribe()
+}
+
 pub async fn watch(bus: Connection) -> anyhow::Result<()> {
     let rule = MatchRule::builder()
         .msg_type(zbus::message::Type::Signal)
@@ -35,8 +43,10 @@ pub async fn watch(bus: Connection) -> anyhow::Result<()> {
         .build();
     let mut signals = MessageStream::for_match_rule(rule, &bus, None).await?;
     while let Some(message) = signals.next().await {
+        let going = message?.body().deserialize::<bool>();
+        SLEEPS.send_modify(|count| *count += 1);
         // `false`: waking up, not going to sleep.
-        if message?.body().deserialize::<bool>() == Ok(false) {
+        if going == Ok(false) {
             crate::clock::resumed();
         }
     }

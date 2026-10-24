@@ -287,6 +287,8 @@ impl Limiter {
         {
             return false;
         }
+        // Only the recent are kept: each AI session adds its own, which over weeks would pile up.
+        self.last.retain(|_, at| now.duration_since(*at) < MIN_GAP);
         self.last.insert(key, now);
         true
     }
@@ -679,6 +681,8 @@ mod tests {
         assert!(limiter.allow(&waiting, start + Duration::from_millis(100)));
         assert!(limiter.allow(&codex, start + Duration::from_millis(100)));
         assert!(limiter.allow(&done, start + Duration::from_millis(400)));
+        // Sessions long over are forgotten.
+        assert_eq!(limiter.last.len(), 1);
     }
 
     #[test]
