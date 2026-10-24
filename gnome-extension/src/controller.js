@@ -1451,6 +1451,9 @@ export class Controller {
 
     /** Types the request instead of saying it: listening stops (speech recognition never starts). */
     _startTyping(initial) {
+        // Closed, it would take the keyboard from the windows unseen.
+        if (!this._voiceOpen)
+            return;
         if (this._daemon.state.assistant?.phase === 'listening')
             this._daemon.call('assistant', 'Cancel');
         this._listenRequest++;
@@ -1599,7 +1602,8 @@ export class Controller {
             runActions(state.actions, this._voiceActions());
             // In the conversation the answer is already in the list: the field is ready for the next word.
             if (this._voice.chatOpen && !state.listen) {
-                this._later('chat-type', CHAT_TYPE_AGAIN_MS, () => this._voice.chatOpen && this._startTyping(''));
+                // Not once closed meanwhile (Esc, or an action that closes it first, as `write` does).
+                this._later('chat-type', CHAT_TYPE_AGAIN_MS, () => this._voiceOpen && this._voice.chatOpen && this._startTyping(''));
             } else if (state.listen && this._autoListens < VOICE_MAX_AUTO_LISTENS) {
                 this._autoListens++;
                 // Asked something back: listen for the reply without a key press.
@@ -1798,6 +1802,7 @@ export class Controller {
     _closeVoice() {
         this._cancel('voice-close');
         this._cancel('voice-listen');
+        this._cancel('chat-type');
         this._cancel('voice-page');
         this._voiceOpen = false;
         // A command still waiting for Run or Deny is asked in an alert now.

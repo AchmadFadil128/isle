@@ -14,6 +14,8 @@ All notable changes to Isle are listed here. The format follows
   go anywhere on the island still lands on the shelf, and the island's tabs keep their clicks.
 - In the Activities overview the Files tab shows its files instead of an empty tray.
 - Maximizing and arranging windows by voice no longer logs warnings on GNOME 49 and later.
+- Closing the assistant (Esc, or an answer that types or takes a screenshot) right after an answer in the
+  conversation no longer leaves the keyboard taken by a closed island.
 
 ## [1.0.6] - 2026-10-24
 
