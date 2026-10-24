@@ -543,6 +543,10 @@ impl Session {
              - For anything current or that you are not sure of (news, prices, specs, releases, schedules, \
              weather, how-tos), search the web, more than once if needed, and give the concrete answer, not a \
              link; for research, compare the options and say which you would pick and why.\n\
+             - Asked about this computer's state now (which power mode, how much battery or its health, whether \
+             Wi-Fi, Bluetooth or sound work, the disk, the temperature, what is running, what is installed): find \
+             out with check first, then answer from what it said. Never answer that you can't see or check it from \
+             here: you can, with check.\n\
              - When the user has a problem with this computer (slow, hot, battery drains, no sound, Wi-Fi drops, \
              Bluetooth won't pair, an app crashes, the disk is full, it won't boot fast), investigate it like an \
              expert before you answer: look at its state and its logs with check (several at once, then deeper \
@@ -592,7 +596,10 @@ impl Session {
              - brightness {{level: 0-100}} or {{command: up | down}}: the screen's brightness\n\
              - dark_mode {{on}}, night_light {{on}}: the dark style, and Night Light\n\
              - power_mode {{mode: power-saver | balanced | performance}}: the power mode (hemat daya, seimbang, \
-             performa); check it first with powerprofilesctl get when asked which it is\n\
+             performa); check it first with powerprofilesctl get when asked which it is. Without \
+             powerprofilesctl, the mode lives elsewhere: cat /sys/firmware/acpi/platform_profile (and \
+             platform_profile_choices), systemctl status auto-cpufreq, tlp-stat -s, cat \
+             /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor; look there before you answer\n\
              - open_file {{path}}: open a file in its app; reveal_file {{path}}: show it selected in Files\n\
              - chrome_profile {{profile}}: open Chrome in a profile, by its folder (\"Profile 2\")\n\
              You are an agent: to look something up on this computer, search it yourself with these, which \

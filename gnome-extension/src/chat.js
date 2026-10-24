@@ -167,11 +167,11 @@ class Sweep extends St.DrawingArea {
 });
 
 /**
- * An answer's light Markdown as Pango markup: **bold**, `code` and "- " lists; everything else as written.
- * The text is escaped first, so nothing in it can be read as markup.
+ * An answer's light Markdown as Pango markup: **bold**, `code` and "- " lists; a [link](url) as its words
+ * alone; everything else as written. The text is escaped first, so nothing in it can be read as markup.
  */
 export function answerMarkup(text) {
-    return text.split('\n').map(line => {
+    return text.replace(/\[([^\]\n]+)\]\((?:https?:\/\/|www\.)[^)\s]+\)/g, '$1').split('\n').map(line => {
         const bullet = /^\s*[-*•]\s+/;
         const listed = bullet.test(line);
         // Code spans first, as written; bold only in the words between them, so the markup always nests.
