@@ -6,6 +6,13 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-10-24
+
+### Fixed
+
+- A request typed in the conversation starts its list of steps afresh: the previous request's steps
+  (and words it said on the way) no longer show under "Thinking…" for the new one.
+
 ## [1.0.5] - 2026-10-24
 
 ### Fixed
@@ -831,7 +838,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.5...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.6...HEAD
+[1.0.6]: https://github.com/zickrian/isle/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/zickrian/isle/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/zickrian/isle/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/zickrian/isle/compare/v1.0.2...v1.0.3
