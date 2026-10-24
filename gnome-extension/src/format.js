@@ -7,6 +7,11 @@ import Gio from 'gi://Gio';
 
 let interfaceSettings = null;
 
+/** Lets go of GNOME's settings once Isle is turned off; they are read again when needed. */
+export function release() {
+    interfaceSettings = null;
+}
+
 /** Whether the user prefers a 12-hour clock in GNOME's settings. */
 export function uses12Hour() {
     interfaceSettings ??= new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});

@@ -2083,6 +2083,7 @@ export class Controller {
         this._topBar.destroy();
         this._daemon.destroy();
         this._settings = null;
+        Format.release();
     }
 
     /** Frees what the steps of building (see the constructor) made before it was turned off: nothing
@@ -2104,5 +2105,6 @@ export class Controller {
             this._privacy, this._audio, this._notifications, this._daemon])
             service?.destroy();
         this._settings = null;
+        Format.release();
     }
 }
