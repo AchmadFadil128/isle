@@ -109,6 +109,26 @@ All notable changes to Isle are listed here. The format follows
 - Tidier pages: every page's content starts and ends on the same edges, secondary buttons share one
   grey, placeholders one brightness and no indent, empty lists one style, the Focus buttons one height;
   calendar times, usage percents and header icons line up, and a song counts down with a minus sign.
+- A command's output with a letter such as "İ" no longer stops the assistant until Isle restarts, and
+  a secret on such a line is still hidden.
+- Isle starts even when the login shell leaves a job running (an agent started in `.bashrc`) that kept
+  its output open, which left the island without its service.
+- Taking a file off the shelf never deletes a file outside the shelf's own folder.
+- An AI that hangs as it starts gives up after 20 seconds instead of leaving Super+I doing nothing.
+- A quick command the assistant ran is no longer reported as interrupted the next time Isle starts.
+- New chat, Undo, Clear conversation and a command's end that come while a request is answered are
+  carried out once it is answered instead of being lost, and a request typed while listening is answered.
+- An error such as "Didn't catch that" no longer shows the last request's command card under it.
+- A command still running when its request is cancelled or runs out of time is followed to its end and
+  told, and one running across two restarts of Isle is no longer lost.
+- The assistant offers a command only through Isle's own checks, also in the answer it gives once its
+  steps run out.
+- AI limit warnings at 80% and 95% come once per window, not again when the reset time is read a moment
+  off.
+- Claude Code gets the sign-in from its settings in a file only you can read, no longer on its command
+  line, where other users could see an API key.
+- A quiet conversation is cleared when its 30 minutes, 2 hours or day are over even while nothing is
+  asked, and at midnight even after the computer slept.
 
 ## [1.0.6] - 2026-10-24
 

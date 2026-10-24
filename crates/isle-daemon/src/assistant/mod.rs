@@ -26,6 +26,7 @@ mod system;
 mod tasks;
 mod whisper;
 
+use std::collections::{HashSet, VecDeque};
 use std::time::Duration;
 
 use chrono::NaiveDate;
@@ -63,6 +64,8 @@ const UNDO_NEW_CHAT: Duration = Duration::from_secs(5);
 /// The AI stays up this long after its last use, so a follow-up needs no start-up; then it quits and its
 /// memory is freed. Opening the island starts it ahead of the request (see `Warm`).
 const KEEP_WARM: Duration = Duration::from_secs(3 * 60);
+/// Starting the AI, or getting it ready, takes longer than this only when it is stuck.
+const START_TIMEOUT: Duration = Duration::from_secs(20);
 /// The window commands that tile a window, which only an updated extension knows.
 const TILES: [&str; 9] = [
     "left",
@@ -803,6 +806,10 @@ fn today() -> NaiveDate {
     chrono::Local::now().date_naive()
 }
 
+/// How often a quiet conversation is checked for being over: a timer counts no time asleep (suspend),
+/// so the clock is read again rather than trusted to reach midnight or the end of a quiet hour.
+const CHECK_CHAT: Duration = Duration::from_secs(60);
+
 /// How long until the next midnight, when the day's conversation is cleared.
 fn until_midnight() -> Duration {
     let now = chrono::Local::now();
@@ -828,16 +835,22 @@ fn new_day(session: &mut Session, pruned: &mut Option<NaiveDate>) {
 pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut commands: Commands) {
     let mut session = Session::default();
     let mut next = None;
+    // Commands about the conversation that came while a request was answered, handled after it.
+    let mut later = VecDeque::new();
     let mut pruned = None;
     // When the AI, unused since, quits (see `KEEP_WARM`).
     let mut cool_at: Option<tokio::time::Instant> = None;
     // The conversation goes on after a restart of isled, with the AI's own copy of it.
     let mut talk = Talk::load(Keep::Day);
+    // How long a quiet conversation is kept, as Settings last said with a request.
+    let mut keep = Keep::Day;
     session.provider = Provider::from_id(&talk.chat.provider);
     session.conversation = Some(talk.chat.conversation.clone()).filter(|id| !id.is_empty());
     show_history(&iface, &talk.chat).await;
     new_day(&mut session, &mut pruned);
-    look_after_tasks(&iface).await;
+    // The ids of the commands followed until they end and are told (see `Command::Settled`).
+    let mut following = HashSet::new();
+    look_after_tasks(&iface, &mut following).await;
     loop {
         let cool = cool_at;
         let cooling = async move {
@@ -853,15 +866,15 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 None => std::future::pending().await,
             }
         };
-        let command = match next.take() {
+        let command = match next.take().or_else(|| later.pop_front()) {
             Some(command) => command,
             None => tokio::select! {
                 command = commands.recv() => match command {
                     Some(command) => command,
                     None => return,
                 },
-                () = tokio::time::sleep(until_midnight()) => {
-                    if talk.end_if_over(&mut session, Keep::Day) {
+                () = tokio::time::sleep(until_midnight().min(CHECK_CHAT)) => {
+                    if talk.end_if_over(&mut session, keep) {
                         show_history(&iface, &talk.chat).await;
                     }
                     new_day(&mut session, &mut pruned);
@@ -884,7 +897,8 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
         };
         next = match command {
             Command::Warm(context) => {
-                if talk.end_if_over(&mut session, Keep::parse(&context.keep_chat)) {
+                keep = Keep::parse(&context.keep_chat);
+                if talk.end_if_over(&mut session, keep) {
                     show_history(&iface, &talk.chat).await;
                 }
                 session.resume(today());
@@ -892,38 +906,59 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 // A failure shows once a request needs the AI; nothing to say yet.
                 if start_brain(&mut session).await.is_ok()
                     && let Some(brain) = session.brain.as_mut()
-                    && let Err(err) = brain.warm().await
                 {
-                    warn!("could not get the AI ready: {err:#}");
-                    session.brain = None;
+                    let warmed = tokio::time::timeout(START_TIMEOUT, brain.warm()).await;
+                    if let Err(err) =
+                        warmed.unwrap_or_else(|_| Err(anyhow::anyhow!("no answer in time")))
+                    {
+                        warn!("could not get the AI ready: {err:#}");
+                        session.brain = None;
+                    }
                 }
                 None
             }
             Command::Listen(context) => {
-                if talk.end_if_over(&mut session, Keep::parse(&context.keep_chat)) {
+                keep = Keep::parse(&context.keep_chat);
+                if talk.end_if_over(&mut session, keep) {
                     show_history(&iface, &talk.chat).await;
                 }
                 session.resume(today());
                 session.adopt(*context);
                 session.open = true;
-                turn(&iface, &data, &mut session, &mut talk, None, &mut commands).await
+                let interrupted = turn(
+                    &iface,
+                    &data,
+                    &mut session,
+                    &mut talk,
+                    None,
+                    &mut commands,
+                    &mut later,
+                )
+                .await;
+                look_after_tasks(&iface, &mut following).await;
+                interrupted
             }
             Command::Ask(text, context) => {
-                if talk.end_if_over(&mut session, Keep::parse(&context.keep_chat)) {
+                keep = Keep::parse(&context.keep_chat);
+                if talk.end_if_over(&mut session, keep) {
                     show_history(&iface, &talk.chat).await;
                 }
                 session.resume(today());
                 session.adopt(*context);
                 session.open = true;
-                turn(
+                let interrupted = turn(
                     &iface,
                     &data,
                     &mut session,
                     &mut talk,
                     Some(text),
                     &mut commands,
+                    &mut later,
                 )
-                .await
+                .await;
+                // A command it ran and stopped following (Cancel, or out of time) is followed on.
+                look_after_tasks(&iface, &mut following).await;
+                interrupted
             }
             Command::NewChat => {
                 // The old one waits for Undo; the AI starts the new one afresh.
@@ -982,6 +1017,10 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 talk.chat.push(Item::command(&task.command, status, now));
                 talk.chat.push(Item::answer(&text, now));
                 talk.save(&session);
+                // Told only now, so a restart before this follows it again.
+                following.remove(&task.id);
+                tasks::forget(&task);
+                tasks::clean(&task);
                 show_history(&iface, &talk.chat).await;
                 if let Err(err) = AssistantService::notice(iface.signal_emitter(), &text, ok).await
                 {
@@ -1024,7 +1063,8 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
     }
 }
 
-/// One request and its answer. Returns a command that interrupted it (End).
+/// One request and its answer. Returns a command that interrupted it (End, or a typed request), and
+/// keeps in `later` those that wait for it (see `hold`).
 async fn turn(
     iface: &InterfaceRef<AssistantService>,
     data: &Sources,
@@ -1032,6 +1072,7 @@ async fn turn(
     talk: &mut Talk,
     typed: Option<String>,
     commands: &mut Commands,
+    later: &mut VecDeque<Command>,
 ) -> Option<Command> {
     let spoken = typed.is_none();
     let text = match typed {
@@ -1061,9 +1102,11 @@ async fn turn(
                 state.actions.clear();
                 state.error.clear();
                 state.hint.clear();
+                state.draft.clear();
+                state.card = Value::Null;
             })
             .await;
-            let audio = match record(iface, commands).await {
+            let audio = match record(iface, commands, later).await {
                 Ok(Recorded::Audio(audio)) => audio,
                 Ok(Recorded::Nothing) => return fail(iface, NOTHING_HEARD).await,
                 Ok(Recorded::NoMic) => return fail(iface, NO_MIC).await,
@@ -1073,7 +1116,8 @@ async fn turn(
             publish(iface, |state| state.phase = Phase::Transcribing).await;
             let whisper = session.whisper.as_mut().expect("started above");
             let transcribed = tokio::time::timeout(TRANSCRIBE_TIMEOUT, whisper.transcribe(&audio));
-            let transcribed = until_cancelled(transcribed, commands, &mut session.open).await;
+            let transcribed =
+                until_cancelled(transcribed, commands, later, &mut session.open).await;
             // Done with it: the speech model quits, its memory freed while the AI works.
             session.whisper = None;
             match transcribed {
@@ -1146,6 +1190,7 @@ async fn turn(
     let result = drive(
         asked,
         commands,
+        later,
         &mut steps,
         &mut drafts,
         &mut card_updates,
@@ -1253,15 +1298,21 @@ async fn start_brain(session: &mut Session) -> Result<(), Failure> {
     }
     let workspace = data_dir().join("assistant");
     let model = session.model(provider);
-    let brain = Brain::start(
+    let instructions = session.instructions();
+    let started = Brain::start(
         provider,
         &model,
         session.conversation.as_deref(),
         &workspace,
-        &session.instructions(),
-    )
-    .await
-    .map_err(|err| {
+        &instructions,
+    );
+    // A stuck start would hold up every command after it (Super+I too).
+    let Ok(started) = tokio::time::timeout(START_TIMEOUT, started).await else {
+        warn!("{} did not start within {START_TIMEOUT:?}", provider.name());
+        let error = format!("{} took too long to start", provider.name());
+        return Err(Failure::from((error.as_str(), "Try again in a moment.")));
+    };
+    let brain = started.map_err(|err| {
         warn!("{err:#}");
         brain::explain(provider, &format!("{err:#}"))
     })?;
@@ -1284,6 +1335,7 @@ const SILENT_RMS: f32 = 1e-4;
 async fn record(
     iface: &InterfaceRef<AssistantService>,
     commands: &mut Commands,
+    later: &mut VecDeque<Command>,
 ) -> Result<Recorded, Command> {
     let mut mic = match Mic::start() {
         Ok(mic) => mic,
@@ -1322,8 +1374,9 @@ async fn record(
                 Some(Command::Stop) if endpointer.heard_speech() => break,
                 Some(Command::Stop) => return Ok(Recorded::Nothing),
                 Some(Command::End | Command::Cancel) | None => return Err(Command::End),
-                // The extension sends no other request mid-turn; one that comes is dropped.
-                Some(_) => {}
+                // Typed instead: the recording gives way to it.
+                Some(ask @ Command::Ask(..)) => return Err(ask),
+                Some(command) => hold(command, later),
             },
         }
     }
@@ -1341,6 +1394,7 @@ async fn record(
 async fn drive<T>(
     future: impl Future<Output = T>,
     commands: &mut Commands,
+    later: &mut VecDeque<Command>,
     steps: &mut mpsc::UnboundedReceiver<String>,
     drafts: &mut mpsc::UnboundedReceiver<String>,
     cards: &mut mpsc::UnboundedReceiver<Value>,
@@ -1401,8 +1455,7 @@ async fn drive<T>(
                 }
                 Some(Command::End) => *open = false,
                 Some(Command::Cancel) | None => return Err(Command::End),
-                // The extension sends no new request while one runs (it reopens this one instead).
-                Some(_) => {}
+                Some(command) => hold(command, later),
             },
         }
     }
@@ -1412,6 +1465,7 @@ async fn drive<T>(
 async fn until_cancelled<T>(
     future: impl Future<Output = T>,
     commands: &mut Commands,
+    later: &mut VecDeque<Command>,
     open: &mut bool,
 ) -> Result<T, Command> {
     tokio::pin!(future);
@@ -1421,9 +1475,22 @@ async fn until_cancelled<T>(
             command = commands.recv() => match command {
                 Some(Command::End) => *open = false,
                 Some(Command::Cancel) | None => return Err(Command::End),
-                Some(_) => {}
+                // Typed while what was said is turned into text: the typed request goes first.
+                Some(ask @ Command::Ask(..)) => return Err(ask),
+                Some(command) => hold(command, later),
             },
         }
+    }
+}
+
+/// A command that came mid-request: New chat, Undo, Clear and a command's end wait for the request to
+/// end. The extension sends no new request while one runs (it reopens this one instead), so one is dropped.
+fn hold(command: Command, later: &mut VecDeque<Command>) {
+    match command {
+        Command::NewChat | Command::UndoNewChat | Command::ClearChat | Command::Settled(..) => {
+            later.push_back(command);
+        }
+        _ => {}
     }
 }
 
@@ -1479,32 +1546,44 @@ async fn fail(
         state.model = failure.model;
         state.heard_nothing = heard_nothing;
         state.activity.clear();
+        state.draft.clear();
         state.reply.clear();
         state.actions.clear();
+        // The last request's card would show under this error, glad it worked.
+        state.card = Value::Null;
     })
     .await;
     None
 }
 
-/// Commands that were running when isled stopped: those over are told now; those still running are
-/// followed until they end, then told (see `Command::Settled`).
-async fn look_after_tasks(iface: &InterfaceRef<AssistantService>) {
+/// Commands nobody follows (they ran when isled stopped, or their request was cancelled): those over
+/// are told now; those still running are followed until they end, then told (see `Command::Settled`).
+async fn look_after_tasks(iface: &InterfaceRef<AssistantService>, following: &mut HashSet<String>) {
     let mut store = tasks::store();
     let running = store.load();
-    if running.tasks.is_empty() {
+    // Only Isle's own: a log in its folder, for a unit of its own.
+    let (own, other): (Vec<_>, Vec<_>) = running.tasks.into_iter().partition(tasks::is_own);
+    if !other.is_empty() {
+        if own.is_empty() {
+            store.remove();
+        } else {
+            store.save_now(&tasks::Running { tasks: own.clone() });
+        }
+    }
+    if own.iter().all(|task| following.contains(&task.id)) {
         return;
     }
     let sender = iface.get().await.commands.clone();
-    store.remove();
-    // Only Isle's own: a log in its folder, for a unit of its own.
-    for task in running.tasks.into_iter().filter(tasks::is_own) {
+    for task in own {
+        if !following.insert(task.id.clone()) {
+            continue;
+        }
         let sender = sender.clone();
         tokio::spawn(async move {
             let (ended, output) = match tasks::settled(&task).await {
                 Some(over) => over,
                 None => tasks::follow(&task, |_| {}).await,
             };
-            tasks::clean(&task);
             sender
                 .send(Command::Settled(Box::new(task), ended, output))
                 .ok();
@@ -1755,5 +1834,35 @@ mod tests {
     #[test]
     fn midnight_is_within_a_day() {
         assert!(until_midnight() <= Duration::from_secs(24 * 3600 + 1));
+    }
+
+    #[tokio::test]
+    async fn commands_that_come_mid_request_wait_for_it() {
+        let (sender, mut commands) = mpsc::unbounded_channel();
+        let mut later = VecDeque::new();
+        let mut open = true;
+        for command in [
+            Command::NewChat,
+            Command::Warm(Box::default()),
+            Command::UndoNewChat,
+            Command::ClearChat,
+            Command::End,
+            Command::Ask("open files".into(), Box::default()),
+        ] {
+            sender.send(command).unwrap();
+        }
+        // A typed request ends the wait; the island closing does not.
+        let waited = until_cancelled(
+            std::future::pending::<()>(),
+            &mut commands,
+            &mut later,
+            &mut open,
+        );
+        assert!(matches!(waited.await, Err(Command::Ask(text, _)) if text == "open files"));
+        assert!(!open);
+        assert!(matches!(
+            later.make_contiguous(),
+            [Command::NewChat, Command::UndoNewChat, Command::ClearChat]
+        ));
     }
 }

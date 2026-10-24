@@ -15,7 +15,7 @@ use tokio::sync::oneshot;
 
 use super::answer::Answer;
 use super::brain::Brain;
-use super::tasks::{self, Ended, Scope, Task};
+use super::tasks::{self, Ended, Scope};
 use super::{apps, check, files};
 
 /// The AI may take this many more steps after its first answer before what it says stands.
@@ -207,9 +207,17 @@ pub struct Out<'a> {
 }
 
 async fn ask_in_time(brain: &mut impl Ask, prompt: &str, out: &Out<'_>) -> anyhow::Result<Answer> {
-    tokio::time::timeout(ASK_TIMEOUT, brain.ask(prompt, out.activity, out.draft))
+    let mut answer = tokio::time::timeout(ASK_TIMEOUT, brain.ask(prompt, out.activity, out.draft))
         .await
-        .map_err(|_| anyhow::Error::new(TooLong))?
+        .map_err(|_| anyhow::Error::new(TooLong))??;
+    // What starts or stops a command is isled's to say (see `run_command`), never the AI's.
+    for action in &mut answer.actions {
+        if let Some(action) = action.as_object_mut() {
+            action.remove("spawn");
+            action.remove("stop");
+        }
+    }
+    Ok(answer)
 }
 
 /// Asks the AI and carries out each step it takes (tools here, desktop actions through `desk`), handing it
@@ -306,6 +314,10 @@ pub async fn think(
         answer.actions.clear();
         answer.done = true;
     }
+    // Its actions go with the reply unchecked: never a command, offered only through `run_command`.
+    answer
+        .actions
+        .retain(|action| !is_tool(action) && action["type"] != "run");
     answer.tools = used;
     answer.ran = ran;
     Ok(answer)
@@ -410,7 +422,7 @@ async fn run_command(
             )
         };
     }
-    remember(&task);
+    tasks::remember(&task);
     let (ended, output) = tasks::follow(&task, |progress| {
         let status = match progress.ended {
             None => "running",
@@ -421,7 +433,7 @@ async fn run_command(
         out.cards.send(card(status, Some(&progress))).ok();
     })
     .await;
-    forget_task(&task);
+    tasks::forget(&task);
     tasks::clean(&task);
     let output = if output.is_empty() {
         "(no output)".to_owned()
@@ -447,26 +459,6 @@ async fn run_command(
                 "run `{shown}` was stopped before it finished (by the user, or its time ran out). Output so far:\n{output}"
             )
         }
-    }
-}
-
-/// Keeps a started task in tasks.json, so isled finds it again after a restart (see `mod.rs`).
-fn remember(task: &Task) {
-    let mut store = tasks::store();
-    let mut running = store.load();
-    running.tasks.push(task.clone());
-    store.save(&running);
-}
-
-fn forget_task(task: &Task) {
-    let mut store = tasks::store();
-    let mut running = store.load();
-    running.tasks.retain(|t| t.id != task.id);
-    // None left: no file at all.
-    if running.tasks.is_empty() {
-        store.remove();
-    } else {
-        store.save(&running);
     }
 }
 
@@ -678,6 +670,22 @@ mod tests {
         assert_eq!(brain.prompts[MAX_STEPS + 1], OUT_OF_STEPS);
         assert_eq!(handled.await.unwrap(), MAX_STEPS);
         assert!(answer.done && answer.actions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn an_answer_after_the_last_step_offers_no_command() {
+        let step = json!({"say": "", "done": false, "actions": [{"type": "open_app", "app": "X"}]});
+        let last = json!({"say": "Installing", "actions": [
+            {"type": "run", "command": "rm -rf ~", "why": "Clean", "spawn": ["systemd-run", "rm"]},
+            {"type": "volume", "level": 20, "spawn": ["x"], "stop": ["y"]}]});
+        let answers = std::iter::repeat_n(step, MAX_STEPS).chain([last]);
+        let mut brain = Scripted::new(answers);
+        let (activity, _steps) = tokio::sync::mpsc::unbounded_channel();
+        let (desk, _handled) = desk();
+        let answer = think(&mut brain, "x", &out!(activity), &desk)
+            .await
+            .unwrap();
+        assert_eq!(answer.actions, [json!({"type": "volume", "level": 20})]);
     }
 
     #[tokio::test]

@@ -130,7 +130,7 @@ fn forget(uri: &str) {
     let Some(path) = uri::to_path(uri) else {
         return;
     };
-    if path.starts_with(owned_dir())
+    if is_copy(&path, &owned_dir())
         && let Err(err) = std::fs::remove_file(&path)
     {
         log::debug!("could not remove {}: {err}", path.display());
@@ -154,6 +154,11 @@ fn remove_unlisted_copies(shelf: &Shelf) {
     }
 }
 
+/// Whether `path` is a file right in the shelf's folder; `shelf/../x` is not, as any bus client may add it.
+fn is_copy(path: &std::path::Path, dir: &std::path::Path) -> bool {
+    path.parent() == Some(dir) && path.file_name().is_some()
+}
+
 /// Where copies made for the shelf live: `~/.local/share/isle/shelf`.
 fn owned_dir() -> std::path::PathBuf {
     data_dir().join("shelf")
@@ -161,4 +166,26 @@ fn owned_dir() -> std::path::PathBuf {
 
 fn file_exists(uri: &str) -> bool {
     uri::to_path(uri).is_some_and(|path| path.exists())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn deletes_only_its_own_copies() {
+        let dir = Path::new("/home/a/.local/share/isle/shelf");
+        assert!(is_copy(&dir.join("Clipboard image.png"), dir));
+        for path in [
+            "/home/a/.local/share/isle/shelf/../../Documents/x",
+            "/home/a/.local/share/isle/shelf/..",
+            "/home/a/.local/share/isle/shelf/sub/x",
+            "/home/a/Documents/x",
+        ] {
+            assert!(!is_copy(Path::new(path), dir), "{path}");
+        }
+        let uri = "file:///home/a/.local/share/isle/shelf/../../Documents/x";
+        assert!(!is_copy(&uri::to_path(uri).unwrap(), dir));
+    }
 }

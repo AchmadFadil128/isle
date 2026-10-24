@@ -34,7 +34,7 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
         Self::at(data_dir().join(format!("{name}.json")))
     }
 
-    fn at(path: PathBuf) -> Self {
+    pub(crate) fn at(path: PathBuf) -> Self {
         let writer = Arc::new(Writer {
             path: path.clone(),
             pending: Mutex::default(),
@@ -98,20 +98,9 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
     /// Saves atomically, so a crash mid-write never leaves a truncated file. The disk work runs on a
     /// blocking thread; saves made meanwhile are merged into the newest, which always lands last.
     pub fn save(&self, value: &T) {
-        if self.read_only {
-            debug!("not saving {}: it could not be loaded", self.path.display());
+        let Some(waiting) = self.queue(value) else {
             return;
-        }
-        let mut bytes = match serde_json::to_vec(value) {
-            Ok(bytes) => bytes,
-            Err(err) => {
-                warn!("could not save {}: {err}", self.path.display());
-                return;
-            }
         };
-        bytes.push(b'\n');
-        // A write already waiting takes these bytes instead of its own.
-        let waiting = lock(&self.writer.pending).replace(bytes).is_some();
         match tokio::runtime::Handle::try_current() {
             Ok(runtime) if !waiting => {
                 let writer = self.writer.clone();
@@ -120,6 +109,31 @@ impl<T: Serialize + DeserializeOwned + Default> Store<T> {
             Ok(_) => {}
             Err(_) => self.writer.write(),
         }
+    }
+
+    /// Saves before returning, for a file another `Store` of it may read or delete right after.
+    pub fn save_now(&self, value: &T) {
+        if self.queue(value).is_some() {
+            self.writer.write();
+        }
+    }
+
+    /// Hands `value` to the writer; whether a write was already waiting, `None` if not to be saved.
+    fn queue(&self, value: &T) -> Option<bool> {
+        if self.read_only {
+            debug!("not saving {}: it could not be loaded", self.path.display());
+            return None;
+        }
+        let mut bytes = match serde_json::to_vec(value) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                warn!("could not save {}: {err}", self.path.display());
+                return None;
+            }
+        };
+        bytes.push(b'\n');
+        // A write already waiting takes these bytes instead of its own.
+        Some(lock(&self.writer.pending).replace(bytes).is_some())
     }
 }
 

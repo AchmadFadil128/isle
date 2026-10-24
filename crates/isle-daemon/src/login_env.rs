@@ -7,8 +7,10 @@
 use std::ffi::OsString;
 use std::io::Read;
 use std::os::unix::ffi::OsStringExt;
-use std::path::PathBuf;
+use std::os::unix::process::CommandExt;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 /// A shell slower than this (a prompt, a network mount) is left behind.
@@ -91,38 +93,66 @@ fn joined_path(shell: &OsString) -> Option<OsString> {
 
 /// The environment of an interactive login shell, where version managers set themselves up.
 fn login_env() -> Option<Vec<(OsString, OsString)>> {
-    let shell = user_shell()?;
-    let mut child = Command::new(&shell)
+    ask(&user_shell()?, TIMEOUT)
+}
+
+fn ask(shell: &Path, timeout: Duration) -> Option<Vec<(OsString, OsString)>> {
+    let mut child = Command::new(shell)
         .args(["-l", "-i", "-c", &format!("printf {MARK}; env -0")])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
+        // Its own group, so whatever its startup files leave running can be ended with it.
+        .process_group(0)
         .spawn()
         .ok()?;
+    let group = child.id() as libc::pid_t;
     let mut stdout = child.stdout.take()?;
-    let reader = std::thread::spawn(move || {
+    let (sender, output) = mpsc::channel();
+    std::thread::spawn(move || {
         let mut bytes = Vec::new();
         stdout.read_to_end(&mut bytes).ok();
-        bytes
+        sender.send(bytes).ok();
     });
-    let deadline = Instant::now() + TIMEOUT;
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
-            _ => {
-                log::warn!(
-                    "the login shell ({}) took too long; going on without it",
-                    shell.display()
-                );
-                child.kill().ok();
-                child.wait().ok();
-                return None;
-            }
+    let deadline = Instant::now() + timeout;
+    let mut bytes = output.recv_timeout(timeout).ok();
+    let exited = loop {
+        if ended(group) {
+            break true;
+        }
+        if Instant::now() >= deadline {
+            break false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    if !exited || bytes.is_none() {
+        // A job left by .bashrc can hold the output open after the shell ends; end it with the shell.
+        // SAFETY: the group made above; its leader is not reaped yet, so the id is still ours.
+        unsafe { libc::killpg(group, libc::SIGKILL) };
+    }
+    child.wait().ok();
+    if exited && bytes.is_none() {
+        bytes = output.recv_timeout(Duration::from_millis(500)).ok();
+    }
+    match bytes {
+        Some(bytes) if exited => Some(parse(&bytes)),
+        _ => {
+            log::warn!(
+                "the login shell ({}) took too long; going on without it",
+                shell.display()
+            );
+            None
         }
     }
-    let bytes = reader.join().ok()?;
-    Some(parse(&bytes))
+}
+
+/// Whether the process ended, left unreaped so its id stays its own.
+fn ended(pid: libc::pid_t) -> bool {
+    // SAFETY: waitid only writes into `info`.
+    let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+    let flags = libc::WEXITED | libc::WNOHANG | libc::WNOWAIT;
+    let done = unsafe { libc::waitid(libc::P_PID, pid as libc::id_t, &mut info, flags) };
+    done == 0 && unsafe { info.si_pid() } != 0
 }
 
 /// `env -0`'s output after the mark: NAME=value, each ended by a NUL.
@@ -189,5 +219,26 @@ mod tests {
                 .stdout,
         );
         assert!(env.iter().any(|(name, _)| name == "PATH"));
+    }
+
+    #[test]
+    fn a_job_left_running_by_the_shell_does_not_hold_isled() {
+        let dir = std::env::temp_dir().join(format!("isle-login-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let shell = dir.join("shell");
+        // Startup files that leave a job holding the output, then the command.
+        std::fs::write(&shell, "#!/bin/sh\nsleep 30 &\nexec /bin/sh -c \"$4\"\n").unwrap();
+        std::fs::set_permissions(&shell, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+            .unwrap();
+        let started = Instant::now();
+        let env = ask(&shell, Duration::from_millis(500)).unwrap();
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(env.iter().any(|(name, _)| name == "PATH"));
+        // A shell that never answers is left behind.
+        std::fs::write(&shell, "#!/bin/sh\nexec sleep 30\n").unwrap();
+        let started = Instant::now();
+        assert!(ask(&shell, Duration::from_millis(300)).is_none());
+        assert!(started.elapsed() < Duration::from_secs(5));
+        std::fs::remove_dir_all(dir).ok();
     }
 }

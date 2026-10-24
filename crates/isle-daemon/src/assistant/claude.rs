@@ -58,8 +58,16 @@ impl Claude {
             // sign in (an API key helper, Bedrock or Vertex in their settings' `env`).
             .args(["--setting-sources", "", "--strict-mcp-config"])
             .args(["--system-prompt", instructions, "--json-schema", SCHEMA]);
-        if let Some(sign_in) = sign_in_settings() {
-            command.args(["--settings", &sign_in]);
+        // A file only the user can read: on the command line, any user could read an API key in it.
+        let sign_in = crate::store::data_dir().join("claude-sign-in.json");
+        match sign_in_settings() {
+            Some(json) => {
+                write_sign_in(&sign_in, &json).context("could not hand Claude its sign-in")?;
+                command.arg("--settings").arg(&sign_in);
+            }
+            None => {
+                std::fs::remove_file(&sign_in).ok();
+            }
         }
         if !model.is_empty() {
             command.args(["--model", model]);
@@ -237,6 +245,18 @@ fn sign_in_settings() -> Option<String> {
     (!kept.is_empty()).then(|| Value::Object(kept).to_string())
 }
 
+/// Writes `json` to `path` made anew, so it is the user's alone whatever an older file was.
+fn write_sign_in(path: &Path, json: &str) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        crate::store::create_private_dir(dir)?;
+    }
+    match std::fs::remove_file(path) {
+        Err(err) if err.kind() != std::io::ErrorKind::NotFound => return Err(err),
+        _ => {}
+    }
+    crate::store::write_private(path, json.as_bytes())
+}
+
 const SIGN_IN_KEYS: &[&str] = &[
     "env",
     "apiKeyHelper",
@@ -321,6 +341,25 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn its_sign_in_is_the_users_alone() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("isle-claude-{}", std::process::id()));
+        let path = dir.join("claude-sign-in.json");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&path, "old").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        write_sign_in(&path, r#"{"env":{"ANTHROPIC_API_KEY":"k"}}"#).unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+        assert!(
+            std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("ANTHROPIC_API_KEY")
+        );
+        std::fs::remove_dir_all(dir).ok();
+    }
 
     #[test]
     fn reads_claudes_answer_and_steps() {
