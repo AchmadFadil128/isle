@@ -6,6 +6,20 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-10-24
+
+### Fixed
+
+- Commands the assistant runs after you press Run (and, for root, enter
+  your password) are followed to the end again: Isle told the AI each one
+  had failed as soon as it started, so it never saw the result and said
+  the password dialog was cancelled, with every AI.
+- The battery charge limit can be set by the assistant on an Isle installed
+  with the one-line installer: it now runs Isle's helper by its whole path,
+  since root's PATH leaves out `~/.local/bin`.
+- The assistant no longer says the terminal, Wi-Fi, Settings, a Chrome
+  profile or music was opened when the app needed was missing.
+
 ## [1.0.2] - 2026-10-24
 
 ### Fixed
@@ -776,7 +790,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/zickrian/isle/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/zickrian/isle/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/zickrian/isle/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/zickrian/isle/compare/v0.9.0...v1.0.0
