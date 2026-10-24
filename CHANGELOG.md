@@ -29,6 +29,8 @@ All notable changes to Isle are listed here. The format follows
   asks go to their terminals at once, as asks that come while it is hidden do.
 - Locking the screen or turning Isle off sends Claude's and Codex's waiting asks to their terminals at
   once; Codex waited nearly ten minutes.
+- A notification keeps text in angle brackets, as GNOME shows it: "Ann <ann@example.com>",
+  "Vec<String>" and "a < b > c" lost those words in the island.
 
 ## [1.0.6] - 2026-10-24
 
