@@ -39,6 +39,8 @@ All notable changes to Isle are listed here. The format follows
   instead of sometimes skipping it.
 - A command card that comes after one put away while it waited takes no Enter or click in its first half
   second either, so a key meant for something else never runs it.
+- Opening the island (Super+V, say) while the assistant waits for Run or Deny keeps the question: it shows
+  as an alert once the island closes, instead of going and leaving the command to wait ten minutes.
 
 ## [1.0.6] - 2026-10-24
 

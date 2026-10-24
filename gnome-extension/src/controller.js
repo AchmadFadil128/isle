@@ -1055,14 +1055,15 @@ export class Controller {
         // A close still pending (the pointer just left) would shut it again.
         this._cancel('expand');
         this._cancel('collapse');
-        if (this._voiceOpen)
-            this._closeVoice();
         const target = pageName ?? this._alert?.page ?? this._defaultPage();
         if (target)
             this._expanded.showPage(target, {animate: this._expandWanted});
         // Opening the island takes over from the alert being shown.
         this._dismissAlert(false);
         this._expandWanted = true;
+        // Closed once it is open, a command still waiting for Run or Deny waits its turn as an alert.
+        if (this._voiceOpen)
+            this._closeVoice();
         this._render();
     }
 
