@@ -174,6 +174,8 @@ All notable changes to Isle are listed here. The format follows
 - With animations turned off, the open island no longer closes when it narrows from under a resting
   pointer (leaving the music page's lyrics for the Call tab); it waits for the pointer to move, as with
   animations on.
+- Clicking the alert with the assistant's answer (or "Isle restarted", or a command's end) opens the
+  assistant without that alert coming back once the assistant closes.
 
 ## [1.0.6] - 2026-10-24
 

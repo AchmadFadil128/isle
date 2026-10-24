@@ -1008,6 +1008,8 @@ export class Controller {
     _openFromClosed() {
         // Clicking a notification opens it, like GNOME's banner did.
         if (!this._expandWanted && this._alert?.onActivate) {
+            // Done with: the assistant it may open puts it back in line no more.
+            this._alert.answered = true;
             this._alert.onActivate();
             this._dismissAlert(true);
             return Clutter.EVENT_STOP;
