@@ -29,6 +29,8 @@ const MAX_MESSAGE: usize = 160;
 const MAX_PROJECT: usize = 60;
 const MAX_SESSION: usize = 100;
 const MAX_CWD: usize = 1024;
+/// How many of the hook's parent processes come along: enough for a terminal or editor and their shells.
+const MAX_PIDS: usize = 32;
 /// Events of one kind from one AI session closer together than this are dropped.
 const MIN_GAP: Duration = Duration::from_millis(300);
 /// A permission waits this long for an answer on the island; then the AI asks in its own terminal
@@ -170,6 +172,9 @@ pub struct Event {
     pub cwd: String,
     pub message: String,
     pub session: String,
+    /// The hook's parent processes, nearest first: the agent's terminal or editor is among them, so the
+    /// island can tell its window from others that merely name the project.
+    pub pids: Vec<u32>,
 }
 
 impl Event {
@@ -199,6 +204,8 @@ impl Event {
         self.project = cut(&self.project, MAX_PROJECT);
         self.message = cut(&self.message, MAX_MESSAGE);
         self.session = cut(&self.session, MAX_SESSION);
+        self.pids.retain(|&pid| pid > 1);
+        self.pids.truncate(MAX_PIDS);
         Ok(self)
     }
 }
@@ -234,6 +241,8 @@ pub struct Request {
     pub input: String,
     /// Whether the AI offers to keep it for next time (Claude's "always").
     pub always: bool,
+    /// The hook's parent processes (see `Event::pids`).
+    pub pids: Vec<u32>,
 }
 
 impl Request {
@@ -245,11 +254,13 @@ impl Request {
             cwd: self.cwd.clone(),
             message: String::new(),
             session: self.session.clone(),
+            pids: std::mem::take(&mut self.pids),
         }
         .checked()?;
         self.project = event.project;
         self.cwd = event.cwd;
         self.session = event.session;
+        self.pids = event.pids;
         self.tool = cut(&self.tool, MAX_TOOL);
         self.input = cut(&self.input, MAX_INPUT);
         Ok(self)

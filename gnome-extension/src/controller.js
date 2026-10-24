@@ -12,6 +12,7 @@ import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 
+import {namesProject} from './actionRules.js';
 import * as Alerts from './alerts.js';
 import {paletteFor} from './bot.js';
 import {ClipboardHistory} from './clipboard.js';
@@ -639,21 +640,23 @@ export class Controller {
     _onAgentEvent(event) {
         if (!this._settings.get_boolean(`agent-alerts-${event.provider}`) || this._notifications.dnd)
             return;
-        const window = this._agentWindow(event.project);
+        const window = this._agentWindow(event);
         if (window && window === global.display.focus_window)
             return;
         const show = window ? () => Main.activateWindow(window) : null;
         this._post(event.kind === 'done' ? Alerts.agentDone(event, this._botLook, show) : Alerts.agent(event, show));
     }
 
-    /** The window (a terminal, VS Code) whose title names `project`, the latest used first. */
-    _agentWindow(project) {
-        if (!project)
-            return null;
-        return global.get_window_actors()
-            .map(actor => actor.meta_window)
-            .filter(window => (window.get_title() ?? '').includes(project))
-            .sort((a, b) => b.get_user_time() - a.get_user_time())[0] ?? null;
+    /** The window (a terminal, VS Code) the agent runs in: the one whose process is among the hook's parents
+     * (`pids`); else, with none of them, the latest used whose title names the project as a word of its own. */
+    _agentWindow({project, pids}) {
+        const windows = global.get_window_actors().map(actor => actor.meta_window);
+        const latest = list => list.sort((a, b) => b.get_user_time() - a.get_user_time())[0] ?? null;
+        const parents = new Set(pids ?? []);
+        const own = latest(windows.filter(window => parents.has(window.get_pid())));
+        if (own || !project)
+            return own;
+        return latest(windows.filter(window => namesProject(window.get_title() ?? '', project)));
     }
 
     _render() {
@@ -1669,7 +1672,7 @@ export class Controller {
         if (!this._settings.get_boolean(`agent-alerts-${request.provider}`) || this._notifications.dnd ||
             !this._island.visible)
             return pass();
-        const window = this._agentWindow(request.project);
+        const window = this._agentWindow(request);
         if (window && window === global.display.focus_window)
             return pass();
         const alert = Alerts.agentAsks(request, this._botLook,

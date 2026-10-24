@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-import {ROOT_WRAPPER, RUN_WRAPPER, describeActions, failed, outcomeOf, runnable, slotsFor, stoppable} from '../../gnome-extension/src/actionRules.js';
+import {ROOT_WRAPPER, RUN_WRAPPER, describeActions, failed, namesProject, outcomeOf, runnable, slotsFor, stoppable} from '../../gnome-extension/src/actionRules.js';
 
 test('an action says what it did, or why it could not', () => {
     assert.deepEqual(outcomeOf(undefined), {ok: true, detail: ''});
@@ -94,4 +94,15 @@ test('a command runs only as shown whole', () => {
     assert.ok(!runnable({command: 'sudo ls', spawn: spawn('sudo ls', {user: true})}, USER));
     assert.ok(!runnable({command: 'apt install x', spawn: spawn('apt install x')}, USER));
     assert.ok(!runnable(user('a'.repeat(401)), USER));
+});
+
+test('a window names the agent\'s project only as a word of its own', () => {
+    assert.equal(namesProject('korus — Visual Studio Code', 'korus'), true);
+    assert.equal(namesProject('kz@laptop: ~/code/korus', 'korus'), true);
+    assert.equal(namesProject('WhatsApp', 'app'), false);
+    assert.equal(namesProject('whatsapp web', 'app'), false);
+    assert.equal(namesProject('isle-ad — Visual Studio Code', 'isle'), false);
+    assert.equal(namesProject('my-app (main) — Terminal', 'my-app'), true);
+    assert.equal(namesProject('c++ notes', 'c++'), true);
+    assert.equal(namesProject('anything', ''), false);
 });

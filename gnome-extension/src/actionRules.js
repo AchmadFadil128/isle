@@ -110,6 +110,14 @@ export function showsWhole(text, max) {
         ![...text].some(c => c.charCodeAt(0) < 0x20 || (c.charCodeAt(0) >= 0x7f && c.charCodeAt(0) <= 0x9f));
 }
 
+/** Whether a window `title` names `project` as a word of its own: "isle — Terminal", not "WhatsApp" for "app". */
+export function namesProject(title, project) {
+    if (!project)
+        return false;
+    const escaped = project.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^\\p{L}\\p{N}_-])${escaped}($|[^\\p{L}\\p{N}_-])`, 'u').test(title);
+}
+
 /** Whether `argv` only stops one of Isle's commands. */
 export function stoppable(argv) {
     return Array.isArray(argv) && argv[0] === 'systemctl' &&

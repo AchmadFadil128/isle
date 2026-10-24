@@ -103,6 +103,7 @@ fn request(ai: &str, payload: &Value) -> Option<Request> {
     Some(Request {
         provider: ai.into(),
         cwd,
+        pids: ancestors(),
         session: text("session_id").into(),
         tool: text("tool_name").into(),
         input: line,
@@ -350,14 +351,58 @@ fn event(provider: &str, kind: &str, cwd: &str, message: &str, session: &str) ->
         cwd,
         message: message.into(),
         session: session.into(),
+        pids: ancestors(),
     }
     .checked()
     .ok()
 }
 
+/// This hook's parent processes, nearest first, up to init: the AI, its shell, and the terminal or
+/// editor whose window it runs in.
+fn ancestors() -> Vec<u32> {
+    let mut pids = Vec::new();
+    let mut pid = std::os::unix::process::parent_id();
+    while pid > 1 && pids.len() < 32 {
+        pids.push(pid);
+        let Some(parent) = std::fs::read_to_string(format!("/proc/{pid}/stat"))
+            .ok()
+            .and_then(|stat| parent_of(&stat))
+        else {
+            break;
+        };
+        pid = parent;
+    }
+    pids
+}
+
+/// The parent's pid in a /proc/<pid>/stat line; the command name in brackets may hold spaces or ')'.
+fn parent_of(stat: &str) -> Option<u32> {
+    stat.rsplit_once(')')?
+        .1
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+
+    #[test]
+    fn reads_the_parent_from_a_stat_line() {
+        assert_eq!(parent_of("1234 (bash) S 1200 1234 1234 0"), Some(1200));
+        // A name with spaces and a closing bracket of its own.
+        assert_eq!(parent_of("77 (Web Content) x) S 42 77 77 0"), Some(42));
+        assert_eq!(parent_of("garbage"), None);
+    }
+
+    #[test]
+    fn finds_its_parents() {
+        let pids = ancestors();
+        assert_eq!(pids.first(), Some(&std::os::unix::process::parent_id()));
+        assert!(pids.iter().all(|&pid| pid > 1));
+    }
 
     use super::*;
 
@@ -547,6 +592,8 @@ mod tests {
                 cwd: "/home/a/code/site".into(),
                 message: "Fixed the header's height.".into(),
                 session: "0199a".into(),
+                // Where the hook runs: so its window is told from others that name the project.
+                pids: ancestors(),
             }
         );
         let turn_only =
