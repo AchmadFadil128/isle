@@ -169,7 +169,8 @@ pub fn mask_secrets(text: &str) -> String {
 }
 
 fn mask_line(line: &str) -> String {
-    let lower = line.to_lowercase();
+    // ASCII-only, so offsets in `lower` stay valid in `line` (İ grows when lowercased).
+    let lower = line.to_ascii_lowercase();
     // "password=…", "token: …", "Authorization: Bearer …": what follows is hidden.
     for key in [
         "password",
@@ -273,6 +274,19 @@ mod tests {
         assert_eq!(
             mask_secrets("Unpacking libreoffice-core ..."),
             "Unpacking libreoffice-core ..."
+        );
+    }
+
+    #[test]
+    fn hides_secrets_after_letters_that_grow_when_lowercased() {
+        assert_eq!(mask_secrets("İİİİİİİİtoken"), "İİİİİİİİtoken");
+        assert_eq!(
+            mask_secrets("İstanbul token: abc"),
+            "İstanbul token: [hidden]"
+        );
+        assert_eq!(
+            mask_secrets("ẞ \u{212A}EY Password=x"),
+            "ẞ \u{212A}EY Password= [hidden]"
         );
     }
 }
