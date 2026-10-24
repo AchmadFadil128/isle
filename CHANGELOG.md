@@ -187,6 +187,8 @@ All notable changes to Isle are listed here. The format follows
   alert when nothing was said.
 - "Still working" under a request opened again from the closed island counts from when it began,
   instead of showing late and short of the time it has taken.
+- While the assistant works step by step, each step shows as it happens ("Searching ~ for “cv”…")
+  instead of the words of its last answer staying until the next one starts.
 
 ## [1.0.6] - 2026-10-24
 
