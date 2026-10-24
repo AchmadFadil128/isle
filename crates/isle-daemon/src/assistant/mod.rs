@@ -806,6 +806,10 @@ fn today() -> NaiveDate {
     chrono::Local::now().date_naive()
 }
 
+/// How often a quiet conversation is checked for being over: a timer counts no time asleep (suspend),
+/// so the clock is read again rather than trusted to reach midnight or the end of a quiet hour.
+const CHECK_CHAT: Duration = Duration::from_secs(60);
+
 /// How long until the next midnight, when the day's conversation is cleared.
 fn until_midnight() -> Duration {
     let now = chrono::Local::now();
@@ -838,6 +842,8 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
     let mut cool_at: Option<tokio::time::Instant> = None;
     // The conversation goes on after a restart of isled, with the AI's own copy of it.
     let mut talk = Talk::load(Keep::Day);
+    // How long a quiet conversation is kept, as Settings last said with a request.
+    let mut keep = Keep::Day;
     session.provider = Provider::from_id(&talk.chat.provider);
     session.conversation = Some(talk.chat.conversation.clone()).filter(|id| !id.is_empty());
     show_history(&iface, &talk.chat).await;
@@ -867,8 +873,8 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                     Some(command) => command,
                     None => return,
                 },
-                () = tokio::time::sleep(until_midnight()) => {
-                    if talk.end_if_over(&mut session, Keep::Day) {
+                () = tokio::time::sleep(until_midnight().min(CHECK_CHAT)) => {
+                    if talk.end_if_over(&mut session, keep) {
                         show_history(&iface, &talk.chat).await;
                     }
                     new_day(&mut session, &mut pruned);
@@ -891,7 +897,8 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
         };
         next = match command {
             Command::Warm(context) => {
-                if talk.end_if_over(&mut session, Keep::parse(&context.keep_chat)) {
+                keep = Keep::parse(&context.keep_chat);
+                if talk.end_if_over(&mut session, keep) {
                     show_history(&iface, &talk.chat).await;
                 }
                 session.resume(today());
@@ -911,7 +918,8 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 None
             }
             Command::Listen(context) => {
-                if talk.end_if_over(&mut session, Keep::parse(&context.keep_chat)) {
+                keep = Keep::parse(&context.keep_chat);
+                if talk.end_if_over(&mut session, keep) {
                     show_history(&iface, &talk.chat).await;
                 }
                 session.resume(today());
@@ -931,7 +939,8 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 interrupted
             }
             Command::Ask(text, context) => {
-                if talk.end_if_over(&mut session, Keep::parse(&context.keep_chat)) {
+                keep = Keep::parse(&context.keep_chat);
+                if talk.end_if_over(&mut session, keep) {
                     show_history(&iface, &talk.chat).await;
                 }
                 session.resume(today());
