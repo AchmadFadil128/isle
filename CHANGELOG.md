@@ -33,6 +33,8 @@ All notable changes to Isle are listed here. The format follows
   looks glad over an error that came after its command.
 - A typed request starts its steps and "Still working" time afresh even when the field opened while an
   earlier request was at work.
+- Undo after starting a new chat no longer pops the conversation open on a later change when the old one
+  did not come back, nor while the island is closed.
 
 ## [1.0.6] - 2026-10-24
 

@@ -1688,21 +1688,25 @@ export class Controller {
     _onHistory() {
         this._voice.setHistory(this._history);
         if (this._openWhenBack) {
+            this._cancel('chat-undo');
             this._openWhenBack = false;
-            this._voice.openChat();
+            if (this._voiceOpen)
+                this._voice.openChat();
         }
     }
 
     // +: isled starts a new conversation; Undo brings the old one back for a moment, then it is deleted.
     _newChat() {
+        this._openWhenBack = false;
         this._daemon.call('assistant', 'NewChat');
         this._voice.showUndo(true);
         this._later('chat-undo', UNDO_MS, () => this._voice.showUndo(false));
     }
 
     _undoNewChat() {
-        this._cancel('chat-undo');
         this._openWhenBack = true;
+        // Not back by then (isled busy, or it dropped it), it never pops open on a later change.
+        this._later('chat-undo', UNDO_MS, () => (this._openWhenBack = false));
         this._daemon.call('assistant', 'UndoNewChat');
     }
 
