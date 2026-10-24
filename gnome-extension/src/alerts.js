@@ -205,21 +205,24 @@ export function track(nowPlaying) {
     };
 }
 
-/** Notifications already watched, and those since withdrawn (destroyed). */
-const watched = new WeakSet();
+/** Notifications already watched (each with what to do once it is withdrawn), and those since withdrawn. */
+const watched = new WeakMap();
 const withdrawn = new WeakSet();
 /** Each notification's own number, so alerts for different ones never replace each other. */
 const numbers = new WeakMap();
 let lastNumber = 0;
 
-/** Watches `item` for being withdrawn, once however often it is shown (updates come as the same one). */
-function watchWithdrawal(item) {
-    if (watched.has(item))
+/** Watches `item` for being withdrawn, once however often it is shown (updates come as the same one); then
+ * the latest `onWithdrawn` runs. */
+function watchWithdrawal(item, onWithdrawn) {
+    const known = watched.has(item);
+    watched.set(item, onWithdrawn);
+    if (known)
         return;
-    watched.add(item);
     const id = item.connect('destroy', () => {
         withdrawn.add(item);
         item.disconnect(id);
+        watched.get(item)?.();
     });
 }
 
@@ -228,19 +231,20 @@ function unseen(item) {
     return !withdrawn.has(item) && !item.acknowledged;
 }
 
-/** A GNOME notification, shown in place of GNOME's own banner; `onShown` once it is on screen. While the
- * screen is `shared`, only who it is from shows. */
-export function notification(item, urgent, onShown, shared = false) {
-    // The app or GNOME may withdraw the notification while it is shown;
-    // clicking the alert afterwards must not touch the destroyed object.
-    watchWithdrawal(item);
+/** A GNOME notification, shown in place of GNOME's own banner; `onShown` once it is on screen, `onWithdrawn(key)`
+ * once its app takes it back. While the screen is `shared`, only who it is from shows. */
+export function notification(item, urgent, {onShown, onWithdrawn}, shared = false) {
     if (!numbers.has(item))
         numbers.set(item, ++lastNumber);
+    const key = `notification:${numbers.get(item)}`;
+    // The app or GNOME may withdraw the notification while it is shown;
+    // clicking the alert afterwards must not touch the destroyed object.
+    watchWithdrawal(item, () => onWithdrawn(key));
     const body = shared ? '' : plainBody(item).replace(/\s+/g, ' ').trim();
     const title = shared ? item.source?.title || 'New notification' : item.title || item.source?.title || '';
     const alert = {
         // Its own key: one arriving behind another waits its turn; the same one updated replaces itself.
-        key: `notification:${numbers.get(item)}`,
+        key,
         kind: 'notification',
         // A critical one waits for someone to be there, like GNOME's, which stays until handled.
         sticky: urgent,
@@ -271,13 +275,15 @@ export function notification(item, urgent, onShown, shared = false) {
                 item.activate();
         },
         item,
-        // When its turn comes: gone if withdrawn or read meanwhile, and as the screen is shared now.
+        // When its turn comes: gone if withdrawn or read meanwhile, else as it reads now (an app may have
+        // updated it) and as the screen is shared now.
         fresh: sharedNow => {
             if (withdrawn.has(item) || (item.acknowledged && !alert.shown))
                 return null;
-            if (sharedNow === shared)
+            const redone = notification(item, urgent, {onShown, onWithdrawn}, sharedNow);
+            if (redone.title === alert.title && redone.subtitle === alert.subtitle &&
+                redone.action?.label === alert.action?.label && redone.gicon === alert.gicon)
                 return alert;
-            const redone = notification(item, urgent, onShown, sharedNow);
             redone.shown = alert.shown;
             return redone;
         },

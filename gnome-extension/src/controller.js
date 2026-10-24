@@ -522,8 +522,11 @@ export class Controller {
         const notifications = this._notifications;
         notifications.connect('banner', (_center, notification) => {
             const urgent = notification.urgency === MessageTray.Urgency.CRITICAL;
-            this._post(Alerts.notification(notification, urgent, () => notifications.acknowledge(notification),
-                this._sharing));
+            this._post(Alerts.notification(notification, urgent, {
+                onShown: () => notifications.acknowledge(notification),
+                // Taken back by its app: it goes from the island too.
+                onWithdrawn: key => !this._destroying && this._withdrawAlert(key),
+            }, this._sharing));
         });
         notifications.connect('dnd-changed', () => (this._compact.doNotDisturb = notifications.dnd));
         notifications.connect('changed', () => (this._compact.unseenNotifications = notifications.unseenCount > 0));
@@ -1361,9 +1364,11 @@ export class Controller {
     _syncSharing() {
         this._shelf.sharing = this._sharing;
         this._expanded.pageNamed('notifications').sharing = this._sharing;
-        // A message on screen as sharing starts loses its text at once.
+        // A message on screen as sharing starts loses its text at once; one gone meanwhile goes.
         const redone = this._alert?.fresh?.(this._sharing);
-        if (redone && redone !== this._alert)
+        if (this._alert?.fresh && !redone)
+            this._dismissAlert(true);
+        else if (redone && redone !== this._alert)
             this._showAlert(redone, {inPlace: true});
     }
 

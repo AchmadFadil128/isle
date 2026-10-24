@@ -35,6 +35,9 @@ All notable changes to Isle are listed here. The format follows
   are left when it shows, not "in 5 min" from when it was due, and no longer shows once the event is over.
 - Do Not Disturb also holds back the AI plan usage warnings, new song alerts and the new version alert,
   as it does the island's other alerts.
+- A notification its app takes back goes from the island at once, also while the screen is shared, rather
+  than staying for its whole time.
+- A notification updated while it waited its turn shows its new words, not the first ones.
 
 ## [1.0.6] - 2026-10-24
 
