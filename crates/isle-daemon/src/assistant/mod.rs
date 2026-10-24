@@ -1097,8 +1097,6 @@ async fn turn(
                     }
                 }
             }
-            // Started now to be ready by the time you finish; a failure shows once it is needed.
-            start_brain(session).await.ok();
             publish(iface, |state| {
                 state.phase = Phase::Listening;
                 state.activity.clear();
@@ -1112,7 +1110,25 @@ async fn turn(
                 state.card = Value::Null;
             })
             .await;
-            let audio = match record(iface, commands, later).await {
+            // The AI starts as you speak, to be ready by the time you finish (a slow start must not
+            // hold up listening); a failure shows once it is needed.
+            let recorded = {
+                let starting = start_brain(session);
+                let recording = record(iface, commands, later);
+                tokio::pin!(starting, recording);
+                let mut started = false;
+                let recorded = loop {
+                    tokio::select! {
+                        recorded = &mut recording => break recorded,
+                        _ = &mut starting, if !started => started = true,
+                    }
+                };
+                if !started {
+                    starting.await.ok();
+                }
+                recorded
+            };
+            let audio = match recorded {
                 Ok(Recorded::Audio(audio)) => audio,
                 Ok(Recorded::Nothing) => return fail(iface, NOTHING_HEARD).await,
                 Ok(Recorded::NoMic) => return fail(iface, NO_MIC).await,

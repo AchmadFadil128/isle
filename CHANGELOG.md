@@ -8,6 +8,8 @@ All notable changes to Isle are listed here. The format follows
 
 ### Fixed
 
+- Super+I starts listening at once even while the AI is still starting (Codex from cold): the AI starts
+  as you speak, so the first words are no longer lost.
 - Installing Isle again after uninstalling it keeps the top bar look chosen before, instead of resetting it.
 - A new version alert tells those who installed a .deb, .rpm or AUR package to install its new package,
   not to run the install command, and the install guide says how.

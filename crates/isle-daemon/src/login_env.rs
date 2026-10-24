@@ -231,7 +231,10 @@ mod tests {
         std::fs::set_permissions(&shell, std::os::unix::fs::PermissionsExt::from_mode(0o755))
             .unwrap();
         let started = Instant::now();
-        let env = ask(&shell, Duration::from_millis(500)).unwrap();
+        // Other tests start programs meanwhile: a script just written can be "busy" for a moment.
+        let env = (0..3)
+            .find_map(|_| ask(&shell, Duration::from_millis(1500)))
+            .unwrap();
         assert!(started.elapsed() < Duration::from_secs(5));
         assert!(env.iter().any(|(name, _)| name == "PATH"));
         // A shell that never answers is left behind.
