@@ -110,12 +110,14 @@ not appear.
 
 **Ubuntu and Debian (.deb), Fedora (.rpm).** Each
 [release](../../releases) also has a system-wide package, for every user of
-the computer. Install it, then turn the extension on once as each user and
-log out and back in:
+the computer. Install it, log out and back in (GNOME Shell only finds a new
+extension at login), then turn Isle on once as each user, in the Extensions
+app or with `gnome-extensions enable`:
 
 ```sh
 sudo apt install ./isle_*_amd64.deb        # Ubuntu 24.04 and newer, Debian 13
 sudo dnf install ./isle-*.x86_64.rpm       # Fedora 40 and newer
+# Log out and back in, then:
 gnome-extensions enable isle@zickrian.github.io
 ```
 

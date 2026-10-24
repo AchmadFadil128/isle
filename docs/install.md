@@ -144,8 +144,9 @@ sudo dnf install ./isle-1.0.0-1.x86_64.rpm      # Fedora 40 and newer
 
 They put the programs in `/usr/bin`, the extension in
 `/usr/share/gnome-shell/extensions`, and the rest where the system expects
-it. GNOME turns extensions on per user, so each user then runs this once and
-logs out and back in:
+it. GNOME Shell only finds a new extension at login, and turns extensions
+on per user: so each user logs out and back in, then turns Isle on once, in
+the Extensions app or with:
 
 ```sh
 gnome-extensions enable isle@zickrian.github.io
