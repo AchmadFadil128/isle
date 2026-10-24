@@ -315,8 +315,8 @@ class TasksPage extends Page {
     // Ticks a reminder: the ring turns orange with a dot in it, the title is struck through, it lingers
     // a moment (a second tap undoes it), then fades and folds away.
     _tick(task, {row, check, dot, title, strike}) {
-        // Folding away already: too late to undo.
-        if (!check.reactive)
+        // Folding away already: too late to undo. A flag, not `reactive`: that restyles the box (:insensitive).
+        if (row._folding)
             return;
         const name = `leave-${task.id}`;
         const pop = shown => {
@@ -333,7 +333,7 @@ class TasksPage extends Page {
             this._leaving.delete(task.id);
             check.remove_style_pseudo_class('checked');
             check.accessible_name = 'Mark as done';
-            row.remove_style_class_name('done');
+            title.remove_style_class_name('done');
             pop(false);
             strike.remove_transition('scale-x');
             strike.ease({scale_x: 0, duration: STRIKE_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
@@ -346,7 +346,8 @@ class TasksPage extends Page {
         this._leaving.add(task.id);
         check.add_style_pseudo_class('checked');
         check.accessible_name = 'Not done';
-        row.add_style_class_name('done');
+        // On the title alone: on the row it restyled every widget in it, in the click's frame.
+        title.add_style_class_name('done');
         pop(true);
         // Struck through from the left, as the dot pops in.
         strike.remove_transition('scale-x');
@@ -357,7 +358,7 @@ class TasksPage extends Page {
         });
         this.later(name, LINGER_MS, () => {
             // Folds away: the rows below slide up into its place; too late now to undo.
-            check.reactive = false;
+            row._folding = true;
             row.clip_to_allocation = true;
             row.ease({
                 opacity: 0,

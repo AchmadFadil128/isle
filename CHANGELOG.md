@@ -8,6 +8,8 @@ All notable changes to Isle are listed here. The format follows
 
 ### Fixed
 
+- Ticking a reminder off no longer drops a frame as its strike draws: only its title and tick box are
+  restyled, not every part of its row.
 - Installing Isle again after uninstalling it keeps the top bar look chosen before, instead of resetting it.
 - A new version alert tells those who installed a .deb, .rpm or AUR package to install its new package,
   not to run the install command, and the install guide says how.
