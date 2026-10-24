@@ -630,6 +630,10 @@ export const VoiceView = GObject.registerClass({
     startTyping(initial = '', card = null) {
         this._dropEndedCard(card);
         this._phase = 'typing';
+        // A new request: the steps and working time of one still at work when the field opened are not its.
+        this._lastPhase = 'typing';
+        this._lastStep = null;
+        this._steps = [];
         this._entry.text = initial;
         this._entry.show();
         this._text.hide();

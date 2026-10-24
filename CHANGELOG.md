@@ -31,6 +31,8 @@ All notable changes to Isle are listed here. The format follows
   request, instead of offering to type a new one.
 - An error no longer shows with the command card of an earlier request, and the assistant's face no longer
   looks glad over an error that came after its command.
+- A typed request starts its steps and "Still working" time afresh even when the field opened while an
+  earlier request was at work.
 
 ## [1.0.6] - 2026-10-24
 
