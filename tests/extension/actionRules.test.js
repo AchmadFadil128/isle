@@ -15,6 +15,9 @@ test('an action says what it did, or why it could not', () => {
     assert.deepEqual(outcomeOf(null), {ok: false, detail: ''});
     assert.deepEqual(outcomeOf(false), {ok: false, detail: ''});
     assert.deepEqual(outcomeOf(failed('no such window is open')), {ok: false, detail: 'no such window is open'});
+    // A command's unit started (startUnit): done, not a failure without a word.
+    assert.deepEqual(outcomeOf({ok: true, detail: 'started'}), {ok: true, detail: 'started'});
+    assert.deepEqual(outcomeOf({ok: true}), {ok: true, detail: ''});
 });
 
 test('steps in progress read as people would say them', () => {

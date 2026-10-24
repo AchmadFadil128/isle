@@ -159,10 +159,10 @@ export function failed(detail) {
 }
 
 // What an action returned, as {ok, detail}: nothing (or a call's reply) is done, a string says what it
-// did, and false, '' or null (a failed call) is not done.
+// did, an {ok, detail} is taken as it is, and false, '' or null (a failed call) is not done.
 export function outcomeOf(outcome) {
-    if (outcome?.ok === false)
-        return outcome;
+    if (typeof outcome?.ok === 'boolean')
+        return {ok: outcome.ok, detail: typeof outcome.detail === 'string' ? outcome.detail : ''};
     if (typeof outcome === 'string' && outcome)
         return {ok: true, detail: outcome};
     return {ok: outcome === undefined || outcome === true || Array.isArray(outcome), detail: ''};
