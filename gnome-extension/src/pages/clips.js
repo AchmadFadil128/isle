@@ -477,16 +477,23 @@ export const ClipsView = GObject.registerClass({
         const dir = GLib.build_filenamev([GLib.get_user_data_dir(), 'isle', 'shelf']);
         GLib.mkdir_with_parents(dir, 0o700);
         const stamp = GLib.DateTime.new_now_local().format('%Y-%m-%d at %H.%M.%S');
-        const target = Gio.File.new_for_path(GLib.build_filenamev([dir, `Clipboard image ${stamp}.png`]));
-        Gio.File.new_for_path(item.image).copy_async(target, Gio.FileCopyFlags.OVERWRITE,
-            GLib.PRIORITY_DEFAULT, null, null, (source, result) => {
-                try {
-                    source.copy_finish(result);
-                    this._daemon.call('shelf', 'Add', [target.get_uri()]);
-                } catch (e) {
-                    console.warn(`Isle: could not put the image on the shelf: ${e.message}`);
-                }
-            });
+        // Two in the same second get " 2", " 3"…: never one over another.
+        const attempt = n => {
+            const target = Gio.File.new_for_path(GLib.build_filenamev([dir, `Clipboard image ${stamp}${n > 1 ? ` ${n}` : ''}.png`]));
+            Gio.File.new_for_path(item.image).copy_async(target, Gio.FileCopyFlags.NONE,
+                GLib.PRIORITY_DEFAULT, null, null, (source, result) => {
+                    try {
+                        source.copy_finish(result);
+                        this._daemon.call('shelf', 'Add', [target.get_uri()]);
+                    } catch (e) {
+                        if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.EXISTS) && n < 50)
+                            attempt(n + 1);
+                        else
+                            console.warn(`Isle: could not put the image on the shelf: ${e.message}`);
+                    }
+                });
+        };
+        attempt(1);
     }
 
     /** Pin, a hand-off and × in the top-right corner, shown on hover. */

@@ -8,6 +8,7 @@ All notable changes to Isle are listed here. The format follows
 
 ### Fixed
 
+- Two clipboard images put in Files within the same second both stay: the second no longer replaces the first.
 - On a 200% display without fractional scaling (GNOME 46–49), the island, its pages, the assistant and
   alerts are drawn at the right size.
 - Dragging files onto the shelf is smooth: the Files tab no longer blinks while the island opens on it
