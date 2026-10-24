@@ -172,6 +172,8 @@ export class Controller {
         this._voiceStep = 0;
         /** A request carries on after the island closed; its answer comes as an alert. */
         this._voiceInBackground = false;
+        /** Whether isled's assistant state was seen yet (see `_onAssistant`). */
+        this._assistantSeen = false;
         /** Times in a row it listened again by itself; see `VOICE_MAX_AUTO_LISTENS`. */
         this._autoListens = 0;
         /** The window in front when the assistant opened, for it to write into. */
@@ -322,7 +324,8 @@ export class Controller {
             if (this._presentation === 'expanded')
                 this._island.setTintMotion(time, level);
         });
-        expanded.connect('voice-requested', () => this._openVoice({typing: true}));
+        // A request still at work shows its progress, as from the closed island; a new one would be lost.
+        expanded.connect('voice-requested', () => this._voiceWorking ? this._reopenVoice() : this._openVoice({typing: true}));
         // Settings open in their own window; the island gets out of its way.
         expanded.connect('settings-requested', () => {
             this.collapse();
@@ -1590,6 +1593,16 @@ export class Controller {
         const state = this._daemon.state.assistant;
         if (!state)
             return;
+        // Built again (turned back on after a lock) while a request was at work: it carries on as if asked
+        // with the island closed. A batch of actions isled still waits on runs again; the last one's results were lost.
+        if (!this._assistantSeen) {
+            this._assistantSeen = true;
+            if (!this._voiceOpen && VOICE_WORKING.includes(state.phase)) {
+                this._voiceInBackground = true;
+                this._voiceTurn = state.turn ?? 0;
+                this._voiceStep = state.phase === 'acting' ? -1 : state.step ?? 0;
+            }
+        }
         const ours = this._voiceOpen || this._voiceInBackground;
         // Actions it takes mid-way, open or closed: each batch once, and what they did goes back.
         if (ours && state.phase === 'acting' && state.step !== this._voiceStep) {
@@ -1910,6 +1923,8 @@ export class Controller {
         stopPending();
         if (this._voiceBound)
             Main.wm.removeKeybinding('voice-shortcut');
+        // A command waiting for Run or Deny ends with Isle; built again, it is asked again (see `_onAssistant`).
+        this._deciding?.done(false);
         if (this._voiceOpen)
             this._closeVoice();
         // Releasing the keyboard may schedule a collapse; cancel it after. Tearing down schedules nothing.

@@ -24,6 +24,9 @@ All notable changes to Isle are listed here. The format follows
   "Listening…" or "Thinking…" forever with the keyboard taken.
 - Typing right after pressing the shortcut, before the assistant has started listening, stops the
   listening, so the typed request is answered and "Didn't catch that" no longer replaces the field.
+- The mic in the open island shows a request still at work instead of starting one that was lost, and a
+  request at work when the screen locks carries on afterwards: its answer comes as an alert, and a command
+  it waits on asks again.
 
 ## [1.0.6] - 2026-10-24
 
