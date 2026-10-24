@@ -33,6 +33,8 @@ const ShelfWindowProxy = Gio.DBusProxy.makeProxyWrapper(`
     <arg name="awidth" type="i" direction="in"/><arg name="aheight" type="i" direction="in"/>
   </method>
   <method name="Hide"/>
+  <method name="Scale"><arg name="scale" type="i" direction="out"/></method>
+  <method name="SetScale"><arg name="scale" type="i" direction="in"/></method>
   <method name="SetDropping"><arg name="dropping" type="b" direction="in"/></method>
   <signal name="Dragging"><arg name="active" type="b"/></signal>
   <signal name="Hovering"><arg name="uris" type="as"/></signal>
@@ -59,6 +61,11 @@ const NOT_FILES = /tab|x-moz-place/;
 /** A helper that quits this often while shown, within this long, is not started again until next login. */
 const MAX_CRASHES = 3;
 const CRASH_WINDOW_US = 10 * 60 * 1000 * 1000;
+/** The helper's window, by its title or its program's name (in WM_CLASS). */
+const WINDOW_NAMES = ['Isle shelf', 'isle-shelf'];
+/** A window this much off the size asked for is drawn at another scale than the island's. */
+const SCALE_SLACK = 0.1;
+const MAX_CORRECTIONS = 2;
 
 /** Whether the drag under way carries files; null while it offers nothing yet. */
 function dragCarriesFiles() {
@@ -68,10 +75,14 @@ function dragCarriesFiles() {
     return types.some(type => FILE_TYPES.includes(type)) && !types.some(type => NOT_FILES.test(type));
 }
 
-/** `rect` (stage pixels) as logical [x, y, width, height]: divided by `uiScale`, rounded inwards so the
+function isHelperWindow(window) {
+    return [window.get_title(), window.get_wm_class_instance(), window.get_wm_class()?.toLowerCase()]
+        .some(name => WINDOW_NAMES.includes(name));
+}
+
+/** `rect` (stage pixels) as logical [x, y, width, height]: divided by `scale`, rounded inwards so the
  * window stays inside what the island covers. */
-function logical({x, y, width, height}) {
-    const scale = uiScale();
+function logical({x, y, width, height}, scale) {
     const [left, top] = [Math.ceil(x / scale), Math.ceil(y / scale)];
     return [left, top, Math.floor((x + width) / scale) - left, Math.floor((y + height) / scale) - top];
 }
@@ -95,12 +106,25 @@ export class ShelfHelper extends Signals.EventEmitter {
         this._awaitingBody = false;
         /** A file is being dragged out of the helper window. */
         this._dragging = false;
+        /** Calls placing the window not answered yet, and the size the last one asked for (logical). */
+        this._placing = 0;
+        this._asked = null;
+        /** The scale the helper was set to draw at (see `_checkScale`), for a new one to start at; null if never. */
+        this._helperScale = null;
+        this._scaledOwner = null;
+        /** Stage pixels per logical one the helper takes, if not `uiScale` (one that can't be set to match). */
+        this._unit = null;
         this._cancellable = new Gio.Cancellable();
 
         this._checkAvailable();
         this._watchDrags();
         // The overview covers windows, this one too: the tab shows its own tiles meanwhile.
         this._overviewIds = ['showing', 'hidden'].map(signal => Main.overview.connect(signal, () => this.sync()));
+        // Its window comes up anew each time it shows (an X11 window that maps is a new one).
+        this._windowAdded = global.top_window_group.connect('child-added', (_group, actor) => {
+            if (actor instanceof Meta.WindowActor)
+                this._watchWindow(actor.meta_window);
+        });
     }
 
     /** Whether the helper is installed, so files can be dropped on the shelf. */
@@ -160,7 +184,7 @@ export class ShelfHelper extends Signals.EventEmitter {
         }
         const {rect, area} = wanted;
         const same = (a, b) => a && ['x', 'y', 'width', 'height'].every(key => a[key] === b[key]);
-        if (same(this._shownRect, rect) && same(this._shownArea, area))
+        if (same(this._shownRect, rect) && same(this._shownArea, area) && !this._resend)
             return;
         // Layout can be off for a frame while opening: a place counts only once the
         // recheck a frame later agrees, never a second call in the same frame.
@@ -178,7 +202,9 @@ export class ShelfHelper extends Signals.EventEmitter {
         }
         this._shownRect = rect;
         this._shownArea = area;
+        this._resend = false;
         const shown = (_result, error) => {
+            this._placing--;
             if (!this._proxy) // destroyed meanwhile
                 return;
             if (error?.matches(Gio.DBusError, Gio.DBusError.UNKNOWN_METHOD) && this._places) {
@@ -198,6 +224,9 @@ export class ShelfHelper extends Signals.EventEmitter {
                 // the tab is never blank in between.
                 if (this._shownRect)
                     this._page.helperActive = true;
+                if (!this._window)
+                    global.get_window_actors().forEach(actor => this._watchWindow(actor.meta_window));
+                this._checkScale();
                 return;
             }
             console.warn(`Isle: shelf helper failed to show: ${error.message}`);
@@ -218,8 +247,17 @@ export class ShelfHelper extends Signals.EventEmitter {
             this._page.helperActive = false;
         };
         // The helper takes GTK's logical pixels, which it multiplies by its own scale.
-        const [x, y, width, height] = logical(rect);
-        const [ax, ay, awidth, aheight] = logical(area);
+        const unit = this._unit ?? uiScale();
+        const [x, y, width, height] = logical(rect, unit);
+        const [ax, ay, awidth, aheight] = logical(area, unit);
+        this._asked = {x, y, width, height};
+        this._placing++;
+        // A new helper starts at the scale an earlier one had to be set to.
+        const owner = this._proxy.g_name_owner;
+        if (this._helperScale && (!owner || owner !== this._scaledOwner)) {
+            this._scaledOwner = owner;
+            this._proxy.SetScaleRemote(this._helperScale, () => {});
+        }
         if (this._places)
             this._proxy.PlaceRemote(x, y, width, height, ax, ay, awidth, aheight, shown);
         else if (same(rect, area))
@@ -259,7 +297,81 @@ export class ShelfHelper extends Signals.EventEmitter {
         return {rect: inside ? body : tab, area: tab};
     }
 
+    /** Follows the helper's window while it is up, to check its size (see `_checkScale`). */
+    _watchWindow(window) {
+        if (!window || window === this._window || !isHelperWindow(window))
+            return;
+        this._forgetWindow();
+        this._window = window;
+        this._windowIds = [
+            window.connect('size-changed', () => this._checkScale()),
+            window.connect('unmanaged', () => this._forgetWindow()),
+        ];
+        this._checkScale();
+    }
+
+    _forgetWindow() {
+        this._windowIds?.forEach(id => this._window.disconnect(id));
+        this._windowIds = null;
+        this._window = null;
+    }
+
+    // GTK in the helper may start before GNOME tells X11 apps the scale, and draw the window at another size
+    // than the island's: then (only) it is set to the scale that matches, and placed again.
+    _checkScale() {
+        const window = this._window, asked = this._asked;
+        if (!window || !asked?.width || !asked.height || !this._proxy || !this._shownRect || this._placing > 0 ||
+            this._scaling)
+            return;
+        const frame = window.get_frame_rect();
+        const across = frame.width / asked.width;
+        const off = value => Math.abs(value - across) > SCALE_SLACK * across;
+        // Still at an earlier place's size or spot (its sides disagree): its next size tells.
+        if (!across || off(frame.height / asked.height) || (asked.x > 0 && off(frame.x / asked.x)))
+            return;
+        const unit = this._unit ?? uiScale();
+        if (Math.abs(across / unit - 1) <= SCALE_SLACK)
+            return;
+        // Twice at most for each helper: one that can't be set right is left be, not placed again and again.
+        const owner = this._proxy.g_name_owner;
+        if (owner !== this._checkedOwner)
+            [this._checkedOwner, this._corrections] = [owner, 0];
+        if (this._corrections >= MAX_CORRECTIONS)
+            return;
+        this._corrections++;
+        this._scaling = true;
+        const done = () => {
+            this._scaling = false;
+            this._resend = true;
+            this.sync();
+        };
+        this._proxy.ScaleRemote((result, error) => {
+            if (!this._proxy) {
+                this._scaling = false;
+                return;
+            }
+            const wanted = error ? 0 : result[0] * uiScale() / across;
+            const whole = Math.round(wanted);
+            if (whole < 1 || whole > 4 || Math.abs(wanted - whole) > SCALE_SLACK * whole) {
+                // An older helper, or a scale GTK can't draw at: the window at least goes where it belongs.
+                console.warn(`Isle: the shelf helper's window is ${across} stage pixels to its one; placing it by that`);
+                this._unit = across;
+                done();
+                return;
+            }
+            this._unit = null;
+            this._proxy.SetScaleRemote(whole, (_result, setError) => {
+                if (setError)
+                    this._unit = across;
+                else
+                    [this._helperScale, this._scaledOwner] = [whole, this._proxy?.g_name_owner ?? null];
+                done();
+            });
+        });
+    }
+
     _hide() {
+        this._resend = false;
         if (!this._shownRect)
             return;
         this._shownRect = this._shownArea = null;
@@ -416,6 +528,8 @@ export class ShelfHelper extends Signals.EventEmitter {
             GLib.source_remove(this._recheck);
         this._cancellable.cancel();
         this._overviewIds.forEach(id => Main.overview.disconnect(id));
+        global.top_window_group.disconnect(this._windowAdded);
+        this._forgetWindow();
         this._dnd.disconnect(this._dndPosition);
         this._dnd.disconnect(this._dndLeave);
         this._hide();

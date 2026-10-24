@@ -161,6 +161,8 @@ All notable changes to Isle are listed here. The format follows
 - With the island on another display, GNOME's clock in the top bar opens its calendar again instead of
   closing it the moment it opens.
 - Turning Isle off, or leaving Super+V to GNOME, no longer undoes another extension's own Super+V calendar.
+- On a 200% display, the Files tab's drag-and-drop window no longer comes out half the island's size
+  when the shelf's helper starts before GNOME has told it the display's scale: it is set to match.
 
 ## [1.0.6] - 2026-10-24
 

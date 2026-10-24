@@ -271,5 +271,7 @@ Served by `isle-shelf` (not `isled`) as `io.github.zickrian.isle.ShelfWindow` at
 | `Show(i x, i y, i width, i height)` | | Show the shelf window over this area, in logical pixels. |
 | `ShowOver(i x, i y, i width, i height, i ax, i ay, i awidth, i aheight)` | | While a file is dragged in: the window covers the whole island (the first four), so a drop lands anywhere on it, with the files in the tab's area inside it (the last four). |
 | `Hide()` | | |
+| `Scale()` | → `i` | The scale GTK draws the window at: X pixels per logical one. |
+| `SetScale(i scale)` | | Draw at this scale (1 to 4) from now on: the extension sets it when the window comes out another size than asked, as when GTK started before GNOME told X11 apps the display's scale. |
 | `SetDropping(b dropping)` | | A file is being dragged towards the island: show where it will land. |
 | `Hovering` | signal `as uris` | The files dragged over the window, for the island to light in their colours; empty once they leave. |
