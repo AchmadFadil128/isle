@@ -32,6 +32,7 @@ export class TopBar extends Signals.EventEmitter {
     constructor(settings) {
         super();
         this._settings = settings;
+        this._toggle = () => this.emit('calendar-requested');
         this._dateMenu = Main.panel.statusArea.dateMenu;
         this._dateMenu.opacity = 0;
         this._dateMenu.reactive = false;
@@ -50,12 +51,12 @@ export class TopBar extends Signals.EventEmitter {
 
         this._heightChanged = Main.panel.connect('notify::height', () => this.emit('height-changed'));
 
-        // The calendar shortcut opens the island instead, and the menu is
-        // closed again should anything else open it; unless Super+V is left to GNOME (Settings).
+        // The calendar shortcut opens the island instead, and the hidden clock's menu is closed again
+        // should anything else open it; unless Super+V is left to GNOME (Settings).
         this._superVChanged = settings.connect('changed::super-v', () => this._syncCalendar());
         this._syncCalendar();
         this._menuChanged = this._dateMenu.menu.connect('open-state-changed', (menu, open) => {
-            if (open && this._settings.get_string('super-v') === 'isle')
+            if (open && !this._clockShown && this._settings.get_string('super-v') === 'isle')
                 menu.close();
         });
     }
@@ -65,8 +66,21 @@ export class TopBar extends Signals.EventEmitter {
     }
 
     _syncCalendar() {
-        if (this._settings.get_string('super-v') === 'isle')
-            Main.panel.toggleCalendar = () => this.emit('calendar-requested');
+        if (this._settings.get_string('super-v') !== 'isle') {
+            this._restoreToggle();
+        } else if (Main.panel.toggleCalendar !== this._toggle) {
+            // Another extension's own, put back when Isle stops (GNOME's is the prototype's).
+            this._priorToggle = Object.hasOwn(Main.panel, 'toggleCalendar') ? Main.panel.toggleCalendar : null;
+            Main.panel.toggleCalendar = this._toggle;
+        }
+    }
+
+    /** Undoes Isle's toggleCalendar, unless another extension has set its own since. */
+    _restoreToggle() {
+        if (Main.panel.toggleCalendar !== this._toggle)
+            return;
+        if (this._priorToggle)
+            Main.panel.toggleCalendar = this._priorToggle;
         else
             delete Main.panel.toggleCalendar;
     }
@@ -83,10 +97,13 @@ export class TopBar extends Signals.EventEmitter {
 
     /** Shows GNOME's own clock in the top bar while the island is on another display. */
     set clockShown(shown) {
+        this._clockShown = shown;
         this._dateMenu.opacity = shown ? 255 : 0;
         this._dateMenu.reactive = shown;
         if (shown)
             this._dateMenu.set_width(-1);
+        else if (this._settings.get_string('super-v') === 'isle')
+            this._dateMenu.menu.close();
     }
 
     _applyStyle() {
@@ -135,7 +152,7 @@ export class TopBar extends Signals.EventEmitter {
         Main.panel.disconnect(this._styleChanged);
         this._dateMenu.menu.disconnect(this._menuChanged);
         this._settings.disconnect(this._superVChanged);
-        delete Main.panel.toggleCalendar;
+        this._restoreToggle();
 
         // No colour of Isle's: the theme's again.
         this._syncColor(null);

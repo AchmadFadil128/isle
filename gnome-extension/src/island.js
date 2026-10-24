@@ -118,14 +118,16 @@ export const Island = GObject.registerClass({
         this.notify('hovered');
     }
 
+    // A finger is no pointer resting on it: a tap's own enter and leave are not hovers.
     vfunc_enter_event(event) {
-        this._setHovered(true);
+        if (!event.get_event_sequence())
+            this._setHovered(true);
         return super.vfunc_enter_event(event);
     }
 
     vfunc_leave_event(event) {
         const related = event.get_related();
-        if (!related || !this.contains(related))
+        if (!event.get_event_sequence() && (!related || !this.contains(related)))
             this._setHovered(false);
         return super.vfunc_leave_event(event);
     }

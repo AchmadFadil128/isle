@@ -145,6 +145,20 @@ All notable changes to Isle are listed here. The format follows
   lighting up as if they landed.
 - The clipboard history's list, which any program can read, now gives only the 160 characters of
   each text a card shows, not 400.
+- With the island following the display in use, it no longer stays hidden after moving off a display
+  with a fullscreen window (alerts waited forever and Super+V did nothing), nor shows over a fullscreen
+  video on the display it moves to.
+- A screen share that began before Isle started (turned on again after unlocking, or updated during
+  a call) now keeps notification text, the clipboard and the shelf hidden as one begun later does.
+- An alert growing under a pointer that rests at the top of the screen no longer opens the island
+  (with "open on hover"), nor stays on screen until the pointer moves: it counts once the pointer moves.
+- Notifications opened by asking the assistant close with Esc or a click elsewhere, as with Super+V,
+  instead of staying open until the pointer went over the island and away.
+- On a touchscreen a tap on the island does what a click does (opens it, or an alert's notification),
+  and a tap elsewhere closes it; before, taps did nothing and the clock under it could not be reached.
+- With the island on another display, GNOME's clock in the top bar opens its calendar again instead of
+  closing it the moment it opens.
+- Turning Isle off, or leaving Super+V to GNOME, no longer undoes another extension's own Super+V calendar.
 
 ## [1.0.6] - 2026-10-24
 

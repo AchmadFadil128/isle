@@ -45,6 +45,7 @@ export class PrivacyMonitor extends Signals.EventEmitter {
         // does the sharing itself; GNOME makes the same choice.
         this._remote = isWayland() ? global.backend.get_remote_access_controller() : null;
         this._remoteId = this._remote?.connect('new-handle', (_controller, handle) => this._onHandle(handle));
+        this._seedShares();
 
         this._syncMicrophone();
         this._syncCamera();
@@ -81,6 +82,30 @@ export class PrivacyMonitor extends Signals.EventEmitter {
             this.emit('recording-started');
     }
 
+    // A share started before Isle (turned on again after unlocking, or updated mid-call) came as no
+    // `new-handle`: GNOME's sharing indicator knows it (private: its `_handles`, else its being shown).
+    _seedShares() {
+        const indicator = Main.panel.statusArea.screenSharing;
+        if (!this._remote || !indicator)
+            return;
+        if (indicator._handles instanceof Set) {
+            indicator._handles.forEach(handle => this._onHandle(handle));
+        } else if (indicator.visible) {
+            this._indicator = indicator;
+            this._indicatorId = indicator.connect('notify::visible', () => this._syncShares());
+            this._syncShares();
+        }
+    }
+
+    _syncShares() {
+        const unknown = Boolean(this._indicator?.visible);
+        if (this._indicator && !unknown) {
+            this._indicator.disconnect(this._indicatorId);
+            this._indicator = null;
+        }
+        this._set('screenShare', this._shares.size > 0 || unknown);
+    }
+
     _onHandle(handle) {
         // Recordings are covered by the screen recorder state above.
         if (handle.is_recording)
@@ -88,7 +113,7 @@ export class PrivacyMonitor extends Signals.EventEmitter {
         this._shares.set(handle, handle.connect('stopped', () => {
             handle.disconnect(this._shares.get(handle));
             this._shares.delete(handle);
-            this._set('screenShare', this._shares.size > 0);
+            this._syncShares();
         }));
         this._set('screenShare', true);
     }
@@ -109,5 +134,6 @@ export class PrivacyMonitor extends Signals.EventEmitter {
         if (this._remoteId)
             this._remote.disconnect(this._remoteId);
         this._shares.forEach((id, handle) => handle.disconnect(id));
+        this._indicator?.disconnect(this._indicatorId);
     }
 }

@@ -8,6 +8,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
+import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
@@ -344,6 +345,7 @@ export class Controller {
         // A new theme or text size restyles every view: laid out ahead again at the next warm-up.
         island.connect('style-changed', () => (this._viewsWarm = false));
         island.connect('button-release-event', (_actor, event) => this._onClick(event));
+        island.connect('touch-event', (_actor, event) => this._onTap(event));
         island.connect('scroll-event', (_actor, event) => this._onAlertScroll(event));
         island.connect('geometry-changed', () => this._shelfHelper.sync());
 
@@ -543,6 +545,7 @@ export class Controller {
     // Layout
 
     _updateGeometry() {
+        const before = this._monitor;
         this._monitor = this._wantedMonitor();
         // On a black bar the island grows out of it, its shoulders below the
         // bar; on any other it hangs from the top of the screen like a notch.
@@ -552,6 +555,14 @@ export class Controller {
         this._expanded.topInset = this._onBar ? this._topBar.height : HEADER_WITHOUT_BAR;
         this._topBar.clockShown = !this._onBar;
         this._render();
+        if (this._monitor !== before)
+            this._syncFullscreen();
+    }
+
+    // GNOME hides the island under a fullscreen window only when fullscreen changes, not when it moves
+    // to another display: its rule (layout.js `_updateActorVisibility`), here.
+    _syncFullscreen() {
+        this._island.visible = !(global.window_group.visible && this._monitor?.inFullscreen);
     }
 
     /** The display the island belongs on: the main one, or the one of the window in use (see Settings). */
@@ -878,7 +889,10 @@ export class Controller {
 
     // Pointer
 
-    _onHoverChanged() {
+    _onHoverChanged(moved = false) {
+        const unmoved = this._hoverUnmoved;
+        this._hoverUnmoved = false;
+        this._cancel('hover');
         // An answer stays while the pointer is on it, and as long again once it leaves.
         if (this._voiceOpen) {
             if (this._island.hovered)
@@ -887,6 +901,14 @@ export class Controller {
                 this._scheduleVoiceClose(Math.min(this._voiceCloseMs, VOICE_LEAVE_MS));
             return;
         }
+        // Grown under a still pointer is no hover yet: it counts once the pointer moves (see `_hoverOnMove`).
+        if (this._island.hovered && !moved && this._island.morphing && !this._expandWanted) {
+            this._hoverUnmoved = true;
+            this._hoverOnMove(global.get_pointer());
+            return;
+        }
+        if (!this._island.hovered && unmoved && !this._expandWanted)
+            return;
         // An alert waits while the pointer is on it, as a notification should; not the volume's.
         if (this._alert && !this._alert.transient && this._presentation === 'peek') {
             if (this._island.hovered)
@@ -933,6 +955,17 @@ export class Controller {
                 this.expand();
             else if (this._island.hovered)
                 this._expandOnRest();
+        });
+    }
+
+    // Counts the pointer on the island as a hover once it moves from `[x, y]`.
+    _hoverOnMove([x, y]) {
+        this._later('hover', MOVE_CHECK_MS, () => {
+            const [nowX, nowY] = global.get_pointer();
+            if (Math.hypot(nowX - x, nowY - y) > REST_DISTANCE_PX)
+                this._onHoverChanged(true);
+            else
+                this._hoverOnMove([x, y]);
         });
     }
 
@@ -1020,7 +1053,23 @@ export class Controller {
         return Clutter.EVENT_STOP;
     }
 
-    _onClick(event) {
+    /** A tap is a primary click, but for a button's own; opened by one, a tap elsewhere closes it. */
+    _onTap(event) {
+        if (event.type() !== Clutter.EventType.TOUCH_END)
+            return Clutter.EVENT_PROPAGATE;
+        for (let actor = global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, ...event.get_coords());
+            actor && actor !== this._island; actor = actor.get_parent()) {
+            if (actor instanceof St.Button)
+                return Clutter.EVENT_PROPAGATE;
+        }
+        const wasOpen = this._expandWanted;
+        const result = this._onClick(event, Clutter.BUTTON_PRIMARY);
+        if (!wasOpen && this._expandWanted && !this._keyboardGrab)
+            this._holdOpen();
+        return result;
+    }
+
+    _onClick(event, button = event.get_button()) {
         // A click puts an answer away; the face and the Sign in button take their own clicks.
         if (this._voiceOpen) {
             if (!this._voiceAnswered || this._voice.chatOpen)
@@ -1028,7 +1077,7 @@ export class Controller {
             this.collapse();
             return Clutter.EVENT_STOP;
         }
-        switch (event.get_button()) {
+        switch (button) {
         case Clutter.BUTTON_PRIMARY:
             return this._openFromClosed();
         case Clutter.BUTTON_MIDDLE:
@@ -1121,10 +1170,15 @@ export class Controller {
         }
         this._shelf.showTab('clipboard');
         this.expand('shelf');
-        this._setKeyboard(true);
+        this._holdOpen();
         if (this._keyboardGrab)
             this._shelf.showTab('clipboard', {focusSearch: true});
-        else // another grab holds the keyboard: it closes once the pointer is not on it
+    }
+
+    /** Opened without the pointer, it takes the keyboard: Esc or a click elsewhere closes it. */
+    _holdOpen() {
+        this._setKeyboard(true);
+        if (!this._keyboardGrab) // another grab holds the keyboard: it closes once the pointer is not on it
             this._later('collapse', KEYBOARD_LESS_CLOSE_MS, () => {
                 if (!this._island.hovered)
                     this._collapseUnlessHeld();
@@ -1144,7 +1198,8 @@ export class Controller {
             // Clicking anywhere else ends typing and closes the island.
             this._stageCapture = global.stage.connect('captured-event', (_stage, event) => {
                 // The shelf helper's window lies over the island: inside too.
-                if (event.type() === Clutter.EventType.BUTTON_PRESS && !this._shelfHelper.containsPointer() &&
+                const press = [Clutter.EventType.BUTTON_PRESS, Clutter.EventType.TOUCH_BEGIN].includes(event.type());
+                if (press && !this._shelfHelper.containsPointer() &&
                     !this._island.contains(global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, ...event.get_coords()))) {
                     this.collapse();
                 }
@@ -1884,7 +1939,11 @@ export class Controller {
             writer: this._writer,
             decide: action => this._decide(action),
             // The answer shows for a moment, then the page.
-            showNotifications: () => this._later('voice-page', 1200, () => this.expand('notifications')),
+            showNotifications: () => this._later('voice-page', 1200, () => {
+                this.expand('notifications');
+                if (!this._island.hovered && !this._keyboardGrab)
+                    this._holdOpen();
+            }),
             // Closed first, so the island is not in a screenshot or over the lock screen.
             // Every close-first action of an answer runs, in order, once the island has closed.
             closeThen: callback => {
@@ -2024,6 +2083,7 @@ export class Controller {
         this._topBar.destroy();
         this._daemon.destroy();
         this._settings = null;
+        Format.release();
     }
 
     /** Frees what the steps of building (see the constructor) made before it was turned off: nothing
@@ -2045,5 +2105,6 @@ export class Controller {
             this._privacy, this._audio, this._notifications, this._daemon])
             service?.destroy();
         this._settings = null;
+        Format.release();
     }
 }
