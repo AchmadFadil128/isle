@@ -178,6 +178,9 @@ All notable changes to Isle are listed here. The format follows
   assistant without that alert coming back once the assistant closes.
 - Locking the screen while the assistant's command waits for Run or Deny in an alert no longer shows the
   notification waiting behind it as the screen locks, marking it read with its sound, unseen.
+- Opening the Usage page asks Claude for new numbers at most every two minutes, as the guide says (every
+  half minute only while offline); it asked every half minute, four times what the guide promises of an
+  endpoint Claude does not document.
 
 ## [1.0.6] - 2026-10-24
 
