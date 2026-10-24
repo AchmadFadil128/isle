@@ -1111,7 +1111,11 @@ async fn turn(
                 Ok(Recorded::Nothing) => return fail(iface, NOTHING_HEARD).await,
                 Ok(Recorded::NoMic) => return fail(iface, NO_MIC).await,
                 Ok(Recorded::Muted) => return fail(iface, MUTED).await,
-                Err(command) => return Some(command),
+                Err(command) => {
+                    // Cut short by a typed request: the speech model is not kept in memory while the AI works on it.
+                    session.whisper = None;
+                    return Some(command);
+                }
             };
             publish(iface, |state| state.phase = Phase::Transcribing).await;
             let whisper = session.whisper.as_mut().expect("started above");

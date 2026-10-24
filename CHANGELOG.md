@@ -8,6 +8,8 @@ All notable changes to Isle are listed here. The format follows
 
 ### Changed
 
+- A typed request that cuts listening short lets the speech model go at once, rather than keeping it in
+  memory until the island closes.
 - While the assistant runs a command, Isle's service sends its state to GNOME Shell only when something
   shows differently: about once a second instead of two or three times, and never the same state twice.
 - Opening the island on a song with synced lyrics no longer eases each lyric line behind the player
