@@ -6,6 +6,8 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
+import {onUiScale} from '../compat.js';
+
 export const Page = GObject.registerClass({
     Signals: {
         // The page needs keyboard input (true) or is done with it (false).
@@ -26,8 +28,11 @@ export const Page = GObject.registerClass({
         'cold': {},
     },
 }, class Page extends St.Widget {
-    _init(daemon, params) {
+    /** `params.height` is in CSS pixels (see `px`). */
+    _init(daemon, {height, ...params}) {
         super._init(params);
+        if (height !== undefined)
+            onUiScale(this, scale => (this.height = height * scale));
         this.daemon = daemon;
         this._active = false;
         this._timeouts = new Map();

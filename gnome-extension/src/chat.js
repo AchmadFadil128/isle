@@ -12,11 +12,11 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {BotIcon} from './botIcon.js';
-import {VERTICAL} from './compat.js';
+import {VERTICAL, onUiScale, px} from './compat.js';
 import * as Format from './format.js';
 import {icon, iconButton, playMotion, slideBy, wrapLines} from './widgets.js';
 
-/** The little face beside its answers, in pixels. */
+/** The little face beside its answers, in CSS pixels (see `px`). */
 const FACE_SIZE = 18;
 /** Messages this far apart (ms) get the time between them. */
 const TIME_GAP_MS = 5 * 60000;
@@ -107,7 +107,7 @@ function copyButton(child, command, copied) {
 /** m:ss for an elapsed time in seconds. */
 export const elapsed = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
-// A box no wider than `max`, as tall as its text wrapped at that width (St would measure one line).
+// A box no wider than `max` (CSS px), as tall as its text wrapped at that width (St would measure one line).
 const Bubble = GObject.registerClass(
 class Bubble extends St.BoxLayout {
     _init(params, max) {
@@ -117,11 +117,13 @@ class Bubble extends St.BoxLayout {
 
     vfunc_get_preferred_width(forHeight) {
         const [min, natural] = super.vfunc_get_preferred_width(forHeight);
-        return [Math.min(min, this._max), Math.min(natural, this._max)];
+        const max = px(this._max);
+        return [Math.min(min, max), Math.min(natural, max)];
     }
 
     vfunc_get_preferred_height(forWidth) {
-        const width = forWidth < 0 ? this._max : Math.min(forWidth, this._max);
+        const max = px(this._max);
+        const width = forWidth < 0 ? max : Math.min(forWidth, max);
         const [, natural] = super.vfunc_get_preferred_height(width);
         return [natural, natural];
     }
@@ -132,7 +134,8 @@ class Bubble extends St.BoxLayout {
 const Sweep = GObject.registerClass(
 class Sweep extends St.DrawingArea {
     _init() {
-        super._init({style_class: 'isle-card-sweep', height: 3, x_expand: true});
+        super._init({style_class: 'isle-card-sweep', x_expand: true});
+        onUiScale(this, scale => (this.height = 3 * scale));
         this._time = 0;
         this.connect('repaint', area => this._paint(area));
     }
@@ -508,12 +511,14 @@ export const ChatView = GObject.registerClass({
             remember();
         });
         adjustment.connect('notify::page-size', () => {
-            if (last.value >= last.upper - last.page - 2)
+            if (last.value >= last.upper - last.page - px(2))
                 toEnd();
             remember();
         });
         // A value clamped as the page changes is not the reader's: it waits for the page's own notice.
         adjustment.connect('notify::value', () => adjustment.page_size === last.page && remember());
+        // Another scale: the rows are made again at its size.
+        onUiScale(this, () => this.setItems(this._items), {now: false});
     }
 
     /** {shape, palette} for the little face beside its answers (see bot.js). */
@@ -542,7 +547,7 @@ export const ChatView = GObject.registerClass({
             if (index >= known && St.Settings.get().enable_animations) {
                 const delay = 60 * (index - known);
                 row.opacity = 0;
-                slideBy(row, 'y', 10, 0, {delay, duration: 260});
+                slideBy(row, 'y', px(10), 0, {delay, duration: 260});
                 row.ease({opacity: 255, duration: 260, delay, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
             }
             last = item;
@@ -566,7 +571,7 @@ export const ChatView = GObject.registerClass({
         if (item.role === 'command') {
             const row = new St.BoxLayout({style_class: 'isle-chat-command'});
             const [iconName, text, styleClass] = STATUS[item.status] ?? ['isle-terminal-symbolic', '', ''];
-            row.add_child(new St.Widget({width: FACE_SIZE}));
+            row.add_child(new St.Widget({width: px(FACE_SIZE)}));
             const command = label('', 'isle-chat-command-text', {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
             command.clutter_text.set_markup(shellMarkup(item.command));
             command.clutter_text.ellipsize = Pango.EllipsizeMode.END;
@@ -581,7 +586,7 @@ export const ChatView = GObject.registerClass({
         }
         const row = new St.BoxLayout({style_class: 'isle-chat-reply-row'});
         // The face once per run of answers; a space as wide after it, so their text lines up.
-        const face = withFace && this._look ? new BotIcon(FACE_SIZE, this._look) : new St.Widget({width: FACE_SIZE});
+        const face = withFace && this._look ? new BotIcon(FACE_SIZE, this._look) : new St.Widget({width: px(FACE_SIZE)});
         face.y_align = Clutter.ActorAlign.START;
         row.add_child(face);
         const text = label('', 'isle-chat-reply', {x_expand: true});

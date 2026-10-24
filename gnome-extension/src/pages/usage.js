@@ -10,7 +10,7 @@ import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
-import {VERTICAL} from '../compat.js';
+import {VERTICAL, px} from '../compat.js';
 import * as Format from '../format.js';
 import * as Palette from '../palette.js';
 import {icon, label, slideBy} from '../widgets.js';
@@ -195,7 +195,7 @@ class UsagePage extends Page {
             return;
         const direction = index > from ? 1 : -1;
         content.opacity = 0;
-        slideBy(content, 'y', direction * 24, 0, {duration: SLIDE_MS});
+        slideBy(content, 'y', direction * px(24), 0, {duration: SLIDE_MS});
         content.ease({opacity: 255, duration: SLIDE_MS, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
         this._fill();
     }

@@ -9,16 +9,18 @@ import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
 
+import {px, uiScale} from './compat.js';
 import {paintRim} from './glow.js';
 import {GENTLE, Spring, SpringDriver} from './spring.js';
 import {fence, slideBy} from './widgets.js';
 
 
-/** Sideways speed (px/s) `nudge` gives: a ~15 px stretch that springs back, as iOS does at a volume limit. */
+/** Sideways speed (CSS px/s) `nudge` gives: a ~15 px stretch that springs back, as iOS does at a volume limit. */
 const NUDGE_VELOCITY = 220;
 /** How long a view takes to glide to its new place when its width changes. */
 const GLIDE_MS = 360;
-/** The shape layer reaches this far past the island on each side (see `_repaint`). */
+/** The shape layer reaches this far past the island on each side (see `_repaint`), in stage pixels: it covers
+ * the fraction of one the island is drawn off its place, whatever the scale. */
 const SHAPE_PAD = 1;
 /** Where a view shown out of sight is moved (see `warmView`): far above the island, beyond its clip. */
 const OUT_OF_REACH = -10000;
@@ -35,10 +37,10 @@ const FADE_OUT = 160;
 const FADE_IN = 320;
 /** The incoming view waits for the shape to make room before appearing. */
 const FADE_IN_DELAY = 120;
-/** How far (px) the views slide as the shape grows or shrinks: they travel with it. Whole
+/** How far (CSS px) the views slide as the shape grows or shrinks: they travel with it. Whole
  * pixels only, never a scale: a scaled picture or text is resampled every frame and seems to shiver. */
 const VIEW_SHIFT = 8;
-/** Below this shoulder size (px) the corners may climb into the top bar, so the island rounds smoothly. */
+/** Below this shoulder size (CSS px) the corners may climb into the top bar, so the island rounds smoothly. */
 const SHOULDER_FADE = 4;
 
 export const Island = GObject.registerClass({
@@ -289,7 +291,7 @@ export const Island = GObject.registerClass({
     nudge() {
         if (!St.Settings.get().enable_animations)
             return;
-        this._width.velocity += NUDGE_VELOCITY;
+        this._width.velocity += px(NUDGE_VELOCITY);
         this._driver.start();
     }
 
@@ -327,10 +329,11 @@ export const Island = GObject.registerClass({
             return;
 
         const previous = this._view;
+        const shift = px(VIEW_SHIFT);
         // Down as the island takes room, up as it gives it; never sideways, it hangs from the top.
         if (previous) {
             previous.remove_all_transitions();
-            slideBy(previous, 'y', previous.translation_y, growing ? VIEW_SHIFT : -VIEW_SHIFT, {duration: FADE_OUT});
+            slideBy(previous, 'y', previous.translation_y, growing ? shift : -shift, {duration: FADE_OUT});
             previous.ease({
                 opacity: 0,
                 duration: FADE_OUT,
@@ -348,7 +351,7 @@ export const Island = GObject.registerClass({
         // Still fading out (shown again within a moment): it comes back from where it is, without a blink.
         const returning = view.visible && view.opacity > 0;
         view.remove_all_transitions();
-        const from = returning ? view.translation_y : growing ? -VIEW_SHIFT : VIEW_SHIFT;
+        const from = returning ? view.translation_y : growing ? -shift : shift;
         view.translation_x = 0;
         view.show();
         if (!returning)
@@ -448,7 +451,7 @@ export const Island = GObject.registerClass({
         cr.translate(this._islandFraction, 0);
         this._outline(cr, height);
         cr.clip();
-        paintRim(cr, this._outlineBox, height, this._tint, this._motion, this._tintStrength, this._rising);
+        paintRim(cr, this._outlineBox, height, this._tint, this._motion, this._tintStrength, this._rising, uiScale());
         cr.$dispose();
     }
 
@@ -461,7 +464,7 @@ export const Island = GObject.registerClass({
         const shoulder = Math.min(margin, Math.max(0, (height - top) / 2));
         const left = margin;
         const right = left + Math.max(0, this._width.value);
-        const hanging = Math.min(1, margin / SHOULDER_FADE);
+        const hanging = Math.min(1, margin / px(SHOULDER_FADE));
         const radius = Math.max(0, Math.min(this._radius.value, height - top * hanging - shoulder, (right - left) / 2));
 
         cr.moveTo(left - shoulder, 0);

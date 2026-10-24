@@ -18,11 +18,12 @@ import {TILES, describeActions, failed, namesProject, outcomeOf, runnable, slots
 import {Bot} from './bot.js';
 import {ChatView, CommandCard, answerMarkup, elapsed} from './chat.js';
 import {isTerminal} from './clipboard.js';
-import {VERTICAL, eventActor, maximize, unmaximize} from './compat.js';
+import {VERTICAL, eventActor, maximize, onUiScale, px, uiScale, unmaximize} from './compat.js';
 import {plainBody} from './notifications.js';
 import {icon, iconButton, pillButton, wrapLines} from './widgets.js';
 
 
+/** Sizes in CSS pixels (see `px`). */
 const FACE_SIZE = 36;
 /** Steps that read oddly once over, as they are kept in the list of steps done. */
 const DONE_AS = {'Asking to run it…': 'Asked to run it'};
@@ -102,7 +103,8 @@ const KEY_LEVEL = 0.32;
 const Face = GObject.registerClass(
 class Face extends St.DrawingArea {
     _init(look) {
-        super._init({width: FACE_SIZE, height: FACE_SIZE});
+        super._init();
+        onUiScale(this, scale => this.set_size(FACE_SIZE * scale, FACE_SIZE * scale));
         this.bot = new Bot(look);
         this.level = 0;
         /** While typing: where on the stage to look (the caret), or null. */
@@ -112,7 +114,7 @@ class Face extends St.DrawingArea {
         this._look = {x: 0, y: 0};
         this.connect('repaint', area => {
             const cr = area.get_context();
-            this.bot.paint(cr, FACE_SIZE);
+            this.bot.paint(cr, px(FACE_SIZE));
             cr.$dispose();
         });
     }
@@ -140,10 +142,10 @@ class Face extends St.DrawingArea {
 
     /** Moves the eyes on to `time` (s): at the caret, at the pointer, or about on their own. */
     step(time) {
-        const [px, py] = global.get_pointer();
-        if (px !== this._pointer[0] || py !== this._pointer[1]) {
-            this._pointer[0] = px;
-            this._pointer[1] = py;
+        const [pointerX, pointerY] = global.get_pointer();
+        if (pointerX !== this._pointer[0] || pointerY !== this._pointer[1]) {
+            this._pointer[0] = pointerX;
+            this._pointer[1] = pointerY;
             this._pointerAt = time;
         }
         const form = this.bot.form;
@@ -152,15 +154,16 @@ class Face extends St.DrawingArea {
         if (caret)
             look = this._towards(caret[0], caret[1]);
         else if (!this.bot.looksOnItsOwn && time - this._pointerAt < POINTER_REST_S)
-            look = this._towards(px, py);
+            look = this._towards(pointerX, pointerY);
         this.bot.step(time, look, this.level);
     }
 
     /** Looking towards the point `x`, `y` on screen. */
     _towards(x, y) {
         const [fx, fy] = this.get_transformed_position();
-        this._look.x = Math.max(-1, Math.min(1, (x - fx - FACE_SIZE / 2) / 260));
-        this._look.y = Math.max(-1, Math.min(1, (y - fy - FACE_SIZE / 2) / 180));
+        const scale = uiScale();
+        this._look.x = Math.max(-1, Math.min(1, (x - fx - FACE_SIZE * scale / 2) / (260 * scale)));
+        this._look.y = Math.max(-1, Math.min(1, (y - fy - FACE_SIZE * scale / 2) / (180 * scale)));
         return this._look;
     }
 });
@@ -316,8 +319,8 @@ export const VoiceView = GObject.registerClass({
         this._texts.add_child(this._setUp);
         row.add_child(this._texts);
         // One round button at the end, its size kept whichever shows, so the texts never shift.
-        this._action = new St.Widget({layout_manager: new Clutter.BinLayout(), width: ACTION_SIZE, height: ACTION_SIZE,
-            y_align: Clutter.ActorAlign.CENTER});
+        this._action = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
+        onUiScale(this._action, scale => this._action.set_size(ACTION_SIZE * scale, ACTION_SIZE * scale));
         this._typeButton = iconButton('isle-keyboard-symbolic', 'isle-voice-action', () => this.emit('type-requested'),
             {accessibleName: 'Type instead'});
         this._stop = iconButton('isle-stop-symbolic', 'isle-voice-action isle-voice-stop', () => this.emit('stop'),
@@ -727,30 +730,31 @@ export const VoiceView = GObject.registerClass({
         // With something to show above, it stays wide, so a conversation never jumps.
         const short = ['listening', 'transcribing'].includes(this._phase) && !this.followUp && !this.typing &&
             !this.chatOpen && !this._undo.visible;
-        return short ? LISTENING_WIDTH : ANSWER_WIDTH;
+        return px(short ? LISTENING_WIDTH : ANSWER_WIDTH);
     }
 
     /** Sizes the texts, wrapped, and returns the height wanted below the top bar. */
     fit() {
         // Typing, the field takes the button's place too (its send is inside it). A command card keeps the
         // button's room as it waits, runs and ends, so it never changes width.
-        const width = this.preferredWidth - TEXT_INSET + (this._action.visible || this._card.visible ? 0 : ACTION_SIZE + 12);
+        const scale = uiScale();
+        const width = this.preferredWidth - (TEXT_INSET - (this._action.visible || this._card.visible ? 0 : ACTION_SIZE + 12)) * scale;
         // Measured per label: the box's own answer is the size set below.
         const parts = [this._undo, this._heardButton, this._entry, this._ideas, this._text, this._card, this._stepsBox, this._still,
             this._hint, this._signIn, this._setUp];
         const natural = parts.filter(part => part.visible).reduce((sum, part) => sum + part.get_preferred_height(width)[1], 0);
         // A command card needs room for its buttons.
-        const most = this._card.visible ? CARD_MAX_HEIGHT : MAX_HEIGHT;
+        const most = (this._card.visible ? CARD_MAX_HEIGHT : MAX_HEIGHT) * scale;
         // Set outright: the row kept an earlier, shorter height for them.
-        this._texts.set_size(width, Math.min(natural, most - ROW_PADDING));
+        this._texts.set_size(width, Math.min(natural, most - ROW_PADDING * scale));
         // Beside a line or two it sits in the middle; beside more, level with the first line.
         this._faceButton.y_align = this._action.y_align =
-            natural > FACE_SIZE + 8 ? Clutter.ActorAlign.START : Clutter.ActorAlign.CENTER;
-        const row = Math.round(Math.min(most, Math.max(MIN_HEIGHT, natural + ROW_PADDING)));
+            natural > (FACE_SIZE + 8) * scale ? Clutter.ActorAlign.START : Clutter.ActorAlign.CENTER;
+        const row = Math.round(Math.min(most, Math.max(MIN_HEIGHT * scale, natural + ROW_PADDING * scale)));
         this._row.height = row;
         if (!this.chatOpen)
             return row;
-        const chat = this._chat.naturalHeight(this.preferredWidth, CHAT_MAX_HEIGHT - row);
+        const chat = this._chat.naturalHeight(this.preferredWidth, CHAT_MAX_HEIGHT * scale - row);
         this._chat.height = chat;
         return row + chat;
     }

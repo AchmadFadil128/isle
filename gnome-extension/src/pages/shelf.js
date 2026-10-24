@@ -7,6 +7,7 @@ import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
+import {onUiScale} from '../compat.js';
 import {DropLight} from '../dropLight.js';
 import {Thumbnails} from '../thumbnails.js';
 import {icon, iconButton, label, pillButton, setEnabled} from '../widgets.js';
@@ -44,9 +45,10 @@ export const ShelfPage = GObject.registerClass({
     _init(daemon, history, settings, {height}) {
         super._init(daemon, {
             style_class: 'isle-page isle-shelf',
-            layout_manager: new Clutter.BoxLayout({orientation: Clutter.Orientation.VERTICAL, spacing: 8}),
+            layout_manager: new Clutter.BoxLayout({orientation: Clutter.Orientation.VERTICAL}),
             height,
         });
+        onUiScale(this, scale => (this.layout_manager.spacing = 8 * scale));
         this.name = 'shelf';
         this._history = history;
         this._settings = settings;

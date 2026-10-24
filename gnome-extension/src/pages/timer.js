@@ -8,7 +8,7 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import {timerColor} from '../compact.js';
-import {VERTICAL} from '../compat.js';
+import {VERTICAL, onUiScale} from '../compat.js';
 import * as Format from '../format.js';
 import {Ring, icon, iconButton, label} from '../widgets.js';
 import {Page} from './page.js';
@@ -21,7 +21,7 @@ const PHASES = {
     long_break: 'Long break',
 };
 const RING_SIZE = 104;
-/** Reset and Start, at the right, in a slot as wide as both: Reset appearing moves nothing. */
+/** Reset and Start, at the right, in a slot as wide as both (CSS px): Reset appearing moves nothing. */
 const CONTROLS_WIDTH = 152;
 /** Shown until isled reports the timer: a fresh 25-minute focus session. */
 const DEFAULT_STATE = {phase: 'idle', running: false, remaining_ms: 25 * 60000, duration_ms: 25 * 60000, today_sessions: 0};
@@ -75,7 +75,8 @@ class TimerPage extends Page {
         this._play = new St.Button({style_class: 'isle-start-pill', child: pill, can_focus: true, accessible_name: 'Start or pause'});
         this._play.connect('clicked', () => this._toggle());
         controls.add_child(this._play);
-        const slot = new St.Widget({layout_manager: new Clutter.BinLayout(), width: CONTROLS_WIDTH});
+        const slot = new St.Widget({layout_manager: new Clutter.BinLayout()});
+        onUiScale(slot, scale => (slot.width = CONTROLS_WIDTH * scale));
         slot.add_child(controls);
         this.add_child(slot);
 

@@ -9,12 +9,13 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import {timerColor} from './compact.js';
-import {VERTICAL} from './compat.js';
+import {VERTICAL, onUiScale, px, uiScale} from './compat.js';
 import * as Format from './format.js';
 import * as Playback from './playback.js';
 import {watchClock} from './wallClock.js';
 import {Bars, PrivacyDots, RecordingDot, Ring, fence, icon, iconButton, label, slideBy} from './widgets.js';
 
+/** Sizes and distances in CSS pixels (see `px`). */
 const EXPANDED_WIDTH = 600;
 /** The least room between the tabs and the status on the right. */
 const HEADER_GAP = 16;
@@ -69,7 +70,7 @@ export const ExpandedView = GObject.registerClass({
     },
 }, class ExpandedView extends St.BoxLayout {
     _init(daemon, privacy, call, settings, pages) {
-        super._init({...VERTICAL, style_class: 'isle-expanded', width: EXPANDED_WIDTH});
+        super._init({...VERTICAL, style_class: 'isle-expanded', width: px(EXPANDED_WIDTH)});
         this._daemon = daemon;
         this._privacy = privacy;
         this._call = call;
@@ -78,7 +79,7 @@ export const ExpandedView = GObject.registerClass({
         // Some pages (Call) have no tab until there is something on them.
         this._index = Math.max(0, pages.findIndex(page => page.available));
         this._active = false;
-        this._width = EXPANDED_WIDTH;
+        this._width = px(EXPANDED_WIDTH);
         this._lastFlip = 0;
         /** The scroll gesture in progress: travel so far, and whether it flipped. */
         this._gesture = {dx: 0, dy: 0, flipped: false, at: 0};
@@ -97,7 +98,12 @@ export const ExpandedView = GObject.registerClass({
         });
         this.add_child(this._header);
         this.add_child(this._buildPager());
-        this.add_child(new St.Widget({height: BOTTOM_PADDING}));
+        const bottom = new St.Widget();
+        this.add_child(bottom);
+        onUiScale(bottom, scale => {
+            bottom.height = BOTTOM_PADDING * scale;
+            this._pagerArea.height = PAGE_HEIGHT * scale;
+        });
 
         for (const page of pages) {
             page.connect('width-changed', () => {
@@ -124,6 +130,8 @@ export const ExpandedView = GObject.registerClass({
         this._callChanged = call.connect('changed', () => this._updateHeader());
         this._syncPage();
         this._syncWidth();
+        // Another scale: the tab names are measured again, and the width with them.
+        onUiScale(this, () => this._syncTabs(), {now: false});
         this.connect('destroy', () => this._onDestroy());
     }
 
@@ -265,7 +273,7 @@ export const ExpandedView = GObject.registerClass({
     }
 
     _buildPager() {
-        const area = new St.Widget({layout_manager: new Clutter.BinLayout(), height: PAGE_HEIGHT});
+        const area = this._pagerArea = new St.Widget({layout_manager: new Clutter.BinLayout()});
 
         this._pager = new St.Widget({
             layout_manager: new Clutter.BinLayout(),
@@ -295,7 +303,7 @@ export const ExpandedView = GObject.registerClass({
 
     /** The width the island should have: the current page's, and never less than the header needs. */
     get preferredWidth() {
-        return Math.max(this.page.preferredWidth ?? EXPANDED_WIDTH, this._headerWidth());
+        return Math.max(this.page.preferredWidth ?? px(EXPANDED_WIDTH), this._headerWidth());
     }
 
     // The tabs and the status side by side with room between, so they never overlap,
@@ -311,7 +319,7 @@ export const ExpandedView = GObject.registerClass({
         const [, tabs] = this._tabsBox.get_preferred_width(-1);
         const [, status] = this._status.get_preferred_width(-1);
         return Math.ceil(tabs - shown + longest + status +
-            this._header.get_theme_node().get_horizontal_padding() + HEADER_GAP);
+            this._header.get_theme_node().get_horizontal_padding() + px(HEADER_GAP));
     }
 
     /** The widest tab name with its gap from the icon, measured once per font: names never change. */
@@ -319,7 +327,8 @@ export const ExpandedView = GObject.registerClass({
         const openName = this._tabs[this._index]?.name;
         if (!openName)
             return 0;
-        const font = openName.get_theme_node().get_font().to_string();
+        // The scale too: the same font is wider at 2x.
+        const font = `${openName.get_theme_node().get_font().to_string()} ${uiScale()}`;
         if (this._names?.font !== font) {
             // The open name's own margin (its gap from the icon), the same for every name.
             const gap = openName.get_preferred_width(-1)[1] - openName.clutter_text.get_preferred_width(-1)[1];
@@ -407,8 +416,9 @@ export const ExpandedView = GObject.registerClass({
         next.show();
 
         if (animate && St.Settings.get().enable_animations) {
+            const distance = px(SLIDE_DISTANCE);
             // Whole pixels (see `slideBy`), the fades eased as before.
-            slideBy(previous, 'x', previous.translation_x, -direction * SLIDE_DISTANCE, {duration: SLIDE_DURATION});
+            slideBy(previous, 'x', previous.translation_x, -direction * distance, {duration: SLIDE_DURATION});
             previous.ease({
                 opacity: 0,
                 duration: SLIDE_DURATION,
@@ -421,7 +431,7 @@ export const ExpandedView = GObject.registerClass({
                 },
             });
             next.opacity = 0;
-            slideBy(next, 'x', direction * SLIDE_DISTANCE, 0, {duration: SLIDE_DURATION});
+            slideBy(next, 'x', direction * distance, 0, {duration: SLIDE_DURATION});
             next.ease({
                 opacity: 255,
                 duration: SLIDE_DURATION,

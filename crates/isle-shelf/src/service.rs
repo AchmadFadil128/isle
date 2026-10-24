@@ -10,6 +10,7 @@ use crate::shelf::ShelfWindow;
 const INTERFACE: &str = r#"
 <node>
   <interface name="io.github.zickrian.isle.ShelfWindow1">
+    <!-- Places are in logical pixels, as GTK's: the extension divides the stage's by its scale. -->
     <method name="Show">
       <arg name="x" type="i" direction="in"/>
       <arg name="y" type="i" direction="in"/>

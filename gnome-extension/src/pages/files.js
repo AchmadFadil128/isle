@@ -11,13 +11,13 @@ import Gio from 'gi://Gio';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
-import {VERTICAL} from '../compat.js';
+import {VERTICAL, onUiScale, px, uiScale} from '../compat.js';
 import {icon, iconButton, label} from '../widgets.js';
 
 /** The shelf holds this many files (as isled enforces). */
 export const SHELF_CAPACITY = 6;
 
-// Sizes in pixels; keep them in step with the helper's tile.rs.
+// Sizes in CSS pixels (see `px`); keep them in step with the helper's tile.rs, which GTK scales likewise.
 const TILE_WIDTH = 84;
 const PREVIEW_SIZE = 52;
 const ICON_SIZE = 46;
@@ -88,6 +88,13 @@ class FilesView extends St.Widget {
         this.insert_child_at_index(this._zone, 0);
         this.connect('destroy', () => (this._destroyed = true));
         this.update();
+        // Another scale: the tiles are made again at its size.
+        onUiScale(this, () => {
+            for (const tile of this._tileFor.values())
+                tile.destroy();
+            this._tileFor.clear();
+            this.update();
+        }, {now: false});
     }
 
     /** While the helper window covers this tab, show nothing of its own so the two never mix. */
@@ -152,7 +159,8 @@ class FilesView extends St.Widget {
         const [from, to] = [ZONE[dragging ? 'near' : 'idle'], ZONE.over];
         const t = full ? 0 : Math.min(1, this._light);
         const [line, fill] = from.map((value, i) => value + (to[i] - value) * t);
-        roundedRect(cr, width, height, ZONE_RADIUS, 0.5);
+        const scale = uiScale();
+        roundedRect(cr, width, height, ZONE_RADIUS * scale, 0.5 * scale);
         cr.setSourceRGBA(1, 1, 1, fill);
         cr.fillPreserve();
         if (t > 0) {
@@ -171,7 +179,7 @@ class FilesView extends St.Widget {
                 cr.setSourceRGBA(1, 0.36, 0.36, 0.6);
             else
                 cr.setSourceRGBA(1, 1, 1, line);
-            strokeDashed(cr);
+            strokeDashed(cr, scale);
         }
         cr.$dispose();
     }
@@ -236,21 +244,21 @@ class FilesView extends St.Widget {
     // Tiles
 
     _tile(item) {
-        const preview = new St.Bin({style_class: 'isle-shelf-preview', width: PREVIEW_SIZE, height: PREVIEW_SIZE});
+        const preview = new St.Bin({style_class: 'isle-shelf-preview', width: px(PREVIEW_SIZE), height: px(PREVIEW_SIZE)});
         // A plain file icon until the file's own one is known (or for good,
         // if the file is gone).
         preview.child = new St.Icon({gicon: icon('isle-file'), icon_size: ICON_SIZE * 0.6, opacity: 160});
 
         const copied = new St.Bin({
             style_class: 'isle-shelf-copied',
-            width: PREVIEW_SIZE,
-            height: PREVIEW_SIZE,
+            width: px(PREVIEW_SIZE),
+            height: px(PREVIEW_SIZE),
             opacity: 0,
             child: new St.Icon({gicon: icon('isle-check-symbolic'), icon_size: 18}),
         });
         const remove = iconButton('isle-close-symbolic', 'isle-shelf-remove',
             () => this._daemon.call('shelf', 'Remove', item.uri), {size: 10, accessibleName: 'Remove from the shelf'});
-        remove.set_size(REMOVE_SIZE, REMOVE_SIZE);
+        remove.set_size(px(REMOVE_SIZE), px(REMOVE_SIZE));
 
         const tile = this._tileBox(this._frame(preview, {copied, remove}), item.name);
         tile.accessible_name = item.name;
@@ -274,16 +282,17 @@ class FilesView extends St.Widget {
 
     /** The preview (with `copied` over it) and room for the × over its corner. */
     _frame(preview, {copied = null, remove = null} = {}) {
-        const frame = new St.Widget({layout_manager: new Clutter.FixedLayout(), width: TILE_WIDTH, height: FRAME_HEIGHT});
+        const scale = uiScale();
+        const frame = new St.Widget({layout_manager: new Clutter.FixedLayout(), width: TILE_WIDTH * scale, height: FRAME_HEIGHT * scale});
         const left = (TILE_WIDTH - PREVIEW_SIZE) / 2;
         for (const square of [preview, copied].filter(Boolean)) {
             frame.add_child(square);
-            square.set_position(left, FRAME_HEIGHT - PREVIEW_SIZE);
+            square.set_position(left * scale, (FRAME_HEIGHT - PREVIEW_SIZE) * scale);
         }
         if (remove) {
             frame.add_child(remove);
             // Its centre a few pixels inside the preview's corner.
-            remove.set_position(left + PREVIEW_SIZE - REMOVE_SIZE + 6, 0);
+            remove.set_position((left + PREVIEW_SIZE - REMOVE_SIZE + 6) * scale, 0);
         }
         return frame;
     }
@@ -291,7 +300,7 @@ class FilesView extends St.Widget {
     _tileBox(frame, name) {
         const box = new St.BoxLayout({...VERTICAL, style_class: 'isle-shelf-tile-box'});
         box.add_child(frame);
-        const text = label(name, 'isle-shelf-name', {width: NAME_WIDTH, x_align: Clutter.ActorAlign.CENTER});
+        const text = label(name, 'isle-shelf-name', {width: px(NAME_WIDTH), x_align: Clutter.ActorAlign.CENTER});
         // Two lines ("Alex Morgan / CV.pdf" whole); only a longer name loses its middle.
         text.clutter_text.set({line_wrap: true, line_wrap_mode: Pango.WrapMode.WORD_CHAR,
             line_alignment: Pango.Alignment.CENTER, ellipsize: Pango.EllipsizeMode.MIDDLE});
@@ -300,7 +309,7 @@ class FilesView extends St.Widget {
             style_class: 'isle-shelf-tile',
             child: box,
             can_focus: true,
-            width: TILE_WIDTH,
+            width: px(TILE_WIDTH),
             y_align: Clutter.ActorAlign.CENTER,
         });
     }
@@ -362,9 +371,9 @@ function roundedRect(cr, width, height, radius, inset) {
     cr.closePath();
 }
 
-/** Strokes the traced path in 1 px dashes, as GTK draws a dashed border. */
-function strokeDashed(cr) {
-    cr.setLineWidth(1);
-    cr.setDash(DASH, 0);
+/** Strokes the traced path in 1 px dashes (times `scale`), as GTK draws a dashed border. */
+function strokeDashed(cr, scale) {
+    cr.setLineWidth(scale);
+    cr.setDash(DASH.map(length => length * scale), 0);
     cr.stroke();
 }

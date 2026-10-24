@@ -10,6 +10,7 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import {Bot} from './bot.js';
+import {onUiScale, px} from './compat.js';
 
 /** How long (ms) a gesture plays; the icon is still again after it. */
 const GESTURE_MS = 750;
@@ -20,9 +21,11 @@ const ALIVE_MS = 2600;
 
 export const BotIcon = GObject.registerClass(
 class BotIcon extends St.DrawingArea {
+    /** `size` in CSS pixels. */
     _init(size, look = {}) {
-        super._init({width: size, height: size});
+        super._init();
         this._size = size;
+        onUiScale(this, scale => this.set_size(size * scale, size * scale));
         this._bot = new Bot(look);
         this._bot.holdEyes();
         this._badge = null;
@@ -109,24 +112,24 @@ class BotIcon extends St.DrawingArea {
 
     _paint(area) {
         const cr = area.get_context();
-        this._bot.paint(cr, this._size);
+        this._bot.paint(cr, px(this._size));
         if (this._badge)
-            this._paintBadge(cr);
+            this._paintBadge(cr, px(1));
         cr.$dispose();
     }
 
     // A small disc on the top left corner in the badge's colour, ringed in black so it stands off the body.
-    _paintBadge(cr) {
-        const r = Math.max(4, this._size * 0.17);
-        const x = r + 0.5, y = r + 0.5;
-        cr.arc(x, y, r + 1.5, 0, 2 * Math.PI);
+    _paintBadge(cr, scale) {
+        const r = Math.max(4, this._size * 0.17) * scale;
+        const x = r + 0.5 * scale, y = r + 0.5 * scale;
+        cr.arc(x, y, r + 1.5 * scale, 0, 2 * Math.PI);
         cr.setSourceRGBA(0, 0, 0, 1);
         cr.fill();
         cr.arc(x, y, r, 0, 2 * Math.PI);
         cr.setSourceRGBA(...this._badge.color, 1);
         cr.fill();
         cr.setSourceRGBA(1, 1, 1, 1);
-        cr.setLineWidth(Math.max(1.4, r * 0.32));
+        cr.setLineWidth(Math.max(1.4 * scale, r * 0.32));
         cr.setLineCap(Cairo.LineCap.ROUND);
         const s = r * 0.42;
         switch (this._badge.glyph) {

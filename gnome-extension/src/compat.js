@@ -5,6 +5,7 @@
 
 import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
+import St from 'gi://St';
 
 import {PACKAGE_VERSION} from 'resource:///org/gnome/shell/misc/config.js';
 
@@ -47,4 +48,37 @@ export function eventActor(event) {
 /** Whether the shell runs on Wayland; GNOME 50 dropped X11 and the check. */
 export function isWayland() {
     return Meta.is_wayland_compositor?.() ?? true;
+}
+
+/** Stage pixels per CSS pixel: 2 on a 200% display GNOME 46 to 49 lay out in physical pixels, else 1.
+ * St scales what CSS sizes, never what code sets: that takes `px`. */
+export function uiScale() {
+    return St.ThemeContext.get_for_stage(global.stage).scale_factor;
+}
+
+/** `n` CSS pixels in stage pixels, for a size, place or distance set from code (never an icon's `icon_size`). */
+export function px(n) {
+    return n * uiScale();
+}
+
+/** Calls `apply(scale)` now (unless `now` is false) and whenever `uiScale` changes, while `actor` lives:
+ * before the next frame, once St restyled for the new scale, so what is measured then is right. */
+export function onUiScale(actor, apply, {now = true} = {}) {
+    const context = St.ThemeContext.get_for_stage(global.stage);
+    if (now)
+        apply(context.scale_factor);
+    const laters = global.compositor.get_laters();
+    let later = 0;
+    const id = context.connect('notify::scale-factor', () => {
+        later ||= laters.add(Meta.LaterType.BEFORE_REDRAW, () => {
+            later = 0;
+            apply(context.scale_factor);
+            return false;
+        });
+    });
+    actor.connect('destroy', () => {
+        context.disconnect(id);
+        if (later)
+            laters.remove(later);
+    });
 }

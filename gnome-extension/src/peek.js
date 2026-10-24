@@ -11,11 +11,11 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {BotIcon} from './botIcon.js';
-import {VERTICAL} from './compat.js';
+import {VERTICAL, onUiScale, px} from './compat.js';
 import * as Palette from './palette.js';
 import {Art, LevelBar, Ring, VolumeGlyph, icon, isSymbolic, ownIcon, pillButton, playMotion, wrapLines} from './widgets.js';
 
-/** Narrowest and widest an alert gets; in between it fits its content. */
+/** Narrowest and widest an alert gets; in between it fits its content. Sizes are in CSS pixels (see `px`). */
 const MIN_WIDTH = 220;
 const MAX_WIDTH = 380;
 /** Height of the part that hangs below the top bar: a line of text, or two. */
@@ -91,9 +91,8 @@ class PeekView extends St.Widget {
             y_expand: true,
             x_align: Clutter.ActorAlign.END,
             y_align: Clutter.ActorAlign.END,
-            translation_x: 4,
-            translation_y: 4,
         });
+        onUiScale(this._artBadge, scale => this._artBadge.set_translation(4 * scale, 4 * scale, 0));
         // Not widened by the badge's expand flags; see `_art()` in pages/media.js.
         this._artBox = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: false, y_expand: false});
         this._artBox.add_child(this._art);
@@ -248,7 +247,7 @@ class PeekView extends St.Widget {
         let title = alert.title ?? '';
         this._titleLines = 1;
         if (alert.titleLines > 1)
-            [title, this._titleLines, this._lineHeight] = this._fitLines(title, alert.titleLines, decision ? DECISION_TEXT_WIDTH : TITLE_WRAP_WIDTH);
+            [title, this._titleLines, this._lineHeight] = this._fitLines(title, alert.titleLines, px(decision ? DECISION_TEXT_WIDTH : TITLE_WRAP_WIDTH));
         const wrap = this._titleLines > 1;
         this._title.clutter_text.line_wrap = wrap;
         this._title.clutter_text.ellipsize = wrap ? Pango.EllipsizeMode.NONE : Pango.EllipsizeMode.END;
@@ -370,14 +369,14 @@ class PeekView extends St.Widget {
     get preferredHeight() {
         // One that asks: as tall as its lines, code and buttons, with even room above and below.
         if (this._asks || this._code.visible) {
-            const [, natural] = this._texts.get_preferred_height(DECISION_TEXT_WIDTH);
-            return Math.round(Math.max(BOT_SIZE + 24, natural + 26));
+            const [, natural] = this._texts.get_preferred_height(px(DECISION_TEXT_WIDTH));
+            return Math.round(Math.max(px(BOT_SIZE + 24), natural + px(26)));
         }
-        const height = this._subtitle.visible ? HEIGHT.two : HEIGHT.one;
+        const height = px(this._subtitle.visible ? HEIGHT.two : HEIGHT.one);
         return height + Math.round((this._titleLines - 1) * this._lineHeight);
     }
 
-    /** `text` cut to whole words that fit in `max` lines `width` wide, with … if cut (by letters when one word is
+    /** `text` cut to whole words that fit in `max` lines `width` (stage px) wide, with … if cut (by letters when one word is
      * too long: a link): [text, lines, line height]. */
     _fitLines(text, max, width) {
         const layout = Pango.Layout.new(this._title.get_pango_context());
@@ -390,7 +389,7 @@ class PeekView extends St.Widget {
             return layout.get_line_count() <= max;
         };
         // No more than the lines could hold of the narrowest letters is measured: a long answer costs no more.
-        const room = Math.ceil(max * width / 2.5);
+        const room = Math.ceil(max * width / px(2.5));
         const letters = [...text];
         let fitted = letters.length > room ? letters.slice(0, room).join('') : text;
         if (!fits(fitted) || fitted !== text) {
@@ -422,11 +421,11 @@ class PeekView extends St.Widget {
     /** The width the island should have for this alert. */
     get preferredWidth() {
         if (this._asks || this._code.visible)
-            return DECISION_WIDTH;
+            return px(DECISION_WIDTH);
         const [, natural] = this._row.get_preferred_width(-1);
         if (this._titleLines > 1)
-            return MAX_WIDTH;
-        return Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, natural)));
+            return px(MAX_WIDTH);
+        return Math.round(Math.min(px(MAX_WIDTH), Math.max(px(MIN_WIDTH), natural)));
     }
 
     _setChild(bin, child) {

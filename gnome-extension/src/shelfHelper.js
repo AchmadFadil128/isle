@@ -10,6 +10,8 @@ import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
+import {px, uiScale} from './compat.js';
+
 const BUS_NAME = 'io.github.zickrian.isle.ShelfWindow';
 const OBJECT_PATH = '/io/github/zickrian/isle/ShelfWindow';
 const ShelfWindowProxy = Gio.DBusProxy.makeProxyWrapper(`
@@ -45,7 +47,7 @@ const CANNOT_START = [
     Gio.DBusError.SPAWN_CHILD_SIGNALED,
 ];
 
-/** How close (in pixels) a drag must come to the island to open the shelf. */
+/** How close (in CSS pixels) a drag must come to the island to open the shelf. */
 const DRAG_PROXIMITY = 120;
 /** How soon a new place for the window is looked at again; see `sync`. */
 const RECHECK_MS = 24;
@@ -64,6 +66,14 @@ function dragCarriesFiles() {
     if (types.length === 0)
         return null;
     return types.some(type => FILE_TYPES.includes(type)) && !types.some(type => NOT_FILES.test(type));
+}
+
+/** `rect` (stage pixels) as logical [x, y, width, height]: divided by `uiScale`, rounded inwards so the
+ * window stays inside what the island covers. */
+function logical({x, y, width, height}) {
+    const scale = uiScale();
+    const [left, top] = [Math.ceil(x / scale), Math.ceil(y / scale)];
+    return [left, top, Math.floor((x + width) / scale) - left, Math.floor((y + height) / scale) - top];
 }
 
 // Signals: `drag-near`, `drag-over` (over the shelf or not), `drag-files` (the URIs over it), `drag-away` (went elsewhere),
@@ -207,12 +217,15 @@ export class ShelfHelper extends Signals.EventEmitter {
             this._shownRect = this._shownArea = null;
             this._page.helperActive = false;
         };
+        // The helper takes GTK's logical pixels, which it multiplies by its own scale.
+        const [x, y, width, height] = logical(rect);
+        const [ax, ay, awidth, aheight] = logical(area);
         if (this._places)
-            this._proxy.PlaceRemote(rect.x, rect.y, rect.width, rect.height, area.x, area.y, area.width, area.height, shown);
+            this._proxy.PlaceRemote(x, y, width, height, ax, ay, awidth, aheight, shown);
         else if (same(rect, area))
-            this._proxy.ShowRemote(rect.x, rect.y, rect.width, rect.height, shown);
+            this._proxy.ShowRemote(x, y, width, height, shown);
         else
-            this._proxy.ShowOverRemote(rect.x, rect.y, rect.width, rect.height, area.x, area.y, area.width, area.height, shown);
+            this._proxy.ShowOverRemote(x, y, width, height, ax, ay, awidth, aheight, shown);
     }
 
     /** Where the window goes ({rect, area}, the tab's area inside it), once the island's shape covers both; else null.
@@ -340,12 +353,12 @@ export class ShelfHelper extends Signals.EventEmitter {
                 this.prepare();
             }
             const distance = this._distanceToIsland(x, y);
-            if (!this._dragNear && distance < DRAG_PROXIMITY) {
+            if (!this._dragNear && distance < px(DRAG_PROXIMITY)) {
                 this._dragNear = true;
                 this._setDropping(true);
                 this.emit('drag-near');
                 this.sync();
-            } else if (this._dragNear && distance > DRAG_AWAY) {
+            } else if (this._dragNear && distance > px(DRAG_AWAY)) {
                 this._dragNear = false;
                 this._setDragOver(false);
                 this._setDropping(false);
