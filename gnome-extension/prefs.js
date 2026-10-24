@@ -187,6 +187,7 @@ export default class IslePreferences extends ExtensionPreferences {
 
         const options = [provider, model];
         options.push(choiceRow(settings, 'voice-speech-model', 'Speech recognition', 'Bigger is more accurate, and slower; downloaded once', [
+            ['tiny', 'Tiny (44 MB)'],
             ['base', 'Base (82 MB)'],
             ['small', 'Small (265 MB)'],
             ['medium', 'Medium (823 MB)'],

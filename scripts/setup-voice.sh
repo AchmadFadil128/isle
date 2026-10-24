@@ -2,7 +2,7 @@
 # Sets up speech recognition for Isle's voice assistant: downloads the speech model isle-whisper runs
 # (whisper.cpp, on the GPU through Vulkan or on the processor), checking its SHA-256. No Python.
 # Usage: isle-setup-voice [tiny|base|small|medium] [--remove-old]
-#   The model given, else the one chosen in Settings → Assistant, else small.
+#   The model given (then also chosen in Settings → Assistant), else the one chosen there, else small.
 #   --remove-old  also deletes what the older Python setup left: its venv and faster-whisper models.
 # Installed as `isle-setup-voice`; also runs from the source folder as scripts/setup-voice.sh.
 set -euo pipefail
@@ -21,10 +21,11 @@ step() { printf '\033[1m==> %s\033[0m\n' "$*"; }
 fail() { printf 'isle-setup-voice: %s\n' "$*" >&2; exit 1; }
 
 MODEL=""
+GIVEN=0
 REMOVE_OLD=0
 for arg in "$@"; do
     case "$arg" in
-        tiny | base | small | medium) MODEL="$arg" ;;
+        tiny | base | small | medium) MODEL="$arg" GIVEN=1 ;;
         --remove-old) REMOVE_OLD=1 ;;
         -h | --help) sed -n '2,7s/^# \{0,1\}//p' "$0"; exit 0 ;;
         *) fail "unknown argument '$arg' (a model is tiny, base, small or medium)" ;;
@@ -77,6 +78,15 @@ mkdir -p "$MODELS"
 step "Downloading the '$MODEL' speech model ($((SIZE / 1000000)) MB) to $MODELS"
 fetch "$WHISPER_URL/$FILE" "$FILE" "$SHA"
 fetch "$VAD_URL/$VAD_FILE" "$VAD_FILE" "$VAD_SHA"
+# isled runs the model chosen in Settings, so a model named here becomes that choice.
+if [ "$GIVEN" = 1 ]; then
+    if { gsettings --schemadir "$SCHEMAS" set org.gnome.shell.extensions.isle voice-speech-model "$MODEL" ||
+        gsettings set org.gnome.shell.extensions.isle voice-speech-model "$MODEL"; } 2>/dev/null; then
+        echo "Settings → Assistant → Speech recognition is now '$MODEL'."
+    else
+        echo "Pick '$MODEL' in Settings → Assistant → Speech recognition so Isle uses it."
+    fi
+fi
 
 # isle-whisper beside this script (both in ~/.local/bin), on the PATH, or built in the source folder.
 HERE="$(dirname "$(readlink -f "$0")")"

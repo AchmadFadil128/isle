@@ -61,7 +61,8 @@ Super+I:
    [README](../README.md#voice-assistant) says how; each uses your own plan).
 2. Set up speech recognition once, in a terminal. It downloads the speech
    model picked in Settings → Assistant (`small`, 265 MB, by default; or name
-   one: `isle-setup-voice base`) and needs nothing else installed. A graphics
+   one, which Settings then uses: `isle-setup-voice base`) and needs nothing
+   else installed. A graphics
    card is used through Vulkan when there is one, else the processor:
 
    ```sh

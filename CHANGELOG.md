@@ -18,6 +18,8 @@ All notable changes to Isle are listed here. The format follows
   then GNOME Shell does not know the new extension, so `gnome-extensions enable` failed and Isle stayed off.
 - Installing Isle again after uninstalling it turns it on: the uninstaller left it on GNOME's list of
   turned-off extensions, which outranks the list of turned-on ones, so it stayed off with no word why.
+- `isle-setup-voice base` (or another model named) also picks that model in Settings: before, it was
+  downloaded but the assistant went on asking for the one chosen there. Settings offer Tiny (44 MB) too.
 
 ## [1.0.6] - 2026-10-24
 

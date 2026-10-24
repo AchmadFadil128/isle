@@ -281,7 +281,8 @@ after 10 minutes, and a command is stopped after 30.
    for it, or run `isle-setup-voice` in a terminal (from the source folder:
    `scripts/setup-voice.sh`). It downloads the speech
    model chosen in Settings, `small` by default (265 MB; `tiny` 44 MB, `base`
-   82 MB, `medium` 823 MB), which `isle-whisper` runs with
+   82 MB, `medium` 823 MB; `isle-setup-voice base` names one and picks it in
+   Settings), which `isle-whisper` runs with
    [whisper.cpp](https://github.com/ggml-org/whisper.cpp): nothing else to
    install. On a computer with a graphics card (NVIDIA, AMD or Intel Arc,
    through Vulkan) it runs there, in about a second; otherwise on the
