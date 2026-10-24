@@ -284,6 +284,7 @@ class PeekView extends St.Widget {
             const counted = hasRing && alert.ring > 0 && /^(\d+)%$/.exec(alert.value);
             this._count = counted ? {final: Number(counted[1]), digits: counted[1].length, target: alert.ring, shown: -1} : null;
             this._value.text = alert.value;
+            this._value.opacity = 255;
             this._syncCount();
             this._setChild(this._accessory, this._value);
         } else if (alert.status) {
@@ -357,6 +358,8 @@ class PeekView extends St.Widget {
             return;
         this._count.shown = shown;
         this._value.text = `${String(shown).padStart(digits, FIGURE_SPACE)}%`;
+        // Before the sweep starts, "0%" would read as an empty battery: the number waits, its room kept.
+        this._value.opacity = shown > 0 ? 255 : 0;
     }
 
     /** The height below the top bar this alert needs: less with a title alone. */
