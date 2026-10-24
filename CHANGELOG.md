@@ -29,6 +29,8 @@ All notable changes to Isle are listed here. The format follows
 - A shelf file's name takes two lines, so "Alex Morgan CV.pdf" shows whole; a charging alert never
   shows "0%" before it counts up; a finished command's step reads "Asked to run it".
 - The hidden warm-up alert can no longer appear as "Charging · Isle · 0%".
+- The conversation stays at its end as a command card below it grows, so the latest message stays in
+  sight; an answer gets three lines in its alert, and a reminder and an agent's summary two.
 
 ## [1.0.4] - 2026-10-24
 
