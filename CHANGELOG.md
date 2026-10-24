@@ -22,6 +22,8 @@ All notable changes to Isle are listed here. The format follows
   Enter or Esc answer a command waiting there for Run or Deny.
 - With Isle's service stopped or refusing a request, the assistant says so and closes instead of showing
   "Listening…" or "Thinking…" forever with the keyboard taken.
+- Typing right after pressing the shortcut, before the assistant has started listening, stops the
+  listening, so the typed request is answered and "Didn't catch that" no longer replaces the field.
 
 ## [1.0.6] - 2026-10-24
 

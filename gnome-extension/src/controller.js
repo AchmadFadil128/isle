@@ -164,6 +164,8 @@ export class Controller {
         this._viewsWarm = false;
         /** Counts `_listen` calls, so only the latest sends its request. */
         this._listenRequest = 0;
+        /** A Listen went to isled and is not over: typing instead cancels it, even before isled says it listens. */
+        this._listenSent = false;
         this._voiceCloseMs = VOICE_ERROR_MS;
         /** The last answer whose actions ran, and the last batch of actions run mid-way (see isled's `step`). */
         this._voiceTurn = 0;
@@ -1456,8 +1458,9 @@ export class Controller {
         // Closed, it would take the keyboard from the windows unseen.
         if (!this._voiceOpen)
             return;
-        if (this._daemon.state.assistant?.phase === 'listening')
+        if (this._listenSent || this._daemon.state.assistant?.phase === 'listening')
             this._daemon.call('assistant', 'Cancel');
+        this._listenSent = false;
         this._listenRequest++;
         this._cancel('voice-close');
         this._cancel('voice-listen');
@@ -1496,6 +1499,7 @@ export class Controller {
         if (result || !this._voiceOpen || request !== this._listenRequest)
             return;
         const why = error || (this._daemon.running ? 'Isle couldn’t take that' : 'Isle’s service isn’t running');
+        this._listenSent = false;
         this._voice.setState({phase: 'error', error: why, hint: this._askAgainHint});
         this._setKeyboard(false);
         this._render();
@@ -1576,8 +1580,10 @@ export class Controller {
             });
         }
         // Closed, or asked to listen again, meanwhile.
-        if (this._voiceOpen && request === this._listenRequest)
+        if (this._voiceOpen && request === this._listenRequest) {
+            this._listenSent = true;
             this._sendRequest(request, 'Listen', json);
+        }
     }
 
     _onAssistant() {
@@ -1599,8 +1605,9 @@ export class Controller {
         }
         if (state.phase === 'idle')
             return;
-        // Typing: the listening it stopped may still report in.
-        if (this._voice.typing && ['listening', 'transcribing'].includes(state.phase))
+        // Typing: the listening it stopped may still report in, "Didn't catch that" too.
+        const stopped = ['listening', 'transcribing'].includes(state.phase) || (state.phase === 'error' && state.heard_nothing);
+        if (this._voice.typing && stopped)
             return;
         // Nothing said back to a follow-up: it just closes, no error.
         if (state.phase === 'error' && state.heard_nothing && this._voice.followUp) {
@@ -1615,8 +1622,10 @@ export class Controller {
                 this._render();
         });
         // Once answered, typing goes back to the windows; the answer closes on its own.
-        if (state.phase === 'reply' || state.phase === 'error')
+        if (state.phase === 'reply' || state.phase === 'error') {
+            this._listenSent = false;
             this._setKeyboard(false);
+        }
         if (state.phase === 'reply' && state.turn !== this._voiceTurn) {
             this._voiceTurn = state.turn;
             runActions(state.actions, this._voiceActions());
@@ -1825,6 +1834,7 @@ export class Controller {
         this._cancel('chat-type');
         this._cancel('voice-page');
         this._voiceOpen = false;
+        this._listenSent = false;
         // A command still waiting for Run or Deny is asked in an alert now.
         if (this._deciding)
             this._askInAlert(this._deciding.action);
