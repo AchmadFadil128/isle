@@ -244,6 +244,8 @@ export const Island = GObject.registerClass({
         if (view === this._view)
             return false;
         if (shown) {
+            // A fade still under way (it was on screen a moment ago) must not bring it back.
+            view.remove_all_transitions();
             view.opacity = 0;
             slideBy(view, 'y', OUT_OF_REACH, OUT_OF_REACH);
             view.show();

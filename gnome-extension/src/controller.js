@@ -49,7 +49,10 @@ const REST_DISTANCE_PX = 10;
 const WARM_START_MS = 3000;
 const WARM_STEP_MS = 60;
 /** What the alert views are laid out with ahead (see `_warmUp`): the parts most alerts have. */
-const WARM_ALERT = {key: 'warm', title: 'Charging', subtitle: 'Isle', icon: 'isle-bolt', ring: 0, value: '0%', tone: 'good'};
+// A ring alert's parts, laid out out of sight (see `_warmUp`). Its words are blank, figure spaces as wide as
+// real ones, so nothing readable could ever show even if a frame caught it.
+const WARM_ALERT = {key: 'warm', title: '\u2007'.repeat(8), subtitle: '\u2007'.repeat(4), icon: 'isle-bolt', ring: 0,
+    value: '\u2007'.repeat(3), tone: 'neutral'};
 /** And again this long after the island closes, or a page changes out of sight, while it stays closed... */
 const WARM_AFTER_CLOSE_MS = 1500;
 /** How long a permission notice waits for the island's own ask for it, which may come a moment later. */
