@@ -59,6 +59,8 @@ export const ShelfPage = GObject.registerClass({
         /** A file is being dragged towards the island, and over the drop zone. */
         this._dropping = false;
         this._dropOver = false;
+        /** Every URI the drag on its way carries, once the helper has read them. */
+        this._hovered = null;
         /** The files on the shelf last time it changed, to tell new ones. */
         this._shelved = null;
         /** A file just landed: the hint says so. */
@@ -99,7 +101,7 @@ export const ShelfPage = GObject.registerClass({
             this._refresh('files');
             // Full or not any more, mid-drag.
             if (this._dropping)
-                this._light.approach(this._dropOver, this._full);
+                this._syncRefusal();
         });
         this._settingsChanged = settings.connect('changed::clipboard-history', () => this._refresh('clips'));
         this.connect('destroy', () => {
@@ -306,10 +308,12 @@ export const ShelfPage = GObject.registerClass({
             this._dropOver = this._files.dropOver = false;
             // The next drag brings its own colours; a drop under way keeps its light.
             this._dragged = null;
+            this._hovered = null;
             this._light.fileColors = null;
             if (!['landing', 'landed'].includes(this._light.state))
                 this._light.off();
         }
+        this._files.refused = dropping && Boolean(this._refusal);
         this._updateFilesHint();
     }
 
@@ -320,11 +324,17 @@ export const ShelfPage = GObject.registerClass({
         this._files.dropOver = this._dropOver;
         this._updateFilesHint();
         if (this._dropping)
-            this._light.approach(this._dropOver, this._full);
+            this._light.approach(this._dropOver, Boolean(this._refusal));
     }
 
     /** The files dragged over the drop zone: the light takes their colours (at most three). */
     async showDragged(uris) {
+        // A drag's files stay the same; the empty list as they leave or land says nothing.
+        if (this._dropping && uris.length > 0) {
+            this._hovered = uris;
+            this._syncRefusal();
+        }
+        uris = uris.filter(uri => uri.startsWith('file://'));
         const token = this._dragged = {};
         // A preview slow to read keeps none from the light: it does without that file's colour.
         const late = new Promise(resolve => {
@@ -336,29 +346,50 @@ export const ShelfPage = GObject.registerClass({
         this._light.fileColors = shown.filter(Boolean).map(file => file.color);
     }
 
-    /** The drag ended; `onShelf` if it was let go over the drop zone. Returns whether a full shelf turned it away. */
+    /** The drag ended; `onShelf` if it was let go over the drop zone. Returns whether the shelf turned it away. */
     endDrop(onShelf) {
-        const refused = onShelf && this._full;
+        const refused = onShelf && Boolean(this._refusal);
         if (onShelf && !refused)
             this._light.release();
         this.dropping = false;
         return refused;
     }
 
-    get _full() {
-        return (this.daemon.state.shelf ?? []).length >= SHELF_CAPACITY;
+    // Why the files on their way can't all land, as the helper refuses them: 'local' (none is on this
+    // computer) or 'room' (more than fit; files already on the shelf only move up); else null.
+    get _refusal() {
+        const shelf = this.daemon.state.shelf ?? [];
+        const local = this._hovered?.filter(uri => uri.startsWith('file://'));
+        if (local?.length === 0)
+            return 'local';
+        // Not read yet: as long as there is room for one.
+        const fresh = local ? local.filter(uri => !shelf.some(item => item.uri === uri)).length : 1;
+        return fresh > 0 && shelf.length + fresh > SHELF_CAPACITY ? 'room' : null;
+    }
+
+    /** The light, zone and hint say whether the files on their way can land. */
+    _syncRefusal() {
+        const refusal = this._refusal;
+        this._files.refused = Boolean(refusal);
+        this._updateFilesHint();
+        this._light.approach(this._dropOver, Boolean(refusal));
     }
 
     /** Says what the Files tab is for, and when it is full. */
     _updateFilesHint() {
         const count = (this.daemon.state.shelf ?? []).length;
         const full = count >= SHELF_CAPACITY;
+        const refusal = this._dropping ? this._refusal : null;
         let text;
         // An empty shelf's drop zone says it all itself.
         if (count === 0 && !this._added)
             text = '';
-        else if (this._dropping && full)
+        else if (refusal === 'local')
+            text = 'Only files on this computer';
+        else if (refusal && full)
             text = 'Full · remove a file first';
+        else if (refusal)
+            text = `Only ${SHELF_CAPACITY - count} more fit`;
         else if (this._dropping)
             text = this._dropOver ? 'Release to add it' : 'Drop to keep it on the shelf';
         else if (this._added)

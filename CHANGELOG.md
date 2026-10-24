@@ -129,6 +129,22 @@ All notable changes to Isle are listed here. The format follows
   line, where other users could see an API key.
 - A quiet conversation is cleared when its 30 minutes, 2 hours or day are over even while nothing is
   asked, and at midnight even after the computer slept.
+- Moving a browser's tabs, or text, near the island no longer opens the shelf and takes the drop:
+  only a drag of files (or links) does.
+- If the shelf's drag-and-drop helper crashes, the Files tab shows its files again instead of staying
+  blank, and a new helper starts; one that quits just as a file is dragged in no longer misses the drag.
+- Cells copied from a spreadsheet are kept in the clipboard history as their text, not as a picture of
+  them (a browser's Copy Image still keeps the picture).
+- A very large copy is no longer read whole into GNOME Shell only to be turned away; reading stops at
+  the history's size limit.
+- A password a password manager copies, and clears again soon after, now leaves the clipboard history
+  too, unless pinned.
+- Dropping more files than the shelf has room for is turned away as you hover, with "Only 2 more fit",
+  instead of some of them going missing while the island showed them landing.
+- Dropping only links or files online on the shelf says "Only files on this computer" instead of
+  lighting up as if they landed.
+- The clipboard history's list, which any program can read, now gives only the 160 characters of
+  each text a card shows, not 400.
 
 ## [1.0.6] - 2026-10-24
 

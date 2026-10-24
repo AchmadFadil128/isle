@@ -26,6 +26,15 @@ const IDLE_QUIT_SECS: u32 = 20;
 /// The drop area flashes this long once a file lands (see style.css).
 const LANDED_FOR: Duration = Duration::from_millis(700);
 
+/// Why the files dragged over the window can't all land.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Refusal {
+    /// None of them is on this computer (links, or files online).
+    NotLocal,
+    /// More than the shelf has room for.
+    NoRoom,
+}
+
 /// One file on the shelf, as isled describes it.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Item {
@@ -57,6 +66,8 @@ struct Inner {
     near: Cell<bool>,
     /// A file is being dragged over this window.
     over: Cell<bool>,
+    /// The local files dragged over the window, once read; none at all if it carries only others.
+    dragged: RefCell<Option<Vec<String>>>,
     /// Quits the helper once hidden for `IDLE_QUIT_SECS`.
     idle_quit: RefCell<Option<glib::SourceId>>,
 }
@@ -112,6 +123,7 @@ impl ShelfWindow {
             input: Cell::default(),
             near: Cell::default(),
             over: Cell::default(),
+            dragged: RefCell::default(),
             idle_quit: RefCell::default(),
         }));
         shelf.accept_drops();
@@ -234,14 +246,41 @@ impl ShelfWindow {
     /// Whether a file is being dragged towards the island: the shelf then
     /// shows where it will land before the pointer even gets here.
     pub fn set_dropping(&self, dropping: bool) {
+        // Kept running while a drag is on its way; free to quit again once it is gone.
+        if dropping {
+            if let Some(quit) = self.0.idle_quit.take() {
+                quit.remove();
+            }
+        } else if !self.0.window.is_visible() {
+            self.hide();
+        }
         if self.0.near.replace(dropping) != dropping {
             self.limit_input();
             self.render();
         }
     }
 
-    fn full(&self) -> bool {
-        self.0.items.borrow().len() >= CAPACITY
+    /// Why the files dragged in can't all land, if so; files already on the shelf only move to the front.
+    fn refusal(&self) -> Option<Refusal> {
+        let items = self.0.items.borrow();
+        let fresh = match &*self.0.dragged.borrow() {
+            Some(uris) if uris.is_empty() => return Some(Refusal::NotLocal),
+            Some(uris) => uris
+                .iter()
+                .filter(|uri| !items.iter().any(|item| item.uri == **uri))
+                .count(),
+            // Not read yet: as long as there is room for one.
+            None => 1,
+        };
+        (fresh > 0 && items.len() + fresh > CAPACITY).then_some(Refusal::NoRoom)
+    }
+
+    fn accepts(&self, target: &gtk::DropTarget) -> gdk::DragAction {
+        if dragged_from_here(target) || self.refusal().is_some() {
+            gdk::DragAction::empty()
+        } else {
+            gdk::DragAction::COPY
+        }
     }
 
     /// Files dropped anywhere on the window go onto the shelf.
@@ -249,34 +288,50 @@ impl ShelfWindow {
         let target = gtk::DropTarget::new(gdk::FileList::static_type(), gdk::DragAction::COPY);
         // Read while hovering, so the island can light in the files' colours before the drop.
         target.set_preload(true);
-        target.connect_value_notify(|target| {
+        let weak = Rc::downgrade(&self.0);
+        target.connect_value_notify(move |target| {
+            let Some(inner) = weak.upgrade() else { return };
             if dragged_from_here(target) {
                 return;
             }
-            let uris = target
-                .value()
-                .and_then(|value| value.get::<gdk::FileList>().ok())
-                .map(|files| local_uris(&files))
+            let files = dragged_files(target);
+            // All of them, so the island can tell links and files online from local ones.
+            let uris: Vec<String> = files
+                .as_ref()
+                .map(|files| {
+                    files
+                        .files()
+                        .iter()
+                        .map(|file| file.uri().to_string())
+                        .collect()
+                })
                 .unwrap_or_default();
             service::announce_hovering(&uris);
+            inner.dragged.replace(files.as_ref().map(local_uris));
+            ShelfWindow(inner).render();
         });
-        // A full shelf refuses the drop; the island's hint says why.
+        // Files that can't all land are refused (the island's hint says why), once they are read.
         let weak = Rc::downgrade(&self.0);
         target.connect_enter(move |target, _, _| {
             let Some(inner) = weak.upgrade() else {
                 return gdk::DragAction::empty();
             };
-            if dragged_from_here(target) {
-                return gdk::DragAction::empty();
-            }
             let shelf = ShelfWindow(inner);
-            shelf.0.over.set(true);
-            shelf.render();
-            if shelf.full() {
-                gdk::DragAction::empty()
-            } else {
-                gdk::DragAction::COPY
+            if !dragged_from_here(target) {
+                // What an earlier drag left must not count, while this one's files are read.
+                shelf
+                    .0
+                    .dragged
+                    .replace(dragged_files(target).as_ref().map(local_uris));
+                shelf.0.over.set(true);
+                shelf.render();
             }
+            shelf.accepts(target)
+        });
+        let weak = Rc::downgrade(&self.0);
+        target.connect_motion(move |target, _, _| match weak.upgrade() {
+            Some(inner) => ShelfWindow(inner).accepts(target),
+            None => gdk::DragAction::empty(),
         });
         let weak = Rc::downgrade(&self.0);
         target.connect_leave(move |_| {
@@ -295,17 +350,16 @@ impl ShelfWindow {
             if dragged_from_here(target) {
                 return false;
             }
-            let shelf = ShelfWindow(inner);
-            shelf.0.over.set(false);
-            shelf.render();
-            if shelf.full() {
-                return false;
-            }
             let Ok(files) = value.get::<gdk::FileList>() else {
                 return false;
             };
             let uris = local_uris(&files);
-            if uris.is_empty() {
+            let shelf = ShelfWindow(inner);
+            shelf.0.dragged.replace(Some(uris.clone()));
+            let refused = shelf.refusal().is_some();
+            shelf.0.over.set(false);
+            shelf.render();
+            if refused {
                 return false;
             }
             shelf.call("Add", Some(&(uris,).to_variant()));
@@ -391,15 +445,22 @@ impl ShelfWindow {
     fn render(&self) {
         let inner = &self.0;
         let count = inner.items.borrow().len();
-        let full = count >= CAPACITY;
         let dragging = inner.near.get() || inner.over.get();
+        let refusal = self.refusal().filter(|_| dragging);
         set_class(&inner.stack, "dropping", dragging);
         set_class(&inner.stack, "over", inner.over.get());
-        set_class(&inner.stack, "full", dragging && full);
+        set_class(&inner.stack, "full", refusal.is_some());
         set_class(&inner.stack, "empty", count == 0 && !dragging);
 
         // The tiles stay as they are while a file comes in: nothing makes room or moves.
-        let (title, hint) = if inner.over.get() && !full {
+        let (title, hint) = if inner.over.get() && refusal == Some(Refusal::NotLocal) {
+            (
+                "Only files on this computer",
+                "Links and files online can't be kept",
+            )
+        } else if inner.over.get() && refusal.is_some() {
+            ("Too many files", "The shelf holds six at a time")
+        } else if inner.over.get() {
             (
                 "Release to add it",
                 "Then drag it into any app, or click to copy it",
@@ -455,6 +516,13 @@ fn local_uris(files: &gdk::FileList) -> Vec<String> {
         .filter(|file| file.is_native())
         .map(|file| file.uri().to_string())
         .collect()
+}
+
+/// The files dragged over the window, once read.
+fn dragged_files(target: &gtk::DropTarget) -> Option<gdk::FileList> {
+    target
+        .value()
+        .and_then(|value| value.get::<gdk::FileList>().ok())
 }
 
 /// Whether the drag is a tile carried out of this window, not a file coming in.
