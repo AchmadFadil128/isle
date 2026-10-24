@@ -888,8 +888,9 @@ const TYPED_COMMAND = 'printf "\\033[2mIsle: press Enter to run it, edit it firs
 function typeInTerminal(command) {
     // On one line: a newline would be an Enter of its own.
     const line = command.split('\n').map(part => part.trim()).filter(Boolean).join(' && ');
-    if (line)
-        inTerminal(['bash', '-c', TYPED_COMMAND, 'isle', line]);
+    if (!line)
+        return failed('no command to type');
+    return inTerminal(['bash', '-c', TYPED_COMMAND, 'isle', line]) ? 'typed into a terminal' : failed('no terminal app found');
 }
 
 /** The greeting it opens with; it understands any language spoken back. */
@@ -1251,14 +1252,16 @@ function arrangeWindows(layout, apps) {
 function playMusic(query, uri) {
     const spotify = findApp('spotify');
     if (!spotify) {
-        if (query)
-            openUri(`https://music.youtube.com/search?q=${encodeURIComponent(query)}`);
-        return;
+        if (!query)
+            return failed('Spotify is not installed and nothing was named to play');
+        openUri(`https://music.youtube.com/search?q=${encodeURIComponent(query)}`);
+        return 'Spotify is not installed: searched YouTube Music in the browser';
     }
     if (!uri) {
-        if (query)
-            openUri(`spotify:search:${encodeURIComponent(query)}`);
-        return;
+        if (!query)
+            return failed('nothing was named to play');
+        openUri(`spotify:search:${encodeURIComponent(query)}`);
+        return 'searched Spotify';
     }
     const play = () => Gio.DBus.session.call(SPOTIFY_BUS, '/org/mpris/MediaPlayer2', 'org.mpris.MediaPlayer2.Player',
         'OpenUri', new GLib.Variant('(s)', [uri]), null, Gio.DBusCallFlags.NONE, -1, null, (bus, result) => {
@@ -1362,11 +1365,13 @@ function revealFile(file) {
 /** Opens Chrome (or Chromium) in the profile kept in folder `profile`, e.g. "Profile 2". */
 function openChromeProfile(profile) {
     if (!/^[\w .-]+$/.test(profile))
-        return;
+        return failed('not a profile name');
     const browser = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']
         .map(name => GLib.find_program_in_path(name)).find(Boolean);
-    if (browser)
-        GLib.spawn_async(null, [browser, `--profile-directory=${profile}`], null, GLib.SpawnFlags.DEFAULT, null);
+    if (!browser)
+        return failed('neither Chrome nor Chromium is installed');
+    GLib.spawn_async(null, [browser, `--profile-directory=${profile}`], null, GLib.SpawnFlags.DEFAULT, null);
+    return undefined;
 }
 
 function openUri(uri) {
@@ -1392,8 +1397,10 @@ function whenOnBus(name, ms, callback) {
 
 function spawn(argv) {
     const program = GLib.find_program_in_path(argv[0]);
-    if (program)
-        GLib.spawn_async(null, [program, ...argv.slice(1)], null, GLib.SpawnFlags.DEFAULT, null);
+    if (!program)
+        return failed(`${argv[0]} is not installed`);
+    GLib.spawn_async(null, [program, ...argv.slice(1)], null, GLib.SpawnFlags.DEFAULT, null);
+    return undefined;
 }
 
 /** Opens `path` (from ~, or absolute) in Files; a folder that isn't there opens its nearest parent. */
