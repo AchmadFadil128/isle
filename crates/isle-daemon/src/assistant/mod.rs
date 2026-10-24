@@ -63,6 +63,8 @@ const UNDO_NEW_CHAT: Duration = Duration::from_secs(5);
 /// The AI stays up this long after its last use, so a follow-up needs no start-up; then it quits and its
 /// memory is freed. Opening the island starts it ahead of the request (see `Warm`).
 const KEEP_WARM: Duration = Duration::from_secs(3 * 60);
+/// Starting the AI, or getting it ready, takes longer than this only when it is stuck.
+const START_TIMEOUT: Duration = Duration::from_secs(20);
 /// The window commands that tile a window, which only an updated extension knows.
 const TILES: [&str; 9] = [
     "left",
@@ -892,10 +894,14 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 // A failure shows once a request needs the AI; nothing to say yet.
                 if start_brain(&mut session).await.is_ok()
                     && let Some(brain) = session.brain.as_mut()
-                    && let Err(err) = brain.warm().await
                 {
-                    warn!("could not get the AI ready: {err:#}");
-                    session.brain = None;
+                    let warmed = tokio::time::timeout(START_TIMEOUT, brain.warm()).await;
+                    if let Err(err) =
+                        warmed.unwrap_or_else(|_| Err(anyhow::anyhow!("no answer in time")))
+                    {
+                        warn!("could not get the AI ready: {err:#}");
+                        session.brain = None;
+                    }
                 }
                 None
             }
@@ -1253,15 +1259,21 @@ async fn start_brain(session: &mut Session) -> Result<(), Failure> {
     }
     let workspace = data_dir().join("assistant");
     let model = session.model(provider);
-    let brain = Brain::start(
+    let instructions = session.instructions();
+    let started = Brain::start(
         provider,
         &model,
         session.conversation.as_deref(),
         &workspace,
-        &session.instructions(),
-    )
-    .await
-    .map_err(|err| {
+        &instructions,
+    );
+    // A stuck start would hold up every command after it (Super+I too).
+    let Ok(started) = tokio::time::timeout(START_TIMEOUT, started).await else {
+        warn!("{} did not start within {START_TIMEOUT:?}", provider.name());
+        let error = format!("{} took too long to start", provider.name());
+        return Err(Failure::from((error.as_str(), "Try again in a moment.")));
+    };
+    let brain = started.map_err(|err| {
         warn!("{err:#}");
         brain::explain(provider, &format!("{err:#}"))
     })?;
