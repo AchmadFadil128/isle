@@ -298,7 +298,9 @@ class UsagePage extends Page {
     // A limit: its name, then when it resets and its share; the bar below.
     _limit({label: name, percent, resets_at_ms: resetsAt}, accent) {
         const used = Math.max(0, Math.min(100, percent));
-        const level = used >= this._marks.critical ? 'critical' : used >= this._marks.warn ? 'warn' : 'normal';
+        // Its colour from the number shown: "80%" is never left white for a 79.6.
+        const shown = Math.round(used);
+        const level = shown >= this._marks.critical ? 'critical' : shown >= this._marks.warn ? 'warn' : 'normal';
         const limit = new St.BoxLayout({...VERTICAL, style_class: 'isle-usage-limit'});
         const line = new St.BoxLayout({style_class: 'isle-usage-line'});
         const title = label(name, 'isle-usage-window', {x_expand: true});
@@ -309,7 +311,7 @@ class UsagePage extends Page {
             this._resetLabels.push([reset, resetsAt]);
             line.add_child(reset);
         }
-        line.add_child(label(`${Math.round(used)}%`, `isle-usage-percent ${level}`));
+        line.add_child(label(`${shown}%`, `isle-usage-percent ${level}`));
         limit.add_child(line);
 
         const bar = new Bar(used / 100, level, accent);
