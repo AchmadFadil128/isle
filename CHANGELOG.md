@@ -8,6 +8,9 @@ All notable changes to Isle are listed here. The format follows
 
 ### Fixed
 
+- Installing Isle again after uninstalling it keeps the top bar look chosen before, instead of resetting it.
+- A new version alert tells those who installed a .deb, .rpm or AUR package to install its new package,
+  not to run the install command, and the install guide says how.
 - Two clipboard images put in Files within the same second both stay: the second no longer replaces the first.
 - On a 200% display without fractional scaling (GNOME 46–49), the island, its pages, the assistant and
   alerts are drawn at the right size.

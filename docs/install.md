@@ -109,6 +109,12 @@ curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash
 To install a particular version instead, put `ISLE_VERSION` before `bash`:
 `… | ISLE_VERSION=1.0.5 bash`.
 
+Installed from a package instead? Download the new release's `.deb` or
+`.rpm` and install it the same way as the first one, or run `makepkg -si`
+again with the updated `PKGBUILD` on Arch; then log out and back in. Don't
+run the command above as well: it would add a second copy in your home
+folder (see [below](#both-a-package-and-the-one-line-install)).
+
 ## Uninstalling
 
 ```sh

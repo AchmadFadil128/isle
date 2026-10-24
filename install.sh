@@ -23,7 +23,9 @@ step() { printf '\033[1m==> %s\033[0m\n' "$*"; }
 [ "$(id -u)" -ne 0 ] || { echo "Run this as yourself, without sudo: Isle installs to your own home folder." >&2; exit 1; }
 VERSION="$(grep -oE '"version-name": *"[^"]*"' gnome-extension/metadata.json | cut -d'"' -f4)"
 # An update keeps the user's choices; only a first install sets Isle's look.
-if [ -d "$DATA/gnome-shell/extensions/$UUID" ] || [ -x "$BINDIR/isled" ]; then
+# Settings still saved (Isle uninstalled, now back) count as an update too.
+if [ -d "$DATA/gnome-shell/extensions/$UUID" ] || [ -x "$BINDIR/isled" ] ||
+    [ -n "$(dconf list /org/gnome/shell/extensions/isle/ 2>/dev/null)" ]; then
     FIRST=0
 else
     FIRST=1

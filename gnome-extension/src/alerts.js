@@ -542,14 +542,14 @@ export function agentRefused(provider, reason) {
     };
 }
 
-/** A newer Isle is out; `howTo` shows how to update. */
-export function update(version, howTo) {
+/** A newer Isle is out; `howTo` shows how to update. `packaged`: installed system-wide (.deb, .rpm, AUR). */
+export function update(version, howTo, packaged = false) {
     return {
         key: 'update',
         icon: 'software-update-available-symbolic',
         motion: 'bounce',
         title: `Isle ${version} is out`,
-        subtitle: 'Run the install command again to update',
+        subtitle: packaged ? 'Install its new package to update' : 'Run the install command again to update',
         tone: 'good',
         action: {label: 'How', callback: howTo},
         duration: REMINDER_DURATION,

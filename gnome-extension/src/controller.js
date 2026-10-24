@@ -1466,7 +1466,7 @@ export class Controller {
             return;
         this._settings.set_string('update-shown', latest);
         this._post(Alerts.update(latest, () => Gio.AppInfo.launch_default_for_uri(UPDATE_HELP,
-            global.create_app_launch_context(0, -1))));
+            global.create_app_launch_context(0, -1)), this._extension.path.startsWith('/usr/')));
     }
 
     // Usage
