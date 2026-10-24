@@ -189,6 +189,8 @@ All notable changes to Isle are listed here. The format follows
 - The installation guide's .deb and .rpm commands match any release's file, not only 1.0.0's.
 - A battery whose level reads a little up and down around 20%, 10% or 5% warns once at each, as
   meant, until the charger is plugged in; it warned again at every dip.
+- Waking the computer no longer brings an "Offline" alert while Wi-Fi reconnects (with the screen not
+  locked on suspend): the connection going with sleep is not one lost.
 
 ## [1.0.6] - 2026-10-24
 
