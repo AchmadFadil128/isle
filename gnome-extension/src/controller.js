@@ -887,7 +887,10 @@ export class Controller {
 
     // Pointer
 
-    _onHoverChanged() {
+    _onHoverChanged(moved = false) {
+        const unmoved = this._hoverUnmoved;
+        this._hoverUnmoved = false;
+        this._cancel('hover');
         // An answer stays while the pointer is on it, and as long again once it leaves.
         if (this._voiceOpen) {
             if (this._island.hovered)
@@ -896,6 +899,14 @@ export class Controller {
                 this._scheduleVoiceClose(Math.min(this._voiceCloseMs, VOICE_LEAVE_MS));
             return;
         }
+        // Grown under a still pointer is no hover yet: it counts once the pointer moves (see `_hoverOnMove`).
+        if (this._island.hovered && !moved && this._island.morphing && !this._expandWanted) {
+            this._hoverUnmoved = true;
+            this._hoverOnMove(global.get_pointer());
+            return;
+        }
+        if (!this._island.hovered && unmoved && !this._expandWanted)
+            return;
         // An alert waits while the pointer is on it, as a notification should; not the volume's.
         if (this._alert && !this._alert.transient && this._presentation === 'peek') {
             if (this._island.hovered)
@@ -942,6 +953,17 @@ export class Controller {
                 this.expand();
             else if (this._island.hovered)
                 this._expandOnRest();
+        });
+    }
+
+    // Counts the pointer on the island as a hover once it moves from `[x, y]`.
+    _hoverOnMove([x, y]) {
+        this._later('hover', MOVE_CHECK_MS, () => {
+            const [nowX, nowY] = global.get_pointer();
+            if (Math.hypot(nowX - x, nowY - y) > REST_DISTANCE_PX)
+                this._onHoverChanged(true);
+            else
+                this._hoverOnMove([x, y]);
         });
     }
 

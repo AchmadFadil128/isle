@@ -114,6 +114,8 @@ All notable changes to Isle are listed here. The format follows
   video on the display it moves to.
 - A screen share that began before Isle started (turned on again after unlocking, or updated during
   a call) now keeps notification text, the clipboard and the shelf hidden as one begun later does.
+- An alert growing under a pointer that rests at the top of the screen no longer opens the island
+  (with "open on hover"), nor stays on screen until the pointer moves: it counts once the pointer moves.
 
 ## [1.0.6] - 2026-10-24
 
