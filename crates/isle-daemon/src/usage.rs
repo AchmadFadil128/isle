@@ -354,7 +354,17 @@ fn marks_passed(
             } else {
                 0
             };
-            let key = format!("{}/{}/{}", provider.id, window.label, window.resets_at_ms);
+            // A reset read again a moment off (its fraction of a second changes) is the same window.
+            let prefix = format!("{}/{}/", provider.id, window.label);
+            let key = alerted
+                .keys()
+                .find(|key| {
+                    key.strip_prefix(&prefix)
+                        .and_then(|r| r.parse::<i64>().ok())
+                        .is_some_and(|r| (r - window.resets_at_ms).abs() < 60_000)
+                })
+                .cloned()
+                .unwrap_or_else(|| format!("{prefix}{}", window.resets_at_ms));
             if level == 0 && window.resets_at_ms == 0 {
                 alerted.remove(&key);
             }
@@ -786,6 +796,44 @@ mod tests {
         assert!(marks_passed(&at(99.0), &config, &mut alerted, 1_000).is_empty());
         // Once the window has reset, it may warn again.
         assert!(marks_passed(&[], &config, &mut alerted, 3_000).is_empty() && alerted.is_empty());
+    }
+
+    #[test]
+    fn a_reset_read_a_moment_off_is_the_same_window() {
+        let config = Config {
+            enabled: true,
+            ..Config::default()
+        };
+        let mut alerted = Alerted::new();
+        let at = |percent: f64, resets_at_ms: i64| {
+            vec![Provider {
+                id: "claude".into(),
+                name: "Claude".into(),
+                windows: vec![Window {
+                    label: "5 hours".into(),
+                    percent,
+                    resets_at_ms,
+                }],
+                ..Provider::default()
+            }]
+        };
+        let reset = 1_793_084_579_000;
+        assert_eq!(
+            marks_passed(&at(82.0, reset + 123), &config, &mut alerted, 1_000).len(),
+            1
+        );
+        assert!(marks_passed(&at(83.0, reset + 456), &config, &mut alerted, 2_000).is_empty());
+        assert!(marks_passed(&at(84.0, reset - 80), &config, &mut alerted, 3_000).is_empty());
+        assert_eq!(
+            marks_passed(&at(96.0, reset + 7), &config, &mut alerted, 4_000).len(),
+            1
+        );
+        // The next window, hours later, warns again.
+        let next = reset + 5 * 3600 * 1000;
+        assert_eq!(
+            marks_passed(&at(82.0, next), &config, &mut alerted, 5_000).len(),
+            1
+        );
     }
 
     #[test]
