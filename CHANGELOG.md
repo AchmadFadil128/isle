@@ -23,6 +23,8 @@ All notable changes to Isle are listed here. The format follows
 - The guide says to run `isled --unhook-all` before removing a .deb, .rpm or AUR package (the AUR
   package says so too), so Claude Code and Codex are not left calling a removed `isled`, and to remove
   Isle with `isle-uninstall` rather than the Extensions app's Remove button.
+- With the assistant's AI on Automatic, Settings list the models of the AI it answers with (the first
+  you are signed in to), not of the first one installed.
 
 ## [1.0.6] - 2026-10-24
 

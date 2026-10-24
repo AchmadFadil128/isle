@@ -158,9 +158,11 @@ export default class IslePreferences extends ExtensionPreferences {
                 syncing = false;
             }
         };
+        // Automatic is the first signed in, else the first installed: as isled picks (brain.rs `pick`).
+        const automatic = installed.find(p => signedIn(p.id)) ?? installed[0];
         const fillModel = () => {
             const wanted = settings.get_string('voice-provider');
-            const current = installed.find(p => p.id === wanted) ?? installed[0];
+            const current = installed.find(p => p.id === wanted) ?? automatic;
             model.visible = Boolean(current);
             if (!current)
                 return;
@@ -666,6 +668,45 @@ const AI_PROVIDERS = [
         ],
     },
 ];
+
+/** Where Claude Code keeps its settings and sign-in: `$CLAUDE_CONFIG_DIR`, else ~/.claude. */
+function claudeConfigDir() {
+    return GLib.getenv('CLAUDE_CONFIG_DIR') || GLib.build_filenamev([GLib.get_home_dir(), '.claude']);
+}
+
+/** The user's own Codex home: `$CODEX_HOME`, else ~/.codex. */
+function codexHome() {
+    return GLib.getenv('CODEX_HOME') || GLib.build_filenamev([GLib.get_home_dir(), '.codex']);
+}
+
+/** Whether AI `id` has a sign-in, checked as isled does (brain.rs `signed_in`). */
+function signedIn(id) {
+    const exists = (...parts) => GLib.file_test(GLib.build_filenamev(parts), GLib.FileTest.EXISTS);
+    const env = name => Boolean(GLib.getenv(name));
+    switch (id) {
+    case 'claude': {
+        if (exists(claudeConfigDir(), '.credentials.json') ||
+            ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX'].some(env))
+            return true;
+        // An API key or a cloud set in its settings.json.
+        try {
+            const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([claudeConfigDir(), 'settings.json']));
+            const json = JSON.parse(new TextDecoder().decode(bytes));
+            const kept = JSON.stringify(['env', 'apiKeyHelper', 'awsAuthRefresh', 'awsCredentialExport', 'forceLoginMethod']
+                .filter(key => key in json).map(key => [key, json[key]]));
+            return ['apiKeyHelper', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_'].some(key => kept.includes(key));
+        } catch {
+            return false;
+        }
+    }
+    case 'codex':
+        return exists(codexHome(), 'auth.json') || env('OPENAI_API_KEY');
+    case 'agy':
+        return exists(GLib.get_home_dir(), '.gemini/antigravity-cli/antigravity-oauth-token');
+    default:
+        return false;
+    }
+}
 
 /** `command` on the PATH or where installers and Node version managers put it, as isled looks; else null. */
 // The same places isled looks in (brain.rs `install_dirs`), for an AI installed with npm, nvm, Homebrew…
