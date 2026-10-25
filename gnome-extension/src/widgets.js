@@ -151,6 +151,28 @@ export function iconButton(iconName, styleClass, onClick, {size = 16, accessible
     return button;
 }
 
+/** A small × on the top-left corner of an alert's icon, shown under the pointer (see `revealClose`), as on
+ * macOS's notifications: put over the icon, it takes no room, so nothing moves as it shows. `out` (CSS px) is
+ * how far it sits out from the corner: further for a round icon, whose corner is empty. */
+export function cornerClose(onClick, {out = 8} = {}) {
+    const button = iconButton('isle-close-symbolic', 'isle-corner-close', onClick, {size: 8, accessibleName: 'Close'});
+    // Always there, only faded out and untouchable: showing and hiding it would restyle the icon beside it.
+    button.set({x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.START, opacity: 0, reactive: false,
+        can_focus: false});
+    onUiScale(button, scale => button.set_translation(-out * scale, -out * scale, 0));
+    return button;
+}
+
+/** Fades a `cornerClose` × in or out. */
+export function revealClose(button, shown) {
+    if (shown === Boolean(button._shown))
+        return;
+    button._shown = shown;
+    button.reactive = button.can_focus = shown;
+    button.remove_transition('opacity');
+    button.ease({opacity: shown ? 255 : 0, duration: shown ? 140 : 100, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+}
+
 /** A pill-shaped text button. */
 export function pillButton(text, styleClass, onClick) {
     const button = new St.Button({
@@ -731,13 +753,15 @@ const MOTIONS = {
     ring: [[{translation_x: -1.6, scale_x: 1.08, scale_y: 1.08}, 90, 'EASE_OUT_SINE'],
         [{translation_x: 1.6}, 110, 'EASE_IN_OUT_SINE'], [{translation_x: -1.1}, 100, 'EASE_IN_OUT_SINE'],
         [{translation_x: 0.6}, 90, 'EASE_IN_OUT_SINE'], [{translation_x: 0, scale_x: 1, scale_y: 1}, 100, 'EASE_OUT_SINE']],
-    // Coming up from below: Caps Lock turned on.
-    rise: [[{translation_y: 0, opacity: 255}, 260, 'EASE_OUT_BACK']],
+    // Coming up from below as it fades in, with the alert: Caps Lock turned on.
+    rise: [[{translation_y: 0, opacity: 255}, 380, 'EASE_OUT_CUBIC']],
     // Side to side, as for a wrong password: something stopped.
     shake: [[{translation_x: -3}, 60, 'EASE_OUT_SINE'], [{translation_x: 3}, 80, 'EASE_IN_OUT_SINE'],
         [{translation_x: -2}, 70, 'EASE_IN_OUT_SINE'], [{translation_x: 0}, 60, 'EASE_OUT_SINE']],
 };
 const REST = {scale_x: 1, scale_y: 1, translation_x: 0, translation_y: 0, opacity: 255};
+/** A rise starts as the alert fades in (see FADE_IN_DELAY in island.js): later, its badge showed empty first. */
+const RISE_DELAY = 120;
 /** Motions waiting for their actor to be on screen (GNOME skips eases on actors that are not). */
 const pendingMotions = new WeakMap();
 
@@ -786,8 +810,10 @@ export function playMotion(actor, motion, {delay = 0} = {}) {
     if (!steps || !St.Settings.get().enable_animations)
         return;
     actor.set_pivot_point(0.5, 0.5);
-    if (motion === 'rise')
-        actor.set({translation_y: px(4), opacity: 0});
+    if (motion === 'rise') {
+        actor.set({translation_y: px(5), opacity: 0});
+        delay = Math.min(delay, RISE_DELAY);
+    }
     const run = () => {
         const scale = uiScale();
         const next = i => {
