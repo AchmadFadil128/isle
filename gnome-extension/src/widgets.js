@@ -173,6 +173,10 @@ export function revealClose(button, shown) {
     button.ease({opacity: shown ? 255 : 0, duration: shown ? 140 : 100, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
 }
 
+/** The music bars move about this often (ms), whatever the display: each step is too small to see more of,
+ * and every frame of a 144 Hz display cost the shell twice the work (the island's other motion keeps its rate). */
+const BARS_STEP_MS = 1000 / 60 - 4;
+
 /** A pill-shaped text button. */
 export function pillButton(text, styleClass, onClick) {
     const button = new St.Button({
@@ -390,6 +394,7 @@ class Bars extends St.BoxLayout {
         this._clock = new Clutter.Timeline({actor: this, duration: 1000, repeat_count: -1});
         this._clock.connect('new-frame', () => this._step());
         this._now = 0;
+        this._steppedAt = -Infinity;
         this.connect('destroy', () => this._onDestroy());
         onUiScale(this, () => (this.maxHeight = this._maxHeight));
     }
@@ -440,6 +445,7 @@ class Bars extends St.BoxLayout {
             bounce.duration = (180 + Math.random() * 220) * settings.slow_down_factor;
             if (!this._clock.is_playing()) {
                 this._now = 0;
+                this._steppedAt = -Infinity;
                 this._clock.start();
             }
         } else if (!this._bounces.some(other => other.on)) {
@@ -449,6 +455,10 @@ class Bars extends St.BoxLayout {
 
     _step() {
         this._now += this._clock.get_delta();
+        // Frames in between change nothing, so the shell draws nothing new for them (see BARS_STEP_MS).
+        if (this._now - this._steppedAt < BARS_STEP_MS)
+            return;
+        this._steppedAt = this._now;
         for (let i = 0; i < this._bounces.length; i++) {
             const bounce = this._bounces[i];
             if (!bounce.on)
