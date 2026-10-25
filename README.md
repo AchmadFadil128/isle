@@ -14,7 +14,9 @@ your screen.
 ![GNOME Shell 46–51](https://img.shields.io/badge/GNOME%20Shell-46%E2%80%9351-4a86cf.svg)
 ![Rust 1.92+](https://img.shields.io/badge/Rust-1.92%2B-orange.svg)
 
-<img src="docs/images/demo.webp" alt="Isle demo on a GNOME desktop: music with lyrics, notifications, calendar, focus timer and clipboard shelf" width="800">
+<img src="docs/images/demo.webp" alt="Isle on a GNOME desktop: the assistant playing music when asked, a command waiting for Run, every page of the island one hover away, and Claude Code asking for permission" width="800">
+
+**[▶ Watch the full demo](https://github.com/zickrian/isle/releases/download/v1.2.1/isle-demo.mp4)** (2 min, with sound)
 
 </div>
 
