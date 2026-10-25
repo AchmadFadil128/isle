@@ -797,7 +797,8 @@ mod tests {
 
     #[tokio::test]
     async fn follows_a_command_to_its_end() {
-        // As systemd would, with the wrapper: the log fills, then the exit line.
+        // As systemd would, with the wrapper: the log fills, then the exit line. "two" comes well after a
+        // poll (POLL), even on a slow CI runner, so "one" is seen on its own first.
         let task = prepare("echo hi", "Say hi", Scope::User).unwrap();
         let log = task.log.clone();
         let wrapper = format!("{{ {WRAPPER}; }} >> {} 2>&1", log.display());
@@ -806,7 +807,7 @@ mod tests {
                 "-c",
                 &wrapper,
                 "isle",
-                "echo one; sleep 0.5; echo two; exit 3",
+                "echo one; sleep 2; echo two; exit 3",
             ])
             .spawn()
             .unwrap();
