@@ -47,24 +47,88 @@ appear in the same place instead of in the middle of the screen.
 
 ## Features
 
-| | |
-|---|---|
-| <img src="docs/images/music.png" alt="Music page" width="420"> | **Music.** Spotify, YouTube in your browser, or any MPRIS player: cover art with the playing app's icon, a scrubber and controls. Volume and output switching are one click away. |
-| <img src="docs/images/lyrics.png" alt="Synced lyrics" width="420"> | **Synced lyrics** from [LRCLIB](https://lrclib.net): the line being sung large and bright, pauses as breathing dots. The island widens and takes the cover's colour; click a line to jump to it. |
-| <img src="docs/images/call.png" alt="A Google Meet call in the island: a live preview of the call, its length, mute and open" width="420"> | **Calls** in WhatsApp, Telegram, Meet or any app or browser: the closed island shows a green phone and how long the call has lasted. Open it to see the call live (you and whoever you call) while you work in other windows, mute your microphone, or jump back to the call. |
-| <img src="docs/images/focus.png" alt="Focus page: the timer's ring, the work and break lengths, and Start" width="420"> | **Focus.** A Pomodoro timer with breaks and Do Not Disturb while you focus: a ring with the time left, the work and break lengths to change with − and +, and Start. Its ring and time stay in the closed island; beside a song, its time sits next to the music bars. |
-| <img src="docs/images/reminders.png" alt="Reminders page: a list with a long reminder wrapped over two lines" width="420"> | **Reminders**, a plain list: add, rename in place, tick one off and it is struck through, then goes. A long one wraps over as many lines as it needs. |
-| <img src="docs/images/clipboard.png" alt="Clipboard history" width="420"> | **Shelf.** A clipboard history of text, links, images and files (search, filter, pin; Super+V to paste), and a files tray: drop files on the island, then drag them into any app or click one to copy it, ready to paste into a chat. |
-| <img src="docs/images/files.png" alt="The files tray with a photo, a PDF and a text file" width="420"> | **Files tray.** Files dropped on the island wait here, with their thumbnails, until you drag them into an app or click one to copy it. |
-| <img src="docs/images/calendar.png" alt="Calendar" width="420"> | **Calendar.** The month beside the chosen day's events. Shows your desktop calendars (Google and others through Online Accounts) and events you add in a line: "Dinner 8:00 pm". Five minutes before an event, the island reminds you, with **Join** when it has a Google Meet, Zoom, Teams or Webex link. |
-| <img src="docs/images/notifications.png" alt="The notifications page" width="420"> | **Notifications.** GNOME's notifications collect here as a plain list, newest first, with their buttons ("Reply", "Mark as read") under the pointer, Clear, and Do Not Disturb a click away. |
-| <img src="docs/images/voice.png" alt="The voice assistant working through a request in steps: finding Spotify, opening it, playing jazz, setting the volume" width="420"> | **Voice assistant.** Press Super+I and ask, in English or Indonesian: play a song, find a file, put windows side by side, add a reminder, explain why the laptop is slow. It works as an agent: a request with several steps is done one after another, each step checked, with the AI you already use (Claude Code, Codex or Antigravity). |
-| <img src="docs/images/command.png" alt="The assistant's card for sudo apt install -y vlc: Needs your password, Deny and Run; then running, with its last lines and Stop" width="420"> | **Installs and fixes things.** "Install LibreOffice", "pasang codex": it checks what your Linux has, searches the web when unsure, and shows the one command it wants to run, with what to know (your password, a script from the web, removing files). Press **Run** or **Deny**. It runs in the background while you carry on, and the assistant checks it worked before saying so. |
-| <img src="docs/images/conversation.png" alt="The conversation: install vlc, the command that ran with Done, and the answer, with + and the field to type in" width="420"> | **Speak or type, and talk it through.** It listens as soon as it opens; start typing to type instead. Scroll up for the conversation so far; select text to copy it, + for a new one. The bot turns to the pointer, blinks, bounces with your voice and changes expression as it thinks and answers, and the light round the edge rises as you speak. Close the island and it carries on in the background. |
-| <img src="docs/images/bot-looks.png" alt="The bot in eight shapes and several colours, with matching glows" width="420"> | **A bot of your own.** Eight shapes, from a circle to a cloud or a ghost, eleven colours or your own, softly shaded, and a glow round the island that matches it. |
-| <img src="docs/images/usage.png" alt="Claude plan usage: a bar for the 5-hour limit and one for the week" width="420"> | **AI usage.** How much of your Claude and ChatGPT plans' limits is used: one plan at a time with its logo, a bar per limit it has (5 hours, the week) and when each resets; scroll up or down, or click the dots, to switch. A warning comes as one nears its end. Only the ones you are signed in to show. |
-| <img src="docs/images/alerts.png" alt="The closed island with a song and the focus timer, then alerts for a meeting with Join, Claude Code asking to run a command, a notification with Reply, and charging" width="420"> | **Alerts** for volume, brightness, Caps Lock, charging, low battery, Bluetooth devices with their battery, going offline, reminders, meetings about to start, AI plan limits and GNOME notifications with their buttons, in the same place instead of the middle of the screen. Hold the pointer on one to keep it; swipe up to put it away. Icons drawn in SF Symbols' manner move once as they appear: the bolt pulses, the bell sways, rings sweep and count up. |
-| <img src="docs/images/approvals.png" alt="Claude Code asking to run npm run build, with Deny, Allow and Always; then Allowed" width="420"> | **AI agents.** When Claude Code or Codex asks permission to run something, answer from the island: **Deny**, **Allow** or, for Claude Code, **Always**. When one is done, the island says what it did. Nothing shows while you are in its window, and answering in its terminal works as before. |
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/images/music.png" alt="Music page" width="100%"><br>
+<b>Music.</b> Spotify, YouTube in your browser, or any MPRIS player: cover art with the playing app's icon, a scrubber and controls. Volume and output switching are one click away.
+</td>
+<td width="50%" valign="top">
+<img src="docs/images/lyrics.png" alt="Synced lyrics" width="100%"><br>
+<b>Synced lyrics</b> from <a href="https://lrclib.net">LRCLIB</a>: the line being sung large and bright, pauses as breathing dots. The island widens and takes the cover's colour; click a line to jump to it.
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/images/call.png" alt="A Google Meet call in the island: a live preview of the call, its length, mute and open" width="100%"><br>
+<b>Calls</b> in WhatsApp, Telegram, Meet or any app or browser: the closed island shows a green phone and how long the call has lasted. Open it to see the call live (you and whoever you call) while you work in other windows, mute your microphone, or jump back to the call.
+</td>
+<td width="50%" valign="top">
+<img src="docs/images/focus.png" alt="Focus page: the timer's ring, the work and break lengths, and Start" width="100%"><br>
+<b>Focus.</b> A Pomodoro timer with breaks and Do Not Disturb while you focus: a ring with the time left, the work and break lengths to change with − and +, and Start. Its ring and time stay in the closed island; beside a song, its time sits next to the music bars.
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/images/reminders.png" alt="Reminders page: a list with a long reminder wrapped over two lines" width="100%"><br>
+<b>Reminders</b>, a plain list: add, rename in place, tick one off and it is struck through, then goes. A long one wraps over as many lines as it needs.
+</td>
+<td width="50%" valign="top">
+<img src="docs/images/clipboard.png" alt="Clipboard history" width="100%"><br>
+<b>Shelf.</b> A clipboard history of text, links, images and files (search, filter, pin; Super+V to paste), and a files tray: drop files on the island, then drag them into any app or click one to copy it, ready to paste into a chat.
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/images/files.png" alt="The files tray with a photo, a PDF and a text file" width="100%"><br>
+<b>Files tray.</b> Files dropped on the island wait here, with their thumbnails, until you drag them into an app or click one to copy it.
+</td>
+<td width="50%" valign="top">
+<img src="docs/images/calendar.png" alt="Calendar" width="100%"><br>
+<b>Calendar.</b> The month beside the chosen day's events. Shows your desktop calendars (Google and others through Online Accounts) and events you add in a line: "Dinner 8:00 pm". Five minutes before an event, the island reminds you, with <b>Join</b> when it has a Google Meet, Zoom, Teams or Webex link.
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/images/notifications.png" alt="The notifications page" width="100%"><br>
+<b>Notifications.</b> GNOME's notifications collect here as a plain list, newest first, with their buttons ("Reply", "Mark as read") under the pointer, Clear, and Do Not Disturb a click away.
+</td>
+<td width="50%" valign="top">
+<img src="docs/images/voice.png" alt="The voice assistant working through a request in steps: finding Spotify, opening it, playing jazz, setting the volume" width="100%"><br>
+<b>Voice assistant.</b> Press Super+I and ask, in English or Indonesian: play a song, find a file, put windows side by side, add a reminder, explain why the laptop is slow. It works as an agent: a request with several steps is done one after another, each step checked, with the AI you already use (Claude Code, Codex or Antigravity).
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/images/command.png" alt="The assistant's card for sudo apt install -y vlc: Needs your password, Deny and Run; then running, with its last lines and Stop" width="100%"><br>
+<b>Installs and fixes things.</b> "Install LibreOffice", "pasang codex": it checks what your Linux has, searches the web when unsure, and shows the one command it wants to run, with what to know (your password, a script from the web, removing files). Press <b>Run</b> or <b>Deny</b>. It runs in the background while you carry on, and the assistant checks it worked before saying so.
+</td>
+<td width="50%" valign="top">
+<img src="docs/images/conversation.png" alt="The conversation: install vlc, the command that ran with Done, and the answer, with + and the field to type in" width="100%"><br>
+<b>Speak or type, and talk it through.</b> It listens as soon as it opens; start typing to type instead. Scroll up for the conversation so far; select text to copy it, + for a new one. The bot turns to the pointer, blinks, bounces with your voice and changes expression as it thinks and answers, and the light round the edge rises as you speak. Close the island and it carries on in the background.
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/images/bot-looks.png" alt="The bot in eight shapes and several colours, with matching glows" width="100%"><br>
+<b>A bot of your own.</b> Eight shapes, from a circle to a cloud or a ghost, eleven colours or your own, softly shaded, and a glow round the island that matches it.
+</td>
+<td width="50%" valign="top">
+<img src="docs/images/usage.png" alt="Claude plan usage: a bar for the 5-hour limit and one for the week" width="100%"><br>
+<b>AI usage.</b> How much of your Claude and ChatGPT plans' limits is used: one plan at a time with its logo, a bar per limit it has (5 hours, the week) and when each resets; scroll up or down, or click the dots, to switch. A warning comes as one nears its end. Only the ones you are signed in to show.
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/images/alerts.png" alt="The closed island with a song and the focus timer, then alerts for a meeting with Join, Claude Code asking to run a command, a notification with Reply, and charging" width="100%"><br>
+<b>Alerts</b> for volume, brightness, Caps Lock, charging, low battery, Bluetooth devices with their battery, going offline, reminders, meetings about to start, AI plan limits and GNOME notifications with their buttons, in the same place instead of the middle of the screen. Hold the pointer on one to keep it; swipe up to put it away. Icons drawn in SF Symbols' manner move once as they appear: the bolt pulses, the bell sways, rings sweep and count up.
+</td>
+<td width="50%" valign="top">
+<img src="docs/images/approvals.png" alt="Claude Code asking to run npm run build, with Deny, Allow and Always; then Allowed" width="100%"><br>
+<b>AI agents.</b> When Claude Code or Codex asks permission to run something, answer from the island: <b>Deny</b>, <b>Allow</b> or, for Claude Code, <b>Always</b>. When one is done, the island says what it did. Nothing shows while you are in its window, and answering in its terminal works as before.
+</td>
+</tr>
+</table>
 
 Also: privacy dots while the camera, microphone or screen sharing is in use,
 a recording timer with a stop button, and a slim glass top bar that leaves
