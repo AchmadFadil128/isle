@@ -16,7 +16,7 @@ your screen.
 
 <img src="docs/images/demo.webp" alt="Isle on a GNOME desktop: the assistant playing music when asked, a command waiting for Run, every page of the island one hover away, and Claude Code asking for permission" width="800">
 
-**[▶ Watch the full demo](https://github.com/zickrian/isle/releases/download/v1.2.1/isle-demo.mp4)** (2 min, with sound)
+[![Watch the full demo on YouTube](https://img.shields.io/badge/Watch%20the%20full%20demo-2%20min%2C%20with%20sound-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/D65nLECDgOo)
 
 </div>
 
