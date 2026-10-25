@@ -41,6 +41,70 @@ const AFTER_CLOSE: &[&str] = &["write", "screenshot", "lock", "notifications"];
 /// Asked once its steps run out.
 const OUT_OF_STEPS: &str = "You are out of steps for this request. Answer the user now (done true, no \
                             actions): say plainly what was done and what was not.";
+/// Said when an answer claims it cannot look at the computer without having tried: some AIs (Codex) at times
+/// believe their own disabled shell means no look at all.
+const NUDGE: &str = "You said you cannot do or see that, but you have not tried. check, run, find_files and \
+     the other tools in your instructions are not function tools: you use them by listing them in your \
+     answer's actions with done false, such as {\"type\": \"check\", \"command\": \"wpctl status\"}, and Isle \
+     runs them and sends you what they found. They are always there. Use them now, then answer the user's \
+     request from what they show, in the language of their request.";
+/// How an answer says it cannot look ("checks aren't available to me", "aku tidak punya akses").
+const EXCUSES: &[&str] = &[
+    "can't check",
+    "cannot check",
+    "unable to check",
+    "can't look",
+    "cannot look",
+    "don't have access",
+    "do not have access",
+    "can't access",
+    "cannot access",
+    "tidak bisa mengecek",
+    "belum bisa mengecek",
+    "gak bisa mengecek",
+    "tidak bisa memeriksa",
+    "belum bisa memeriksa",
+    "tidak bisa melihat",
+    "belum bisa melihat",
+    "tidak punya akses",
+    "belum punya akses",
+    "tidak ada akses",
+    "couldn't locate the",
+    "belum punya data",
+    "tidak punya data",
+    "couldn't search",
+    "can't search",
+    "cannot search",
+    "without looking",
+    "tanpa melihat",
+    "tanpa mengecek",
+    "tanpa memeriksa",
+    "not available",
+    "aren't available",
+    "isn't available",
+    "tidak tersedia",
+    "belum tersedia",
+];
+/// "From here" with a no: "I can't search the folder from here", "belum bisa … dari sini".
+const NOT_FROM_HERE: &[&str] = &[
+    "can't",
+    "cannot",
+    "couldn't",
+    "unable",
+    "tidak bisa",
+    "belum bisa",
+    "gak bisa",
+    "nggak bisa",
+];
+
+/// Whether `say` claims Isle cannot look at the computer.
+fn excuse(say: &str) -> bool {
+    let say = say.to_lowercase().replace('\u{2019}', "'");
+    EXCUSES.iter().any(|excuse| say.contains(excuse))
+        || ((say.contains("from here") || say.contains("dari sini"))
+            && NOT_FROM_HERE.iter().any(|no| say.contains(no)))
+}
+
 /// The actions isled runs itself, for the AI, rather than the extension for the user.
 const TOOLS: &[&str] = &[
     "find_files",
@@ -236,9 +300,16 @@ pub async fn think(
     let mut used = Vec::new();
     let mut checks = Vec::new();
     let mut ran = Vec::new();
+    let mut nudged = false;
     for _ in 0..MAX_STEPS {
         let (calls, mut actions): (Vec<Value>, Vec<Value>) =
             answer.actions.iter().cloned().partition(is_tool);
+        // Once per request: an answer that says it cannot look, having never looked, is told it can.
+        if calls.is_empty() && used.is_empty() && !nudged && excuse(&answer.say) {
+            nudged = true;
+            answer = ask_in_time(brain, NUDGE, out).await?;
+            continue;
+        }
         // Its answer: what can run now does, before it stands.
         let last = calls.is_empty() && (answer.done || actions.is_empty());
         if last {
@@ -925,6 +996,34 @@ mod tests {
             brain.prompts[1].contains("(exit 0):\nLinux")
                 && brain.prompts[1].contains("did not run")
         );
+    }
+
+    #[tokio::test]
+    async fn an_answer_that_will_not_look_is_told_it_can() {
+        let mut brain = Scripted::new([
+            json!({"say": "Bluetooth checks aren’t available to me right now.", "actions": []}),
+            json!({"say": "", "done": false, "actions": [{"type": "check", "command": "uname -s"}]}),
+            json!({"say": "Linux.", "actions": []}),
+        ]);
+        let (activity, _steps) = tokio::sync::mpsc::unbounded_channel();
+        let (desk, _handled) = desk();
+        let answer = think(
+            &mut brain,
+            "why is my bluetooth not working?",
+            &out!(activity),
+            &desk,
+        )
+        .await
+        .unwrap();
+        assert_eq!(brain.prompts[1], NUDGE);
+        assert_eq!(answer.say, "Linux.");
+        assert_eq!(answer.checks, ["uname -s"]);
+        assert!(excuse("Aku belum bisa mengecek Bluetooth dari sini."));
+        assert!(excuse("I couldn’t locate the file-search action just now."));
+        assert!(!excuse("Bluetooth is on and paired with your headphones."));
+        assert!(!excuse(
+            "Kamu bisa melihat dan mengecek perangkatnya di Settings."
+        ));
     }
 
     #[test]

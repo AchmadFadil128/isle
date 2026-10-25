@@ -74,7 +74,20 @@ pub fn from_text(text: &str) -> Answer {
         .or_else(|| text.strip_prefix("```"))
         .and_then(|rest| rest.trim_end().strip_suffix("```"))
         .map_or(text, str::trim);
-    serde_json::from_str(inner).unwrap_or_else(|_| Answer::plain(text))
+    let mut answer: Answer = serde_json::from_str(inner).unwrap_or_else(|_| Answer::plain(text));
+    answer.actions.iter_mut().for_each(window_focus);
+    answer
+}
+
+/// A `focus` naming an app or window means switching to it, not the focus timer (Codex mixes the two up).
+pub fn window_focus(action: &mut Value) {
+    let named = ["app", "title"]
+        .iter()
+        .any(|key| action[*key].as_str().is_some_and(|name| !name.is_empty()));
+    if action["type"] == "focus" && named {
+        action["type"] = "window".into();
+        action["command"] = "focus".into();
+    }
 }
 
 /// What `say` holds so far in an answer still being written (`{"say": "Hel`), for the island to show as it
@@ -132,6 +145,13 @@ mod tests {
         assert_eq!(from_text(json).actions.len(), 1);
         assert_eq!(from_text(&format!("```json\n{json}\n```")).actions.len(), 1);
         assert_eq!(from_text(&format!("```\n{json}\n```")).say, "Opened");
+        let switch =
+            from_text(r#"{"say": "Ok", "actions": [{"type": "focus", "app": "Google Chrome"}]}"#);
+        assert_eq!(switch.actions[0]["type"], "window");
+        assert_eq!(switch.actions[0]["command"], "focus");
+        let timer =
+            from_text(r#"{"say": "Ok", "actions": [{"type": "focus", "command": "start"}]}"#);
+        assert_eq!(timer.actions[0]["type"], "focus");
         let plain = from_text("  Sure, it is 3 pm.  ");
         assert_eq!(plain.say, "Sure, it is 3 pm.");
         assert!(plain.actions.is_empty() && plain.done);

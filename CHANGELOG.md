@@ -6,6 +6,15 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- With Codex, the assistant answers an English request in English: it often replied in Indonesian.
+- With Codex, asking for a file to be made ("make notes.txt saying hello") offers a command to run, rather
+  than saying it cannot write files.
+- When the assistant says it cannot look at the computer or find something without having tried, Isle
+  tells it that it can, and it looks before it answers.
+- "Switch to Chrome" brings Chrome's window up with Codex, rather than going to the focus timer.
+
 ## [1.2.0] - 2026-10-24
 
 ### Added

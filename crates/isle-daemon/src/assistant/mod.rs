@@ -208,6 +208,73 @@ impl Notification {
     }
 }
 
+/// Words that mark a request as English, and ones that mark it as Indonesian.
+const ENGLISH: &[&str] = &[
+    "the", "my", "me", "is", "are", "what", "why", "how", "please", "open", "close", "to", "in",
+    "of", "and", "for", "it", "this", "that", "can", "you", "your", "i", "play", "turn", "set",
+    "find", "show", "remind", "not", "with", "on", "off", "make", "file",
+];
+const INDONESIAN: &[&str] = &[
+    "aku",
+    "kamu",
+    "gw",
+    "gue",
+    "lu",
+    "yang",
+    "dan",
+    "di",
+    "ke",
+    "ini",
+    "itu",
+    "apa",
+    "kenapa",
+    "gimana",
+    "bagaimana",
+    "tolong",
+    "buka",
+    "tutup",
+    "bisa",
+    "mau",
+    "ya",
+    "dong",
+    "sama",
+    "buat",
+    "jadi",
+    "lagi",
+    "udah",
+    "sudah",
+    "belum",
+    "nggak",
+    "gak",
+    "ga",
+    "tidak",
+    "isinya",
+    "dari",
+    "untuk",
+    "pake",
+    "pakai",
+    "cari",
+];
+
+/// The request in the prompt; one plainly in English says so, as the instructions' Indonesian examples
+/// pull some AIs (Codex) into answering English in Indonesian.
+fn said(text: &str) -> String {
+    let words: Vec<String> = text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    let indonesian = words
+        .iter()
+        .any(|word| INDONESIAN.contains(&word.as_str()) || word.ends_with("nya"));
+    let english = words.iter().any(|word| ENGLISH.contains(&word.as_str()));
+    if english && !indonesian {
+        format!("The user said, in English (so reply in English): \"{text}\"")
+    } else {
+        format!("The user said: \"{text}\"")
+    }
+}
+
 /// `text` on one line with its quotes softened, so it cannot pose as the prompt's own structure.
 fn one_line(text: &str) -> String {
     soften(&text.split_whitespace().collect::<Vec<_>>().join(" "))
@@ -492,11 +559,12 @@ impl Session {
         // Introduced once a turn got an answer: a first turn that failed is explained again.
         if self.sent_data.is_some() {
             if self.sent_data.as_deref() == Some(data) {
-                return format!("{extra}[{now}] The user said: \"{text}\"");
+                return format!("{extra}[{now}] {}", said(text));
             }
             return format!(
                 "{extra}[{now}] What Isle knows changed (the computer and the user's day):\n\
-                 {data}\n\nThe user said: \"{text}\""
+                 {data}\n\n{}",
+                said(text)
             );
         }
         // Claude and Codex took the job as their instructions when they started (see `instructions`).
@@ -507,7 +575,8 @@ impl Session {
         };
         format!(
             "{job}What Isle knows now (the computer and the user's day):\n{data}\n\
-             It is {now}.\n\n{extra}The user said: \"{text}\""
+             It is {now}.\n\n{extra}{}",
+            said(text)
         )
     }
 
@@ -603,7 +672,10 @@ impl Session {
              - open_file {{path}}: open a file in its app; reveal_file {{path}}: show it selected in Files\n\
              - chrome_profile {{profile}}: open Chrome in a profile, by its folder (\"Profile 2\")\n\
              You are an agent: to look something up on this computer, search it yourself with these, which \
-             return their results to you:\n\
+             return their results to you. They are not function tools: you use them by listing them in your \
+             answer's actions with done false, such as {{\"type\": \"check\", \"command\": \"wpctl status\"}}; \
+             Isle runs them and sends you what they found. So they are always there, whatever other tools you \
+             have or lack:\n\
              - find_files {{terms, in, kind}}: files and folders whose names contain any of terms. Give several \
              (both languages, synonyms, short forms: \"ttd\", \"tanda tangan\", \"signature\", \"sign\"); \
              in is where to look (\"~/Downloads\", default ~); kind is image, document, video, audio or folder\n\
@@ -644,7 +716,8 @@ impl Session {
              Anything else is refused and comes back saying what does work: then use one of those, never tell \
              the user you were not allowed to look.\n\
              - run {{command, why, detail, root}}: a command that changes the computer (install, update, remove, \
-             set up). Isle shows it to the user, who presses Run or Deny; it runs in the background, carrying on \
+             set up; and make, write, move or delete files and folders, as a shell line such as printf 'halo\\n' > \
+             ~/notes.txt). Isle shows it to the user, who presses Run or Deny; it runs in the background, carrying on \
              if the island closes, and you get its exit code and the end of its output. why is a short title \
              (\"Install LibreOffice\"); detail one plain line on what it does or where it comes from (\"From \
              Ubuntu's own archive, about 280 MB\"); root true when it needs administrator rights (then write it \
@@ -655,7 +728,7 @@ impl Session {
              - screenshot: open the screenshot tool; lock: lock the screen\n\
              - write {{text}}: type text where the user's cursor is, when they ask you to write, draft, reply or \
              fill in something in the app they are in, or to change the selected text. Put only the finished text \
-             in it. A plain question (\"translate this\", \"what is\") is answered in say only.\n\
+             in it. To make or change a file on disk, use run instead. A plain question (\"translate this\", \"what is\") is answered in say only.\n\
              Work step by step when a request needs several steps that depend on each other (\"buka Files \
              terus taruh di kiri\", \"find my CV and open it\", \"open Spotify, then play jazz\"): send the first \
              actions with done false; Isle runs them and tells you what each did, then you take the next step. \
@@ -1714,6 +1787,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn says_when_a_request_is_english() {
+        let english = "The user said, in English (so reply in English): ";
+        assert!(said("remind me to call mom in 2 hours").starts_with(english));
+        assert!(said("find my CV and open it").starts_with(english));
+        assert!(said("close spotify").starts_with(english));
+        assert!(said("spotify").starts_with("The user said: "));
+        assert!(said("buka spotify dong").starts_with("The user said: "));
+        assert!(said("tolong open file nya").starts_with("The user said: "));
+        assert!(said("kenapa laptop aku lemot").starts_with("The user said: "));
+    }
+
+    #[test]
     fn a_refused_model_gives_way_to_the_default() {
         let mut session = Session::default();
         session.context.codex_model = "gpt-9".into();
@@ -1867,7 +1952,7 @@ mod tests {
         assert!(!same.contains("Reminders"));
         let changed = session.prompt("what now", "Reminders:\n- Tea");
         assert!(changed.contains("What Isle knows changed") && changed.contains("- Tea\n"));
-        assert!(changed.ends_with("The user said: \"what now\""));
+        assert!(changed.ends_with("The user said, in English (so reply in English): \"what now\""));
     }
 
     #[test]

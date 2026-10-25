@@ -356,7 +356,12 @@ fn parse_answer(text: &str) -> anyhow::Result<Answer> {
             action.retain(|_, field| !field.is_null());
         }
     }
-    Ok(serde::Deserialize::deserialize(&value)?)
+    let mut answer: Answer = serde::Deserialize::deserialize(&value)?;
+    answer
+        .actions
+        .iter_mut()
+        .for_each(super::answer::window_focus);
+    Ok(answer)
 }
 
 /// `schema` as Codex's structured output needs it: every field required (optional ones may be null),

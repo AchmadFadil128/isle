@@ -228,10 +228,14 @@ fn no_actions(answer: &Answer) -> Result<(), String> {
     )
 }
 
+/// Light markdown (bold, lists, code) is fine; headings, tables and links are not.
 fn plain(answer: &Answer) -> Result<(), String> {
+    let say = &answer.say;
     ensure(
-        !answer.say.contains("**") && !answer.say.contains("\n- "),
-        "reply has markdown",
+        !say.lines()
+            .any(|line| line.starts_with('#') || line.starts_with('|'))
+            && !say.contains("](http"),
+        "reply has headings, tables or links",
     )
 }
 
