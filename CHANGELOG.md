@@ -6,6 +6,8 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-25
+
 ### Changed
 
 - Alerts go sooner: a notification after 4 seconds, as GNOME's own banner does, and a passing one such as
@@ -18,6 +20,8 @@ All notable changes to Isle are listed here. The format follows
   holds beside it. Before, music, a timer or the unread dot hid the moon. The Notifications page says what
   still gets through while it is on.
 - An answer from the assistant cut short in its alert says "Click to read more".
+- The music bars move about 60 times a second on any display. On a 144 Hz one, music playing costs GNOME
+  Shell a third less; everything else moves at the display's own rate.
 - Settings → About shows whether Isle is up to date ("You're up to date · Checked today"), or which newer
   version is out, with How to update and Copy command. The switch for checking moved there from Alerts.
 
