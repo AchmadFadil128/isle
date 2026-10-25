@@ -13,6 +13,7 @@ your screen.
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 ![GNOME Shell 46–51](https://img.shields.io/badge/GNOME%20Shell-46%E2%80%9351-4a86cf.svg)
 ![Rust 1.92+](https://img.shields.io/badge/Rust-1.92%2B-orange.svg)
+[![Buy me a coffee](https://img.shields.io/badge/support-buy%20me%20a%20coffee-ffdd00.svg)](https://sociabuzz.com/zickrian/tribe)
 
 <img src="docs/images/demo.webp" alt="Isle on a GNOME desktop: the assistant playing music when asked, a command waiting for Run, every page of the island one hover away, and Claude Code asking for permission" width="800">
 
@@ -43,6 +44,7 @@ appear in the same place instead of in the middle of the screen.
 - [Uninstalling](#uninstalling)
 - [How it works](#how-it-works)
 - [Contributing](#contributing)
+- [Support](#support)
 - [License](#license)
 
 ## Features
@@ -602,6 +604,12 @@ Bug reports, ideas and pull requests are welcome. See
 and [CHANGELOG.md](CHANGELOG.md) for what changed. Everyone taking part
 follows the [Code of Conduct](CODE_OF_CONDUCT.md); please report security
 problems privately as described in [SECURITY.md](SECURITY.md).
+
+## Support
+
+Isle is free and always will be. If it makes your desktop nicer, you can
+[buy me a coffee](https://sociabuzz.com/zickrian/tribe). A star, a bug report
+or telling a friend helps just as much.
 
 ## License
 
