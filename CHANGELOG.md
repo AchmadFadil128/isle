@@ -6,6 +6,8 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-25
+
 ### Fixed
 
 - With Codex, the assistant answers an English request in English: it often replied in Indonesian.
@@ -14,6 +16,13 @@ All notable changes to Isle are listed here. The format follows
 - When the assistant says it cannot look at the computer or find something without having tried, Isle
   tells it that it can, and it looks before it answers.
 - "Switch to Chrome" brings Chrome's window up with Codex, rather than going to the focus timer.
+
+### Changed
+
+- The README shows a new demo of the assistant, a command waiting for Run, the island's pages and an agent
+  asking, with a link to the full video.
+- The installation guide shows how to install on Arch Linux step by step, and says Isle is not in the
+  AUR yet.
 
 ## [1.2.0] - 2026-10-24
 
@@ -1100,7 +1109,8 @@ The first release.
   dark, vivid ones bright.
 - Text is at least 12 px throughout.
 
-[Unreleased]: https://github.com/zickrian/isle/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/zickrian/isle/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/zickrian/isle/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/zickrian/isle/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/zickrian/isle/compare/v1.0.6...v1.1.0
 [1.0.6]: https://github.com/zickrian/isle/compare/v1.0.5...v1.0.6

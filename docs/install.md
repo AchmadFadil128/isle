@@ -172,12 +172,20 @@ assistant is set up per user as above, with `isle-setup-voice`.
 
 ### Arch Linux
 
-[`packaging/aur`](../packaging/aur) has a `PKGBUILD` for `isle-bin`, made
-from the release tarball. In that folder:
+Isle is not in the AUR yet, so `yay -S isle-bin` or `paru -S isle-bin` finds nothing. Either use
+the one-line install (step 2), or build the `isle-bin` package from the `PKGBUILD` in
+[`packaging/aur`](../packaging/aur), made from the release tarball:
 
 ```sh
+sudo pacman -S --needed base-devel git
+git clone --depth 1 https://github.com/zickrian/isle.git
+cd isle/packaging/aur
 makepkg -si
+# Log out and back in, then:
+gnome-extensions enable isle@zickrian.github.io
 ```
+
+To update, run `git pull` in that folder and `makepkg -si` again.
 
 ### Both a package and the one-line install
 

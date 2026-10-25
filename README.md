@@ -123,8 +123,19 @@ sudo dnf install ./isle-*.x86_64.rpm       # Fedora 40 and newer
 gnome-extensions enable isle@zickrian.github.io
 ```
 
-**Arch Linux.** [`packaging/aur`](packaging/aur) has a `PKGBUILD` for
-`isle-bin`, made from the release tarball: run `makepkg -si` in that folder.
+**Arch Linux.** Isle is not in the AUR yet (`yay -S isle-bin` finds
+nothing). Build its package from the `PKGBUILD` in
+[`packaging/aur`](packaging/aur), made from the release tarball, or use the
+one-line install above:
+
+```sh
+sudo pacman -S --needed base-devel git
+git clone --depth 1 https://github.com/zickrian/isle.git
+cd isle/packaging/aur
+makepkg -si
+# Log out and back in, then:
+gnome-extensions enable isle@zickrian.github.io
+```
 
 To update a package, install the new release's package the same way (or run
 `makepkg -si` again with the updated `PKGBUILD`); don't also run the command
