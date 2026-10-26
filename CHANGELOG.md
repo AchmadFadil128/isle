@@ -6,6 +6,15 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-26
+
+### Fixed
+
+- The Usage page shows your ChatGPT plan and limits as they are now, as Codex's /status does, rather than
+  as Codex last logged them: after an upgrade or downgrade it said the old plan (and its old limits) until
+  Codex was used again. It asks at most every 10 minutes, or when the page opens, as for Claude.
+- Settings → AI Usage lists ChatGPT as soon as Codex is signed in, even before Codex was first used.
+
 ## [1.3.0] - 2026-10-25
 
 ### Changed
