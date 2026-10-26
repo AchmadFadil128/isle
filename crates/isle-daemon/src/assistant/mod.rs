@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The voice assistant: records a request, turns it into text and asks the AI the user picked (agy,
-//! Claude Code or Codex) what to do. It works as an agent, step by step, and carries on in the background
+//! Claude Code, Codex or Grok) what to do. It works as an agent, step by step, and carries on in the background
 //! once the island closes; the extension shows each step and runs the desktop actions it asks for. The AI
 //! and speech recognition run only while needed: nothing is left running between requests.
 
@@ -16,6 +16,7 @@ mod check;
 mod child;
 mod claude;
 mod codex;
+mod grok;
 #[cfg(test)]
 mod eval;
 mod files;
@@ -46,6 +47,10 @@ pub use self::brain::{Provider, install_dirs};
 use self::chat::{Chat, Item, Keep};
 pub use self::claude::config_dir as claude_config_dir;
 pub use self::codex::user_home as codex_home;
+pub use self::grok::{
+    billing_url as grok_billing_url, client_version as grok_client_version, sign_in as grok_sign_in,
+    user_home as grok_home,
+};
 use self::mic::Mic;
 pub use self::tasks::shows_whole;
 use self::whisper::Whisper;
@@ -152,12 +157,13 @@ struct State {
 #[serde(default)]
 pub struct Context {
     apps: Vec<String>,
-    /// The AI picked in Settings ("auto", "agy", "claude", "codex"), and the model picked for each
+    /// The AI picked in Settings ("auto", "agy", "claude", "codex", "grok"), and the model picked for each
     /// ("" for its own default).
     provider: String,
     agy_model: String,
     claude_model: String,
     codex_model: String,
+    grok_model: String,
     whisper_model: String,
     language: String,
     /// How long a quiet conversation is kept ("day", "idle-30m", "idle-2h"; see chat.rs).
@@ -362,7 +368,7 @@ fn context(json: &str) -> fdo::Result<Context> {
 #[interface(name = "io.github.zickrian.isle.Assistant1")]
 impl AssistantService {
     /// Records a request and answers it; `context` is JSON
-    /// `{apps, provider, agy_model, claude_model, codex_model, whisper_model, language, selection, …}`.
+    /// `{apps, provider, agy_model, claude_model, codex_model, grok_model, whisper_model, language, selection, …}`.
     async fn listen(
         &self,
         context_json: &str,
@@ -519,6 +525,7 @@ impl Session {
             Provider::Agy => &context.agy_model,
             Provider::Claude => &context.claude_model,
             Provider::Codex => &context.codex_model,
+            Provider::Grok => &context.grok_model,
         };
         let refused = self
             .refused_model

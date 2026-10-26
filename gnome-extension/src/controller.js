@@ -414,7 +414,7 @@ export class Controller {
         this._settingsChanged.push(this._settings.connect('changed::voice-shortcut', () => (this._voice.shortcut = this._voiceShortcut)));
         for (const key of ['bot-shape', 'bot-color', 'bot-glow'])
             this._settingsChanged.push(this._settings.connect(`changed::${key}`, () => this._syncBotLook()));
-        for (const key of ['usage-enabled', 'usage-claude', 'usage-codex', 'usage-warn', 'usage-critical'])
+        for (const key of ['usage-enabled', 'usage-claude', 'usage-codex', 'usage-grok', 'usage-warn', 'usage-critical'])
             this._settingsChanged.push(this._settings.connect(`changed::${key}`, () => this._syncUsage()));
         for (const key of ['event-alerts', 'event-alert-minutes'])
             this._settingsChanged.push(this._settings.connect(`changed::${key}`, () => this._syncEventAlerts()));
@@ -708,9 +708,14 @@ export class Controller {
         this._post(Alerts.agentRefused(provider, error));
     }
 
-    /** Claude Code or Codex needs the user, or is done: an alert, unless its window is the one in front. */
+    /** Whether alerts are on for `provider`. Grok runs Claude's hooks, so it follows Claude's switch. */
+    _alertsOn(provider) {
+        return this._settings.get_boolean(`agent-alerts-${provider === 'grok' ? 'claude' : provider}`);
+    }
+
+    /** Claude Code, Codex or Grok needs the user, or is done: an alert, unless its window is the one in front. */
     _onAgentEvent(event) {
-        if (!this._settings.get_boolean(`agent-alerts-${event.provider}`) || this._notifications.dnd)
+        if (!this._alertsOn(event.provider) || this._notifications.dnd)
             return;
         // A permission the island asked for itself needs no second alert; one it could not ask (a long
         // command, too many waiting) does. Its ask may come a moment after this.
@@ -1553,6 +1558,7 @@ export class Controller {
             enabled: this._settings.get_boolean('usage-enabled'),
             claude: this._settings.get_boolean('usage-claude'),
             codex: this._settings.get_boolean('usage-codex'),
+            grok: this._settings.get_boolean('usage-grok'),
             warn: this._settings.get_int('usage-warn'),
             critical: this._settings.get_int('usage-critical'),
         };
@@ -2016,7 +2022,7 @@ export class Controller {
         }
         this._askedAt.set(`${request.provider}:${request.session}`, now);
         const pass = () => this._daemon.call('agents', 'Resolve', request.id, '');
-        if (!this._settings.get_boolean(`agent-alerts-${request.provider}`) || this._notifications.dnd ||
+        if (!this._alertsOn(request.provider) || this._notifications.dnd ||
             !this._island.visible)
             return pass();
         const window = this._agentWindow(request);

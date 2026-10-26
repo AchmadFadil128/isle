@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Usage: how much of each AI plan's limits is used, as isled reads them (Claude, and ChatGPT as Codex
-// saw it). One provider at a time, a bar per limit; with more, scrolling up or down (or the dots) moves
+// Usage: how much of each AI plan's limits is used, as isled reads them (Claude, ChatGPT as Codex
+// saw it, and Grok). One provider at a time, a bar per limit; with more, scrolling up or down (or the dots) moves
 // between them, as in a widget stack. The page has no tab without any.
 
 import Clutter from 'gi://Clutter';
@@ -19,7 +19,7 @@ import {Page} from './page.js';
 /** A limit warns (an alert) and then turns red at these shares; Settings may move them (see `setMarks`). */
 const MARKS = {warn: 80, critical: 95};
 /** Each provider's colour, for its bars. */
-const ACCENTS = {claude: [0.85, 0.47, 0.34], codex: [0.06, 0.64, 0.5]};
+const ACCENTS = {claude: [0.85, 0.47, 0.34], codex: [0.06, 0.64, 0.5], grok: [0.93, 0.94, 0.96]};
 const FALLBACK = Palette.BLUE;
 /** How far a scroll goes before it moves to the next provider, as the island's tabs do. */
 const WHEEL_STEP = 1;
@@ -32,7 +32,7 @@ const FILL_MS = 500;
 const css = ([r, g, b], alpha = 1) => `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${alpha})`;
 
 /** Each provider's logo (icons/), shown by its name. */
-const LOGOS = {claude: 'isle-claude', codex: 'isle-openai'};
+const LOGOS = {claude: 'isle-claude', codex: 'isle-openai', grok: 'isle-grok'};
 
 /** The provider's logo, or a dot of its colour for one without. */
 function mark(id) {

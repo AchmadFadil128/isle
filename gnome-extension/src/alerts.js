@@ -333,13 +333,18 @@ export function usage(provider, window, percent, resetsAt, critical) {
     const name = provider.toLowerCase();
     return {
         key: `usage:${provider}:${window}`,
-        icon: name.includes('claude') ? 'isle-claude' : name.includes('gpt') || name.includes('codex') ? 'isle-openai' : 'isle-gauge',
+        icon: name.includes('claude') ? 'isle-claude'
+            : name.includes('grok') ? 'isle-grok'
+            : name.includes('gpt') || name.includes('codex') ? 'isle-openai' : 'isle-gauge',
         ring: Math.min(1, percent / 100),
         title: provider,
         subtitle: resetsAt > 0 ? `${limitName(window)} · resets ${when}` : limitName(window),
         value: percentText(percent),
         // In the plan's own colour, as on the Usage page; red once nearly used up.
-        tone: Math.round(percent) >= critical ? 'bad' : name.includes('claude') ? 'claude' : name.includes('gpt') || name.includes('codex') ? 'codex' : 'neutral',
+        tone: Math.round(percent) >= critical ? 'bad'
+            : name.includes('claude') ? 'claude'
+            : name.includes('grok') ? 'grok'
+            : name.includes('gpt') || name.includes('codex') ? 'codex' : 'neutral',
         duration: REMINDER_DURATION,
         page: 'usage',
     };
@@ -410,8 +415,10 @@ export function meeting(event, link, join) {
     return alert;
 }
 
-const AGENT_NAMES = {claude: 'Claude', codex: 'Codex'};
-const AGENT_APPS = {claude: 'Claude Code', codex: 'Codex'};
+const AGENT_NAMES = {claude: 'Claude', codex: 'Codex', grok: 'Grok'};
+const AGENT_APPS = {claude: 'Claude Code', codex: 'Codex', grok: 'Grok'};
+const agentIcon = provider => provider === 'codex' ? 'isle-openai' : provider === 'grok' ? 'isle-grok' : 'isle-claude';
+const agentTone = provider => provider === 'codex' ? 'codex' : provider === 'grok' ? 'grok' : 'claude';
 
 /** An AI agent needs the user, or is done ({provider, kind, project, message}); `show` brings its window up. */
 export function agent(event, show) {
@@ -424,11 +431,11 @@ export function agent(event, show) {
     return {
         // One per session: a newer word from the same one replaces it.
         key: `agent:${event.provider}:${event.session || event.project}`,
-        icon: event.provider === 'codex' ? 'isle-openai' : 'isle-claude',
+        icon: agentIcon(event.provider),
         motion: waiting ? 'ring' : 'bounce',
         title,
         subtitle: [event.project, detail].filter(Boolean).join(' · '),
-        tone: event.provider === 'codex' ? 'codex' : 'claude',
+        tone: agentTone(event.provider),
         duration: waiting ? REMINDER_DURATION + 4000 : REMINDER_DURATION,
         // It waits on the user: it stays until they are there to see it.
         sticky: waiting,
@@ -500,8 +507,9 @@ export function agentDone(event, look, show) {
 
 /** The first sentence of `text`, cut to a line's worth. */
 function firstSentence(text) {
+    // The words first (`{"say":"…"}` is that sentence), then the first one of them.
     // Markdown's marks only, not the characters of names (`user_id` keeps its underscore).
-    const first = Format.answerPlain((text ?? '').trim().split(/(?<=[.!?])\s|\n/)[0] ?? '')
+    const first = Format.answerPlain(text ?? '').trim().split(/(?<=[.!?])\s|\n/)[0] ?? ''
         .replace(/^[#>\s]+/, '')
         .replace(/(^|[^\w])_([^_]+)_(?=[^\w]|$)/g, '$1$2')
         .replace(/(^|[^\w*])\*([^*]+)\*(?=[^\w*]|$)/g, '$1$2')
@@ -550,7 +558,7 @@ export function agentRefused(provider, reason) {
     const name = AGENT_NAMES[provider] ?? 'Your AI';
     return {
         key: `agent-refused:${provider}`,
-        icon: provider === 'codex' ? 'isle-openai' : 'isle-claude',
+        icon: agentIcon(provider),
         motion: 'shake',
         title: `Couldn’t turn on ${name} alerts`,
         subtitle: reason,

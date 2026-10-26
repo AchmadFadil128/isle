@@ -48,6 +48,7 @@ const TONE_COLORS = {
     // The plans' colours on the Usage page (see pages/usage.js).
     claude: [0.85, 0.47, 0.34],
     codex: [0.06, 0.64, 0.5],
+    grok: [0.93, 0.94, 0.96],
     agy: [0.3, 0.55, 1],
     warn: Palette.ORANGE,
     break: Palette.BLUE,

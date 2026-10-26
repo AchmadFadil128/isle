@@ -88,7 +88,7 @@ export default class IslePreferences extends ExtensionPreferences {
             description: found.length
                 ? 'How much of your plans\' limits is used, on a Usage page in the open island, with a warning ' +
                   'as one nears its end. Found from the apps you are signed in to; nothing else to set up.'
-                : 'Sign in to Claude Code (claude) or Codex (codex) and your plan shows up here.',
+                : 'Sign in to Claude Code (claude), Codex (codex) or Grok (grok) and your plan shows up here.',
         });
         const enabled = switchRow(settings, 'usage-enabled', 'Show AI usage', 'The Usage page and its warnings');
         group.add(enabled);
@@ -143,7 +143,7 @@ export default class IslePreferences extends ExtensionPreferences {
         // Only the AIs installed here are offered; with none, the assistant says how to get one.
         const provider = choiceRow(settings, 'voice-provider', 'AI', installed.length
             ? 'Answers with your own sign-in; Isle runs its actions'
-            : 'Install Claude Code, Codex or Antigravity (agy), and sign in', [
+            : 'Install Claude Code, Codex, Grok or Antigravity (agy), and sign in', [
             ['auto', installed.length === 1 ? `Automatic (${installed[0].name})`
                 : installed.length ? 'Automatic (the one you are signed in to)' : 'None installed'],
             ...installed.map(({id, name}) => [id, name]),
@@ -660,6 +660,11 @@ const AI_PROVIDERS = [
         models: () => [['', 'Codex\'s default'], ...codexModels()],
     },
     {
+        id: 'grok', name: 'Grok', command: 'grok', modelKey: 'voice-grok-model',
+        about: 'What Grok answers with, with little reasoning, to be quick',
+        models: () => [['', 'Grok\'s default'], ...grokModels()],
+    },
+    {
         id: 'agy', name: 'Antigravity', command: 'agy', modelKey: 'voice-agy-model',
         about: 'What agy answers with',
         models: () => [
@@ -679,6 +684,11 @@ function claudeConfigDir() {
 /** The user's own Codex home: `$CODEX_HOME`, else ~/.codex. */
 function codexHome() {
     return GLib.getenv('CODEX_HOME') || GLib.build_filenamev([GLib.get_home_dir(), '.codex']);
+}
+
+/** The user's own Grok home: `$GROK_HOME`, else ~/.grok. */
+function grokHome() {
+    return GLib.getenv('GROK_HOME') || GLib.build_filenamev([GLib.get_home_dir(), '.grok']);
 }
 
 /** Whether AI `id` has a sign-in, checked as isled does (brain.rs `signed_in`). */
@@ -703,6 +713,8 @@ function signedIn(id) {
     }
     case 'codex':
         return exists(codexHome(), 'auth.json') || env('OPENAI_API_KEY');
+    case 'grok':
+        return exists(grokHome(), 'auth.json') || env('XAI_API_KEY');
     case 'agy':
         return exists(GLib.get_home_dir(), '.gemini/antigravity-cli/antigravity-oauth-token');
     default:
@@ -720,7 +732,7 @@ function findProgram(command) {
         GLib.build_filenamev([env('BUN_INSTALL', `${home}/.bun`), 'bin']),
         GLib.build_filenamev([env('VOLTA_HOME', `${home}/.volta`), 'bin']),
         env('PNPM_HOME', `${home}/.local/share/pnpm`),
-        ...['.local/share/fnm/aliases/default/bin', '.fnm/aliases/default/bin', '.claude/local',
+        ...['.local/share/fnm/aliases/default/bin', '.fnm/aliases/default/bin', '.claude/local', '.grok/bin',
             '.local/share/mise/shims', '.asdf/shims', '.yarn/bin', '.linuxbrew/bin', '.nix-profile/bin']
             .map(dir => GLib.build_filenamev([home, dir])),
         '/home/linuxbrew/.linuxbrew/bin', '/run/current-system/sw/bin',
@@ -767,7 +779,20 @@ function codexModels() {
     return [];
 }
 
-/** The AI providers signed in here, as rows to switch: Claude Code's sign-in, and Codex's (or its logs). */
+/** The models Grok lists, from the cache it keeps (the user's home). */
+function grokModels() {
+    try {
+        const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([grokHome(), 'models_cache.json']));
+        const models = JSON.parse(new TextDecoder().decode(bytes)).models ?? {};
+        return Object.values(models)
+            .map(model => [model.info?.id ?? model.info?.model, model.info?.name])
+            .filter(([id, name]) => id && name);
+    } catch {
+        return [];
+    }
+}
+
+/** The AI providers signed in here, as rows to switch: Claude Code's sign-in, Codex's (or its logs), and Grok's. */
 // Where isled reads them (usage.rs): Claude Code's config dir, the user's Codex home and Isle's own.
 function usageProviders() {
     const providers = [];
@@ -783,6 +808,8 @@ function usageProviders() {
     const sessions = [[codexHome(), 'sessions'], [GLib.get_user_data_dir(), 'isle', 'codex', 'sessions']];
     if (signedIn || sessions.some(dir => GLib.file_test(GLib.build_filenamev(dir), GLib.FileTest.IS_DIR)))
         providers.push({key: 'usage-codex', title: 'ChatGPT', subtitle: 'Signed in with Codex'});
+    if (GLib.file_test(GLib.build_filenamev([grokHome(), 'auth.json']), GLib.FileTest.EXISTS))
+        providers.push({key: 'usage-grok', title: 'Grok', subtitle: 'Signed in with Grok'});
     return providers;
 }
 
