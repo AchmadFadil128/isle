@@ -767,7 +767,7 @@ function codexModels() {
     return [];
 }
 
-/** The AI providers signed in here, as rows to switch: Claude Code's sign-in, and Codex's logs. */
+/** The AI providers signed in here, as rows to switch: Claude Code's sign-in, and Codex's (or its logs). */
 // Where isled reads them (usage.rs): Claude Code's config dir, the user's Codex home and Isle's own.
 function usageProviders() {
     const providers = [];
@@ -779,9 +779,10 @@ function usageProviders() {
     } catch {
         // Not signed in to Claude Code.
     }
+    const signedIn = GLib.file_test(GLib.build_filenamev([codexHome(), 'auth.json']), GLib.FileTest.EXISTS);
     const sessions = [[codexHome(), 'sessions'], [GLib.get_user_data_dir(), 'isle', 'codex', 'sessions']];
-    if (sessions.some(dir => GLib.file_test(GLib.build_filenamev(dir), GLib.FileTest.IS_DIR)))
-        providers.push({key: 'usage-codex', title: 'ChatGPT', subtitle: 'As Codex last saw it'});
+    if (signedIn || sessions.some(dir => GLib.file_test(GLib.build_filenamev(dir), GLib.FileTest.IS_DIR)))
+        providers.push({key: 'usage-codex', title: 'ChatGPT', subtitle: 'Signed in with Codex'});
     return providers;
 }
 

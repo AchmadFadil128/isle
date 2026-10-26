@@ -438,20 +438,21 @@ readable by you alone, and the AI's copy apart from your own chats with it.
 ## AI usage
 
 Isle finds your plans from the apps you are signed in to: **Claude** with
-Claude Code's sign-in, and **ChatGPT** from what Codex writes as you use it.
+Claude Code's sign-in, and **ChatGPT** with Codex's.
 It shows each limit your plan has (a 5-hour window, the week, a model's
 week), when it resets, and warns at 80% and 95% (set in Settings). A plan
 you are not signed in to does not show at all.
 
-Claude's numbers come from the same page Claude Code's `/usage` reads; it is
-not a documented API, so it may change. Isle asks it every ten minutes (at
+Claude's numbers come from the same page Claude Code's `/usage` reads, and
+ChatGPT's from the one Codex's `/status` reads; neither is a documented API,
+so they may change. Isle asks each every ten minutes (at
 most every two while the Usage page is open), and not while the screen is
 locked. Offline, as at login before the
 network is up, it tries again within a minute; when Claude's server fails it
 waits longer each time. It never signs in or refreshes a sign-in itself, and
-with usage turned off it asks nothing at all. ChatGPT's numbers
-are read from Codex's own logs, with no network at all, so they are as of
-your last use of Codex.
+with usage turned off it asks nothing at all. When ChatGPT can't be asked
+(offline, or Codex's sign-in ran out), its numbers come from Codex's own
+logs, as of your last use of Codex.
 
 **AI agents.** Isle connects to Claude Code and Codex when it finds them,
 also when you install one later, and says so once. It adds its hooks to
