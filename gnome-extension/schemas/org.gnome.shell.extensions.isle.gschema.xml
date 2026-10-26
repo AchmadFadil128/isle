@@ -10,6 +10,12 @@
       <summary>Top bar style</summary>
       <description>“glass”: see-through, with no colour of its own, with the island as a black notch hanging from the top of the screen. “black”: the island blends into a black bar. (A “theme” setting from before 0.7.3 reads as glass.)</description>
     </key>
+    <key name="top-bar-opacity" type="i">
+      <range min="0" max="100"/>
+      <default>0</default>
+      <summary>Top bar opacity</summary>
+      <description>How black the top bar beside the island is, in %: 0 is glass, 100 is black and the island blends into it. Unset, top-bar-style decides.</description>
+    </key>
     <key name="compact-top-bar" type="b">
       <default>true</default>
       <summary>Compact top bar</summary>
@@ -33,6 +39,11 @@
     <key name="update-shown" type="s">
       <default>''</default>
       <summary>The newest version already announced, so each is said once</summary>
+    </key>
+    <key name="prefs-page" type="s">
+      <default>''</default>
+      <summary>The Settings page to open on next, once</summary>
+      <description>The island's Update button sets it to show About, where the update is.</description>
     </key>
     <key name="open-on" type="s">
       <choices>
@@ -97,6 +108,16 @@
       <range min="1" max="60"/>
       <default>5</default>
       <summary>Minutes before an event its alert shows</summary>
+    </key>
+    <key name="world-clocks" type="b">
+      <default>true</default>
+      <summary>World clocks on the Calendar page</summary>
+      <description>A globe on the Calendar page shows the time in the cities of GNOME’s World Clocks.</description>
+    </key>
+    <key name="hidden-pages" type="as">
+      <default>[]</default>
+      <summary>Pages left out of the island</summary>
+      <description>Names of the open island’s pages that have no tab: music, notifications, focus, reminders, shelf, calendar.</description>
     </key>
     <key name="agent-alerts-claude" type="b">
       <default>true</default>

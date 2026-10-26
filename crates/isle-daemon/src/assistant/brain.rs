@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 zickrian
 
 //! The assistant's "brain": whichever AI CLI the user has and picked (agy, Claude Code, Codex or Grok), behind one
 //! face. Each runs with the user's own sign-in, kept to answering; isled runs the tools and actions itself.
@@ -13,6 +14,7 @@ use super::claude::Claude;
 use super::codex::Codex;
 use super::grok::Grok;
 
+/// An AI CLI the assistant can run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provider {
     Agy,
@@ -31,6 +33,7 @@ const AUTO: [Provider; 4] = [
 ];
 
 impl Provider {
+    /// Its id in Settings and in saved state.
     pub fn id(self) -> &'static str {
         match self {
             Provider::Agy => "agy",
@@ -50,6 +53,7 @@ impl Provider {
         }
     }
 
+    /// The program's file name.
     fn command(self) -> &'static str {
         match self {
             Provider::Agy => "agy",
@@ -107,6 +111,7 @@ impl Provider {
         self != Provider::Agy
     }
 
+    /// Every provider, in "auto" order.
     pub fn all() -> [Provider; 4] {
         AUTO
     }
@@ -209,6 +214,7 @@ fn npm_prefix(home: &Path, from_env: Option<PathBuf>) -> Option<PathBuf> {
     set.is_absolute().then(|| set.join("bin"))
 }
 
+/// The running CLI behind the assistant, whichever it is.
 pub enum Brain {
     Agy(Agy),
     Claude(Claude),
@@ -241,13 +247,9 @@ impl Brain {
             Provider::Codex => {
                 Brain::Codex(Codex::start(&program, model, resume, workspace, instructions).await?)
             }
-            Provider::Grok => Brain::Grok(Grok::start(
-                &program,
-                model,
-                resume,
-                workspace,
-                instructions,
-            )?),
+            Provider::Grok => {
+                Brain::Grok(Grok::start(&program, model, resume, workspace, instructions).await?)
+            }
         })
     }
 
@@ -259,6 +261,7 @@ impl Brain {
         }
     }
 
+    /// Which CLI this is.
     pub fn provider(&self) -> Provider {
         match self {
             Brain::Agy(_) => Provider::Agy,
@@ -325,6 +328,7 @@ pub struct Failure {
 }
 
 impl From<(&str, &str)> for Failure {
+    /// Just words: nothing to sign in to or set up.
     fn from((error, hint): (&str, &str)) -> Self {
         Self {
             error: error.into(),

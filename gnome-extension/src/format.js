@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 zickrian
 
 // Text formatting shared by the island's views.
 
@@ -98,7 +99,7 @@ export function answerPlain(text) {
 }
 
 /** The words of an answer that arrived as `{"say":"…"}`, also inside a ```json fence; else `text`. */
-function spoken(text) {
+export function spoken(text) {
     const trimmed = text.trim();
     const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(trimmed);
     const body = fenced ? fenced[1] : trimmed;

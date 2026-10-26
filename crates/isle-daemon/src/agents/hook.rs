@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 zickrian
 
-//! `isled --agent-hook claude|codex`: run by the AI itself, it turns what the AI hands its hooks into an
-//! event for the running isled, or (a permission) asks the island and prints the user's answer for the AI.
-//! It never fails: when there is no answer (no isled, no reply in time) it prints nothing, and the AI asks
-//! in its own terminal as it would without Isle.
+//! `isled --agent-hook claude|codex`: run by the AI, it passes its hook events to isled and asks the island
+//! about permissions. With no answer (no isled, no reply in time) it prints nothing: the AI asks in its terminal.
 
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -144,8 +143,8 @@ async fn decide(request: &Request) -> zbus::Result<String> {
         .ok_or_else(|| zbus::Error::Failure("no answer".into()))
 }
 
-/// Resolves once the permission was answered in Claude Code's own terminal (it asks there at the same
-/// time; Codex waits for the hook): its transcript has the result of this tool call. Never, when that cannot be told (no transcript, the call not found in it).
+/// Resolves once the permission was answered in Claude Code's own terminal: the transcript has the call's
+/// result. Codex waits for the hook instead. Never resolves without a transcript or the call in it.
 async fn answered_elsewhere(payload: &Value) {
     let path = payload["transcript_path"].as_str().map(PathBuf::from);
     let mut found = None;
@@ -297,6 +296,7 @@ async fn send(event: &Event) -> zbus::Result<()> {
 }
 
 /// Claude Code's `Notification` (needs a permission, or waits for the user) and `Stop` (done).
+#[cfg(test)]
 fn from_claude(payload: &Value) -> Option<Event> {
     from_named("claude", payload)
 }
@@ -317,6 +317,7 @@ fn from_named(provider: &str, payload: &Value) -> Option<Event> {
     event(provider, kind, text("cwd"), &message, text("session_id"))
 }
 
+/// "permission" or "waiting" for a Claude Code notification; `None` for one the island ignores.
 fn notification_kind(kind: &str, message: &str) -> Option<&'static str> {
     match kind {
         "permission_prompt" => Some("permission"),
@@ -375,6 +376,7 @@ fn ai_of(named: Option<&str>, parents: &[String]) -> Option<&'static str> {
     }
 }
 
+/// `grok`, or a versioned `grok-…` binary, by path or bare name.
 fn is_grok(name: &str) -> bool {
     let name = name.rsplit(['/', '\\']).next().unwrap_or(name);
     name == "grok" || name.starts_with("grok-")
@@ -385,17 +387,25 @@ fn parent_names() -> Vec<String> {
     ancestors().into_iter().filter_map(process_name).collect()
 }
 
+/// `comm`, else the executable's file name when that is blank.
 fn process_name(pid: u32) -> Option<String> {
     let comm = std::fs::read_to_string(format!("/proc/{pid}/comm")).ok();
-    let comm = comm.as_deref().map(str::trim).filter(|name| !name.is_empty());
+    let comm = comm
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty());
     if let Some(name) = comm {
         return Some(name.to_owned());
     }
     std::fs::read_link(format!("/proc/{pid}/exe"))
         .ok()
-        .and_then(|path| path.file_name().map(|name| name.to_string_lossy().into_owned()))
+        .and_then(|path| {
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+        })
 }
 
+/// The first line with text on it, trimmed.
 fn first_line(text: &str) -> &str {
     text.lines()
         .map(str::trim)
@@ -590,12 +600,19 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            (spoken.provider.as_str(), spoken.message.as_str(), spoken.project.as_str()),
+            (
+                spoken.provider.as_str(),
+                spoken.message.as_str(),
+                spoken.project.as_str()
+            ),
             ("grok", "Something.", "assistant")
         );
         let parents = ["sh".to_owned(), "grok".to_owned()];
         assert_eq!(ai_of(Some("claude"), &parents), Some("grok"));
-        assert_eq!(ai_of(Some("claude"), &["claude".to_owned()]), Some("claude"));
+        assert_eq!(
+            ai_of(Some("claude"), &["claude".to_owned()]),
+            Some("claude")
+        );
         assert_eq!(ai_of(Some("codex"), &parents), Some("codex"));
         assert!(from_claude(&json!({"hook_event_name": "PreToolUse"})).is_none());
         assert!(from_claude(&json!([1, 2])).is_none());
