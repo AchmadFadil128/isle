@@ -109,15 +109,15 @@
 /* Compact top bar: slimmer than GNOME's 2.2em, so it reads as a thin bezel
  * around the island. Status icons and the tray stay where they are. */
 #panel.isle-compact-bar {
-  height: 26px;
-  font-size: 13px;
+  height: 1.8em;
+  font-size: 0.9em;
   font-family: "Inter Variable";
   font-weight: 500;
 }
 
 /* Closed island inside the top bar, like a notch: the bar is as tall as the island, so
  * maximised windows start below it. Comes after the compact bar's height so it wins. */
-#panel.isle-notch-bar { height: 32px; }
+#panel.isle-notch-bar { height: 2.2em; }
 
 /* Isle's bar is black or see-through in light and dark style alike: its text and icons stay white,
  * as GNOME's light style has them over the overview (it makes them near-black otherwise). */
@@ -162,18 +162,18 @@
 /* Both slots keep their width when empty so the clock stays centred. */
 .isle-compact-slot { width: 24px; }
 
-.isle-compact-clock { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+.isle-compact-clock { font-size: 13pt; font-weight: 600; letter-spacing: -0.2px; }
 .isle-compact-clock-box { spacing: 6px; }
 
 /* Inside the top bar everything is sized like the bar's own text. */
 .isle-compact-in-bar .isle-compact-row { padding: 0 14px; spacing: 10px; }
 .isle-compact-in-bar .isle-compact-slot { width: 22px; }
-.isle-compact-in-bar .isle-compact-clock { font-size: 15px; letter-spacing: -0.1px; }
+.isle-compact-in-bar .isle-compact-clock { font-size: 11pt; letter-spacing: -0.1px; }
 
 .isle-unseen-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 3px;
+  width: 0.4em;
+  height: 0.4em;
+  border-radius: 999px;
   background-color: #ffffff;
 }
 
@@ -183,9 +183,9 @@
 .isle-privacy-dots-in-slot { padding-left: 0; }
 
 .isle-privacy-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 4px;
+  width: 0.45em;
+  height: 0.45em;
+  border-radius: 999px;
 }
 
 .isle-privacy-dot.camera { background-color: #34c759; }
@@ -193,9 +193,9 @@
 .isle-privacy-dot.screenShare { background-color: #0a84ff; }
 
 .isle-recording-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 5px;
+  width: 0.65em;
+  height: 0.65em;
+  border-radius: 999px;
   background-color: #ff453a;
 }
 
@@ -206,8 +206,8 @@
 .isle-compact-second { spacing: 8px; }
 .isle-compact-second-call { color: #30d158; }
 /* As large as the clock and on its line: the two times read as one row. */
-.isle-compact-second-time { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
-.isle-compact-in-bar .isle-compact-second-time { font-size: 15px; letter-spacing: -0.1px; }
+.isle-compact-second-time { font-size: 13pt; font-weight: 600; letter-spacing: -0.2px; }
+.isle-compact-in-bar .isle-compact-second-time { font-size: 11pt; letter-spacing: -0.1px; }
 
 /* ── Alerts (peek) ────────────────────────────────────── */
 
@@ -238,8 +238,8 @@
   padding: 3px 10px;
   border-radius: 999px;
 }
-.isle-peek-title { font-size: 14px; font-weight: 600; }
-.isle-peek-subtitle { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
+.isle-peek-title { font-size: 10.5pt; font-weight: 600; }
+.isle-peek-subtitle { font-size: 9pt; color: rgba(255, 255, 255, 0.5); }
 .isle-peek-code {
     font-family: monospace;
     font-size: 12px;
@@ -266,7 +266,7 @@
 .isle-peek-answered-text { font-size: 12px; font-weight: 600; }
 .isle-peek-allowed { color: #30d158; }
 .isle-peek-denied { color: #ff453a; }
-.isle-peek-value { font-size: 20px; font-weight: 600; letter-spacing: -0.5px; }
+.isle-peek-value { font-size: 15pt; font-weight: 600; letter-spacing: -0.5px; }
 .isle-peek-level-box { spacing: 8px; }
 .isle-peek-level-text { font-size: 12px; font-weight: 600; min-width: 30px; text-align: right; }
 
@@ -275,11 +275,11 @@
 /* The orb on the left, then what was heard above the answer (voice.js sizes them to match). */
 .isle-voice-row { padding: 14px 16px 20px 16px; spacing: 12px; }
 .isle-voice-orb { border-radius: 999px; }
-.isle-voice-heard { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-bottom: 2px; }
-.isle-voice-text { font-size: 15px; font-weight: 500; letter-spacing: -0.1px; }
+.isle-voice-heard { font-size: 9pt; color: rgba(255, 255, 255, 0.5); padding-bottom: 2px; }
+.isle-voice-text { font-size: 11.25pt; font-weight: 500; letter-spacing: -0.1px; }
 .isle-voice-text-dim { color: rgba(255, 255, 255, 0.6); }
-.isle-voice-text-long { font-size: 14px; font-weight: 400; color: rgba(255, 255, 255, 0.92); }
-.isle-voice-hint { font-size: 12px; color: rgba(255, 255, 255, 0.5); padding-top: 4px; }
+.isle-voice-text-long { font-size: 10.5pt; font-weight: 400; color: rgba(255, 255, 255, 0.92); }
+.isle-voice-hint { font-size: 9pt; color: rgba(255, 255, 255, 0.5); padding-top: 4px; }
 .isle-voice-steps { spacing: 3px; padding-top: 5px; }
 .isle-voice-step { spacing: 6px; }
 .isle-voice-step-tick { color: rgba(255, 255, 255, 0.45); }
@@ -421,7 +421,7 @@
 .isle-tab:checked { background-color: rgba(255, 255, 255, 0.09); }
 .isle-tab-box { spacing: 0; }
 /* The gap from the icon is the name's own margin, so a closed name takes no room (expanded.js). */
-.isle-tab-label { font-size: 13px; font-weight: 600; margin-left: 6px; }
+.isle-tab-label { font-size: 10pt; font-weight: 600; margin-left: 6px; }
 
 /* A dot on a tab whose page has news. */
 .isle-tab-badge {
@@ -430,8 +430,8 @@
   border-radius: 3px;
   background-color: #ff453a;
 }
-.isle-header-date { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
-.isle-header-time { font-size: 13px; font-weight: 600; }
+.isle-header-date { font-size: 10pt; color: rgba(255, 255, 255, 0.9); }
+.isle-header-time { font-size: 10pt; font-weight: 600; }
 .isle-header-settings { padding: 4px; color: rgba(255, 255, 255, 0.6); }
 .isle-header-settings:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
 .isle-header-status { spacing: 10px; }
@@ -444,7 +444,7 @@
 
 .isle-recording-pill:hover { background-color: rgba(255, 69, 58, 0.32); }
 .isle-recording-pill-box { spacing: 6px; }
-.isle-recording-time { font-size: 12px; font-weight: 700; color: #ff6961; }
+.isle-recording-time { font-size: 9pt; font-weight: 700; color: #ff6961; }
 
 /* Pages line up with the header's edges. */
 .isle-page { padding: 6px 28px 0 28px; }
