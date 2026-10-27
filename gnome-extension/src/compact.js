@@ -11,7 +11,7 @@ import St from 'gi://St';
 
 import {paletteFor} from './bot.js';
 import {BotIcon} from './botIcon.js';
-import {iconSize, onUiScale, px, stageScale, uiScale} from './compat.js';
+import {iconSize, onUiScale, px, stageScale, textScale, uiScale} from './compat.js';
 import * as Format from './format.js';
 import * as Palette from './palette.js';
 import * as Playback from './playback.js';
@@ -155,10 +155,12 @@ export const CompactView = GObject.registerClass({
     /** The width the island should have to fit what is shown. */
     get preferredWidth() {
         const size = SIZES[this._inBar ? 'inBar' : 'hanging'];
+        const fontScale = this._inBar ? textScale() : 1.0;
         const privacy = this._privacyWidth();
         // With nothing beside the clock, the island widens for the moon; beside an activity there is room.
-        const moon = this._moon.visible ? size.moon + MOON_GAP : 0;
-        return px(this._left.child || this._right.child ? size.activities : size.clock + moon) + privacy + 2 * this._secondExtra;
+        const moon = this._moon.visible ? (size.moon + MOON_GAP) * fontScale : 0;
+        const base = this._left.child || this._right.child ? size.activities : size.clock;
+        return px(Math.round(base * fontScale + moon)) + privacy + 2 * this._secondExtra;
     }
 
     /** A sign with a time label beside it, for the right side's second activity. */

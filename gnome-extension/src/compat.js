@@ -89,12 +89,13 @@ export function stageScale() {
     return St.ThemeContext.get_for_stage(global.stage).scale_factor;
 }
 
-/** Effective scale factor for code-set sizes (combines stage scale and desktop text-scaling-factor). */
+/** Stage pixels per CSS pixel: 2 on a 200% display GNOME 46 to 49 lay out in physical pixels, else 1.
+ * St scales what CSS sizes, never what code sets: that takes `px`. */
 export function uiScale() {
-    return stageScale() * textScale();
+    return stageScale();
 }
 
-/** `n` CSS pixels in stage pixels, taking into account both display scale and desktop scaling factor. */
+/** `n` CSS pixels in stage pixels, taking into account display scale. */
 export function px(n) {
     return Math.round(n * uiScale());
 }
